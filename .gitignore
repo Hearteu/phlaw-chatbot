@@ -42,9 +42,6 @@ outputs/
 temp/
 cache/
 
-# --- HuggingFace & Qdrant Data (Handled by Git LFS) ---
+# --- HuggingFace & Qdrant Data
 model_cache/
 qdrant_data/
-
-# --- Explicitly Track LFS Metadata ---
-!model_cache/.gitattributes
