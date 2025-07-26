@@ -55,7 +55,6 @@ for year in sorted(os.listdir(DATA_DIR)):
 
         filepath = os.path.join(year_path, filename)
         if filepath in embedded_cache:
-            print(f"⏩ Skipping cached: {filename}")
             continue
 
         with open(filepath, "r", encoding="utf-8") as f:

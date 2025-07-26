@@ -1,0 +1,50 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.egg
+*.egg-info/
+dist/
+build/
+*.log
+
+# --- Virtual Environments & Environment Files ---
+venv/
+.env
+.env.*
+*.env.json
+
+# --- VS Code & IDEs ---
+.vscode/
+.idea/
+
+# --- Django ---
+*.sqlite3
+db.sqlite3
+/media/
+/staticfiles/
+/local_settings.py
+
+# --- Node (Frontend) ---
+node_modules/
+*.lock
+
+# --- Jupyter Notebooks ---
+.ipynb_checkpoints/
+
+# --- Scraped Docs & Output ---
+jurisprudence/
+docs/
+*.txt
+outputs/
+temp/
+cache/
+
+# --- HuggingFace & Qdrant Data (Handled by Git LFS) ---
+model_cache/
+qdrant_data/
+
+# --- Explicitly Track LFS Metadata ---
+!model_cache/.gitattributes

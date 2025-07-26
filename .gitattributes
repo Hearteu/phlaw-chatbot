@@ -1,0 +1,5 @@
+
+qdrant_data/** filter=lfs diff=lfs merge=lfs -text
+model_cache/**/pytorch_model.bin filter=lfs diff=lfs merge=lfs -text
+model_cache/**/config.json filter=lfs diff=lfs merge=lfs -text
+model_cache/**/tokenizer* filter=lfs diff=lfs merge=lfs -text

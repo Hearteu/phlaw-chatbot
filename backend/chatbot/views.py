@@ -13,3 +13,5 @@ class ChatView(APIView):
             return Response({"error": "Missing query"}, status=400)
         answer = chat_with_law_bot(query)
         return Response({"answer": answer})
+    
+
