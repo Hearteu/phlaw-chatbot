@@ -6,8 +6,7 @@ services:
       - "8000:8000"
       - "7860:7860"
     volumes:
-      - ./backend:/app/backend
-      - ./model_cache:/root/.cache/huggingface
+      - ./model_cache:/root/.cache/huggingface  # Only model cache, NOT full backend
     env_file:
       - ./backend/.env
     depends_on:
@@ -19,5 +18,7 @@ services:
     ports:
       - "6333:6333"
     volumes:
-      - ./qdrant_data:/qdrant/storage
+      - qdrant_data:/qdrant/storage
 
+volumes:
+  qdrant_data:
