@@ -7,7 +7,7 @@ services:
       - "7860:7860"
     volumes:
       - ./model_cache:/root/.cache/huggingface  # Only model cache, NOT full backend
-      - ./backend/jurisprudence:/app/backend/jurisprudence  # ✅ Add this line
+      - ./backend:/app/backend
     env_file:
       - ./backend/.env
     depends_on:
