@@ -45,3 +45,4 @@ cache/
 # --- HuggingFace & Qdrant Data
 model_cache/
 qdrant_data/
+volume_backup/

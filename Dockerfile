@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt ./requirements.txt
 
 # Install Python dependencies
-RUN pip install --upgrade pip && pip install -r requirements.txt
+RUN pip install --upgrade pip && pip install --default-timeout=300 --retries=10 -r requirements.txt
 
 # Copy backend code only (not entire root folder)
 COPY backend/ ./backend/

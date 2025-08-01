@@ -16,7 +16,7 @@ def generate_response(prompt):
     # Generate with sampling, optional temperature and top_p for more variety
     outputs = model.generate(
         **inputs,
-        max_new_tokens=512,
+        max_new_tokens=32,
         do_sample=True,
         temperature=0.7,
         top_p=0.9,
