@@ -36,6 +36,7 @@ node_modules/
 
 # --- Scraped Docs & Output ---
 jurisprudence/
+jurisprudence2/
 docs/
 *.txt
 outputs/

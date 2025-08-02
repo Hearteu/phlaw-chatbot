@@ -9,7 +9,7 @@ class LegalRetriever:
         self.model = SentenceTransformer("Stern5497/sbert-legal-xlm-roberta-base")
         self.qdrant = QdrantClient(host="qdrant", port=6333)
         self.collection = "jurisprudence"
-        self.data_dir = "/app/backend/jurisprudence"  # base folder for .txt files
+        self.data_dir = "/app/backend/jurisprudence2"  # base folder for .txt files
 
     def retrieve(self, query, k=3):
         query_vector = self.model.encode(query).tolist()
