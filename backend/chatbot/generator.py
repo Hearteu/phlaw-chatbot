@@ -9,7 +9,7 @@ model = AutoModelForCausalLM.from_pretrained(
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
 
-def generate_response(prompt, max_new_tokens=256):
+def generate_response(prompt, max_new_tokens=1500):
     prompt = prompt[:1500]
     inputs = tokenizer(prompt, return_tensors="pt", truncation=True).to(device)
     with torch.no_grad():

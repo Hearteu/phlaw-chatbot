@@ -10,7 +10,7 @@ class ChatAPITestCase(TestCase):
     def test_chat_endpoint_works(self):
         response = self.client.post(
             '/api/chat/',  # Change if your path is different
-            json.dumps({'query': "Give the facts in the 2009 case on bounced checks and estafa."}),
+            json.dumps({'query': "What is the legal age for marriage in the Philippines?"}),
             content_type='application/json'
         )
         self.assertEqual(response.status_code, 200)
