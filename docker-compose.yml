@@ -6,12 +6,16 @@ services:
       - "8000:8000"
       - "7860:7860"
     volumes:
-      - ./model_cache:/root/.cache/huggingface  # Only model cache, NOT full backend
+      - ./model_cache:/root/.cache/huggingface
       - ./backend:/app/backend
+      # - ./law-chat.Q5_K_M.gguf:/app/law-chat.Q5_K_M.gguf  # If model outside backend
     env_file:
       - ./backend/.env
     depends_on:
       - qdrant
+    runtime: nvidia                # <-- for GPU
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all # <-- for GPU
 
   qdrant:
     image: qdrant/qdrant

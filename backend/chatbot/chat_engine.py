@@ -8,9 +8,9 @@ def truncate_text(text, max_chars=1000):
         return ""
     return text[:max_chars]
 
-def chat_with_law_bot(query, 
-                      max_doc_chars=1000, 
-                      max_total_chars=4096, 
+def chat_with_law_bot(query,
+                      max_doc_chars=1000,
+                      max_total_chars=4096,
                       min_docs=1):
     """
     Memory-safe chat engine that limits doc size and overall prompt length.
@@ -44,8 +44,11 @@ def chat_with_law_bot(query,
     context = "\n\n".join(context_parts)
 
     prompt = (
-        "Answer the question using Philippine jurisprudence context:\n\n"
-        f"{context}\n\nQuestion: {query}\nAnswer:"
+        f"You are a friendly legal assistant. "
+        f"Answer the user's question using the Philippine jurisprudence sources below. "
+        f"Explain clearly, summarize where possible, and use conversational language. "
+        f"Do not rephrase issues, just provide the answer.\n\n"
+        f"Sources:\n{context}\n\nUser Question: {query}\nConversational Answer:"
     )
 
     # Call your generator to get the final answer

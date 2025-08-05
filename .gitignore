@@ -47,3 +47,5 @@ cache/
 model_cache/
 qdrant_data/
 volume_backup/
+
+backend/law-chat.Q5_K_M.gguf
