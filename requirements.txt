@@ -1,5 +1,6 @@
 Django
 djangorestframework==3.16.0
+django-cors-headers
 
 qdrant-client==1.15.0
 sentence-transformers==5.0.0

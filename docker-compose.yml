@@ -1,10 +1,13 @@
+version: '3.8'
+
 services:
+  # Backend service (Django)
   web:
     build: .
     container_name: phlaw_backend
     ports:
-      - "8000:8000"
-      - "7860:7860"
+      - "8000:8000"  # Django backend
+      - "7860:7860"  # Possibly for Gradio or another service
     volumes:
       - ./model_cache:/root/.cache/huggingface
       - ./backend:/app/backend
@@ -13,17 +16,32 @@ services:
       - ./backend/.env
     depends_on:
       - qdrant
-    runtime: nvidia                # <-- for GPU
+    runtime: nvidia  # For GPU support
     environment:
-      - NVIDIA_VISIBLE_DEVICES=all # <-- for GPU
+      - NVIDIA_VISIBLE_DEVICES=all  # For GPU usage
 
+  # Qdrant service for vector storage
   qdrant:
     image: qdrant/qdrant
     container_name: qdrant
     ports:
-      - "6333:6333"
+      - "6333:6333"  # Default port for Qdrant's HTTP API
     volumes:
       - qdrant_data:/qdrant/storage
 
+  # Frontend service (Next.js)
+  frontend:
+    build:
+      context: ./frontend  # Path to your Next.js project
+    container_name: phlaw_frontend
+    ports:
+      - "3000:3000"  # Next.js default port
+    volumes:
+      - ./frontend:/app/frontend  # Sync frontend code
+    command: npm run dev  # Start Next.js development server
+    depends_on:
+      - web  # Ensure the backend is up before the frontend
+
+# Named volumes
 volumes:
-  qdrant_data:
+  qdrant_data:  # For Qdrant storage persistence
