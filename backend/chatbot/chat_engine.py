@@ -47,7 +47,7 @@ def chat_with_law_bot(query,
         f"You are a friendly legal assistant. "
         f"Answer the user's question using the Philippine jurisprudence sources below. "
         f"Explain clearly, summarize where possible, and use conversational language. "
-        f"Do not rephrase issues, just provide the answer.\n\n"
+        f"Do not rephrase issues, just provide the answer in same as the source.\n\n"
         f"Sources:\n{context}\n\nUser Question: {query}\nConversational Answer:"
     )
 
