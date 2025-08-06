@@ -1,6 +1,7 @@
 services:
   web:
     build: .
+    image: cmdampon/phlaw-chatbot:latest
     container_name: phlaw_backend
     ports:
       - "8000:8000"
