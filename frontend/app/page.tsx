@@ -12,9 +12,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Send, Scale, User, BookOpen } from "lucide-react";
+import { Send, Scale, User } from "lucide-react";
 
 interface Message {
   id: string;
@@ -124,12 +123,12 @@ export default function Home() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-slate-200 p-4">
-      <Card className="w-full max-w-5xl  flex flex-col bg-slate-200 shadow-none">
-        <CardHeader className="text-black ">
+    <div className="flex flex-col items-center justify-center h-screen p-4 bg-white">
+      <Card className="w-full max-w-3xl flex flex-col h-full bg-white border rounded-xl shadow-sm">
+        <CardHeader className="text-black">
           <CardTitle className="flex items-center gap-3">
-            <div className="w-10 h-10  rounded-full flex items-center justify-center ">
-              <Scale className="w-5 h-5 " />
+            <div className="w-10 h-10 rounded-full flex items-center justify-center">
+              <Scale className="w-5 h-5" />
             </div>
             <div className="flex flex-col">
               <span className="text-xl font-bold">LegalBot PH</span>
@@ -140,92 +139,90 @@ export default function Home() {
           </CardTitle>
         </CardHeader>
 
-        <CardContent className="flex-1 p-0 bg-slate-200">
-          <ScrollArea className="h-full p-6">
-            <div className="space-y-6">
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex gap-4 ${
-                    message.role === "user" ? "justify-end" : "justify-start"
-                  }`}
-                >
-                  {message.role === "assistant" && (
-                    <Avatar className="w-10 h-10 border-2">
-                      <AvatarFallback className="">
-                        <Scale className="w-5 h-5" />
-                      </AvatarFallback>
-                    </Avatar>
-                  )}
-
-                  <div
-                    className={`max-w-[75%] rounded-xl px-4 py-3 ${
-                      message.role === "user"
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white"
-                        : "bg-white border text-slate-800"
-                    }`}
-                  >
-                    <p className="text-sm leading-relaxed">{message.content}</p>
-                    <p
-                      className={`text-xs mt-2 ${
-                        message.role === "user"
-                          ? "text-blue-100"
-                          : "text-slate-500"
-                      }`}
-                    >
-                      {formatTime(message.timestamp)}
-                    </p>
-                  </div>
-
-                  {message.role === "user" && (
-                    <Avatar className="w-10 h-10 border-2 border-blue-300">
-                      <AvatarFallback className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
-                        <User className="w-5 h-5" />
-                      </AvatarFallback>
-                    </Avatar>
-                  )}
-                </div>
-              ))}
-
-              {isTyping && (
-                <div className="flex gap-4 justify-start">
+        <CardContent className="flex-1 overflow-y-auto px-4 py-2">
+          <div className="space-y-6">
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={`flex gap-4 ${
+                  message.role === "user" ? "justify-end" : "justify-start"
+                }`}
+              >
+                {message.role === "assistant" && (
                   <Avatar className="w-10 h-10 border-2">
-                    <AvatarFallback className="">
+                    <AvatarFallback>
                       <Scale className="w-5 h-5" />
                     </AvatarFallback>
                   </Avatar>
-                  <div className="bg-white border rounded-xl px-4 py-3 shadow-md">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm text-slate-600">
-                        Researching jurisprudence
-                      </span>
-                      <div className="flex space-x-1">
-                        <div className="w-2 h-2 rounded-full animate-bounce"></div>
-                        <div
-                          className="w-2 h-2 rounded-full animate-bounce"
-                          style={{ animationDelay: "0.1s" }}
-                        ></div>
-                        <div
-                          className="w-2 h-2 rounded-full animate-bounce"
-                          style={{ animationDelay: "0.2s" }}
-                        ></div>
-                      </div>
+                )}
+
+                <div
+                  className={`max-w-[75%] rounded-xl px-4 py-3 ${
+                    message.role === "user"
+                      ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white"
+                      : "bg-white border text-slate-800"
+                  }`}
+                >
+                  <p className="text-sm leading-relaxed">{message.content}</p>
+                  <p
+                    className={`text-xs mt-2 ${
+                      message.role === "user"
+                        ? "text-blue-100"
+                        : "text-slate-500"
+                    }`}
+                  >
+                    {formatTime(message.timestamp)}
+                  </p>
+                </div>
+
+                {message.role === "user" && (
+                  <Avatar className="w-10 h-10 border-2 border-blue-300">
+                    <AvatarFallback className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+                      <User className="w-5 h-5" />
+                    </AvatarFallback>
+                  </Avatar>
+                )}
+              </div>
+            ))}
+
+            {isTyping && (
+              <div className="flex gap-4 justify-start">
+                <Avatar className="w-10 h-10 border-2">
+                  <AvatarFallback>
+                    <Scale className="w-5 h-5" />
+                  </AvatarFallback>
+                </Avatar>
+                <div className=" px-4 py-3 shadow-md">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-slate-600">
+                      Researching jurisprudence
+                    </span>
+                    <div className="flex space-x-1">
+                      <div className="w-2 h-2 rounded-full animate-bounce"></div>
+                      <div
+                        className="w-2 h-2 rounded-full animate-bounce"
+                        style={{ animationDelay: "0.1s" }}
+                      ></div>
+                      <div
+                        className="w-2 h-2 rounded-full animate-bounce"
+                        style={{ animationDelay: "0.2s" }}
+                      ></div>
                     </div>
                   </div>
                 </div>
-              )}
-            </div>
-          </ScrollArea>
+              </div>
+            )}
+          </div>
         </CardContent>
 
-        <CardFooter className="border-t border-amber-200/20 bg-gradient-to-r from-slate-50 to-blue-50 p-4">
+        <CardFooter className="border-t p-4 bg-white sticky bottom-0 z-10">
           <div className="flex w-full gap-3">
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Ask about Supreme Court cases, legal doctrines..."
-              className="flex-1 focus:ring-amber-400/20"
+              placeholder="Ask about jurisprudence..."
+              className="flex-1 border-gray-300 focus:ring-0 focus:border-blue-500 bg-gray-50 text-sm"
               disabled={isTyping}
             />
             <Button
