@@ -31,7 +31,10 @@ WORKDIR /app/backend
 EXPOSE 8000
 
 # Install Next.js frontend dependencies and build
-COPY frontend/ ./frontend/
+COPY ./frontend/package.json /app/frontend/package.json
+COPY ./frontend/package-lock.json /app/frontend/package-lock.json
+COPY ./frontend /app/frontend
+
 WORKDIR /app/frontend
 
 # Install npm dependencies for Next.js
@@ -45,7 +48,7 @@ EXPOSE 3000
 # Supervisor approach (you can install it in the base container)
 RUN apt-get install -y supervisor
 
-COPY supervisor.conf /etc/supervisor/conf.d/supervisord.conf
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Start both the Django backend and Next.js frontend
 CMD ["/usr/bin/supervisord"]
