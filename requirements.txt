@@ -1,6 +1,5 @@
-Django==5.2.4
+Django
 djangorestframework==3.16.0
-drf-yasg==1.21.10
 
 qdrant-client==1.15.0
 sentence-transformers==5.0.0
@@ -8,15 +7,15 @@ transformers==4.53.3
 torch==2.7.1
 
 python-dotenv==1.1.1
-pandas==2.3.1
-numpy==2.3.1
+pandas
+numpy
 psutil==7.0.0  # for system/process KPI metrics
 
 # KPI/metrics and monitoring
-django-axes==6.3.0           # Security and login attempt tracking
-django-prometheus==2.3.1     # Export metrics to Prometheus/Grafana
-django-request-logging==0.7.3 # Log request/response details
-prometheus-client==0.20.0    # For custom metric tracking in Django
+django-axes         # Security and login attempt tracking
+django-prometheus   # Export metrics to Prometheus/Grafana
+django-request-logging # Log request/response details
+prometheus-client   # For custom metric tracking in Django
 
 # For API testing & docs
 requests==2.32.4
@@ -26,3 +25,4 @@ PyYAML==6.0.2
 # For development/quality
 ruff==0.12.4
 pytest==8.2.1
+llama-cpp-python

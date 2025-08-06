@@ -1,27 +1,26 @@
-# Use a slim Python base image
-FROM python:3.11-slim
+FROM nvidia/cuda:12.9.1-devel-ubuntu22.04
 
-# Set working directory
 WORKDIR /app
 
-# Install system-level dependencies for Python packages
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libpq-dev \
+# Install Python 3.11, pip, and system dependencies
+RUN apt-get update && \
+    apt-get install -y \
+        python3.11 python3.11-venv python3.11-distutils python3-pip \
+        build-essential libpq-dev git \
+        ninja-build \
     && rm -rf /var/lib/apt/lists/*
 
-# Pre-copy only requirements.txt to leverage Docker layer caching
+# Set environment variable for CUDA build
+ENV CMAKE_ARGS="-DGGML_CUDA=on"
+
 COPY requirements.txt ./requirements.txt
 
-# Install Python dependencies
-RUN pip install --upgrade pip && pip install --default-timeout=300 --retries=10 -r requirements.txt
+# Use Python 3.11 for pip install
+RUN python3.11 -m pip install --default-timeout=300 --retries=10 -r requirements.txt
 
-# Copy backend code only (not entire root folder)
 COPY backend/ ./backend/
 WORKDIR /app/backend
 
-# Expose port for Django
 EXPOSE 8000
 
-# Run Django development server (for production, use gunicorn/uvicorn instead)
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+CMD ["python3.11", "manage.py", "runserver", "0.0.0.0:8000"]

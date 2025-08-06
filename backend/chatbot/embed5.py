@@ -1,7 +1,9 @@
 import json
 import os
+import re
 import uuid
 
+import torch
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, PointStruct, VectorParams
@@ -38,6 +40,8 @@ else:
 # Load model
 print(f"📥 Loading model: {EMBED_MODEL}")
 model = SentenceTransformer(EMBED_MODEL)
+if torch.cuda.is_available():
+    model = model.to('cuda')
 
 # Process each year folder dynamically
 for year in sorted(os.listdir(DATA_DIR)):
@@ -60,12 +64,20 @@ for year in sorted(os.listdir(DATA_DIR)):
         with open(filepath, "r", encoding="utf-8") as f:
             content = f.read()
 
+        # Try to extract G.R. number(s) from file content
+        gr_nos = re.findall(r"G\.R\. No\. \d{5,}", content)
+        gr_nos = [gr.strip() for gr in gr_nos]  # In case of multiple numbers
+
         vector = model.encode(content).tolist()
         
         point = PointStruct(
             id=str(uuid.uuid5(uuid.NAMESPACE_URL, filepath)),
             vector=vector,
-            payload={"filename": filename, "year": year}
+            payload={
+                "filename": filename,
+                "year": year,
+                "gr_no": gr_nos  # stores as list, can be single or multiple
+            }
         )
         points.append(point)
         embedded_cache.append(filepath)

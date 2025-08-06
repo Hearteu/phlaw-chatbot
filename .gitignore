@@ -11,10 +11,10 @@ build/
 *.log
 
 # --- Virtual Environments & Environment Files ---
-venv/
-.env
-.env.*
-*.env.json
+# venv/
+# .env
+# .env.*
+# *.env.json
 
 # --- VS Code & IDEs ---
 .vscode/
@@ -47,3 +47,5 @@ cache/
 model_cache/
 qdrant_data/
 volume_backup/
+
+backend/law-chat.Q5_K_M.gguf
