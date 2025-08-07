@@ -2,9 +2,8 @@
 
 import type React from "react";
 
-import { useState } from "react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
@@ -12,8 +11,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Send, Scale, User } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Scale, Send, User } from "lucide-react";
+import { useState } from "react";
 
 interface Message {
   id: string;

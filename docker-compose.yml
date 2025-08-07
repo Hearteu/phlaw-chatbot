@@ -1,49 +1,48 @@
-version: '3.8'
 
 services:
   # Backend service (Django)
   web:
     build:
-      context: .
-      dockerfile: backend/Dockerfile  # Path to the backend Dockerfile
+      context: ./backend  # Root directory for backend context
+      dockerfile: Dockerfile  # Path to the backend Dockerfile
     container_name: phlaw_backend
     ports:
-      - "8000:8000"  # Django backend
-      - "7860:7860"  # For GPU services
+      - "8000:8000"  # Django backend port
+      - "7860:7860"  # GPU services port (if using GPU)
     volumes:
-      - ./model_cache:/root/.cache/huggingface
-      - ./backend:/app/backend
+      - ./model_cache:/root/.cache/huggingface  # Cache Huggingface models
+      - ./backend:/app/backend  # Mount backend source code
     env_file:
-      - ./backend/.env
+      - ./backend/.env  # Environment variables for the backend
     depends_on:
-      - qdrant  # Ensure Qdrant is up before backend starts
-    runtime: nvidia  # GPU support
+      - qdrant  # Ensure Qdrant is up before the backend starts
+    runtime: nvidia  # GPU support for backend
     environment:
-      - NVIDIA_VISIBLE_DEVICES=all  # GPU usage
+      - NVIDIA_VISIBLE_DEVICES=all  # Make GPU available to the backend
 
   # Frontend service (Next.js)
   frontend:
     build:
-      context: . # Path to the frontend directory
-      dockerfile: frontend/Dockerfile  # The Dockerfile inside the frontend directory
+      context: ./frontend # Set context to the frontend directory for the build
+      dockerfile: Dockerfile  # Dockerfile inside the frontend directory
     container_name: phlaw_frontend
     ports:
-      - "3000:3000"  # Next.js default port
+      - "3000:3000"  # Expose Next.js default port
     volumes:
-      - ./frontend:/app/frontend  # Sync frontend code
-    command: npm run dev  # Start Next.js development server
+      - ./frontend:/app/frontend  # Sync frontend code into container
+    command: npm run dev  # Run the Next.js development server
     depends_on:
       - web  # Ensure backend is up before frontend starts
 
-  # Qdrant service (if needed)
+  # Qdrant service (vector storage)
   qdrant:
     image: qdrant/qdrant
     container_name: qdrant
     ports:
-      - "6333:6333"  # Default Qdrant port
+      - "6333:6333"  # Qdrant's HTTP API port
     volumes:
-      - qdrant_data:/qdrant/storage
+      - qdrant_data:/qdrant/storage  # Persistent storage for Qdrant
 
-# Named volumes
+# Named volumes for persistent storage
 volumes:
-  qdrant_data:  # For persistent Qdrant storage
+  qdrant_data:  # To store Qdrant data

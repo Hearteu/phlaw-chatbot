@@ -9,19 +9,24 @@ from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, PointStruct, VectorParams
 from sentence_transformers import SentenceTransformer
 
-# Load configs once
+# --- Load configs & API key from .env (optional, for security) ---
 load_dotenv()
-QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
-QDRANT_PORT = int(os.getenv("QDRANT_PORT", 6333))
-QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "jurisprudence2")
+
+QDRANT_CLOUD_URL = os.getenv("QDRANT_CLOUD_URL")
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
+QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "jurisprudence")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "Stern5497/sbert-legal-xlm-roberta-base")
 VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", 768))
 
-DATA_DIR = "/app/backend/jurisprudence2"
-CACHE_PATH = "backend/chatbot/embedded_cache2.json"
+DATA_DIR = "backend/jurisprudence2"
+CACHE_PATH = "backend/backend/chatbot/embedded_cache2.json"
 
-# Initialize Qdrant
-client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
+# --- Initialize Qdrant Cloud Client ---
+client = QdrantClient(url=QDRANT_CLOUD_URL, api_key=QDRANT_API_KEY)
+print("🟢 Connected to Qdrant Cloud!")
+print(client.get_collections())
+
+# Create collection if needed
 if not client.collection_exists(QDRANT_COLLECTION):
     client.create_collection(
         collection_name=QDRANT_COLLECTION,
@@ -29,7 +34,7 @@ if not client.collection_exists(QDRANT_COLLECTION):
     )
 print(f"✅ Qdrant collection: {QDRANT_COLLECTION}")
 
-# Load cache
+# Load embedding cache
 os.makedirs(os.path.dirname(CACHE_PATH), exist_ok=True)
 if os.path.exists(CACHE_PATH):
     with open(CACHE_PATH, "r", encoding="utf-8") as f:
@@ -37,13 +42,13 @@ if os.path.exists(CACHE_PATH):
 else:
     embedded_cache = []
 
-# Load model
+# --- Load model (with CUDA support if available) ---
 print(f"📥 Loading model: {EMBED_MODEL}")
 model = SentenceTransformer(EMBED_MODEL)
 if torch.cuda.is_available():
     model = model.to('cuda')
 
-# Process each year folder dynamically
+# --- Main Embedding and Upload Loop ---
 for year in sorted(os.listdir(DATA_DIR)):
     year_path = os.path.join(DATA_DIR, year)
     if not os.path.isdir(year_path) or not year.isdigit():
@@ -64,19 +69,18 @@ for year in sorted(os.listdir(DATA_DIR)):
         with open(filepath, "r", encoding="utf-8") as f:
             content = f.read()
 
-        # Try to extract G.R. number(s) from file content
+        # Extract G.R. number(s)
         gr_nos = re.findall(r"G\.R\. No\. \d{5,}", content)
-        gr_nos = [gr.strip() for gr in gr_nos]  # In case of multiple numbers
+        gr_nos = [gr.strip() for gr in gr_nos]
 
         vector = model.encode(content).tolist()
-        
         point = PointStruct(
             id=str(uuid.uuid5(uuid.NAMESPACE_URL, filepath)),
             vector=vector,
             payload={
                 "filename": filename,
                 "year": year,
-                "gr_no": gr_nos  # stores as list, can be single or multiple
+                "gr_no": gr_nos  # always a list
             }
         )
         points.append(point)
@@ -88,7 +92,7 @@ for year in sorted(os.listdir(DATA_DIR)):
     else:
         print("✔️ No new docs found this year")
 
-# Save cache
+# Save embedding cache
 with open(CACHE_PATH, "w", encoding="utf-8") as f:
     json.dump(embedded_cache, f, indent=2)
 
