@@ -1,40 +1,42 @@
 
-services:
-  # Backend service (Django)
-  web:
-    build:
-      context: ./backend  # Root directory for backend context
-      dockerfile: Dockerfile  # Path to the backend Dockerfile
-    container_name: phlaw_backend
-    ports:
-      - "8000:8000"  # Django backend port
-      - "7860:7860"  # GPU services port (if using GPU)
-    volumes:
-      - ./model_cache:/root/.cache/huggingface  # Cache Huggingface models
-      - ./backend:/app/backend  # Mount backend source code
-    env_file:
-      - ./backend/.env  # Environment variables for the backend
-    depends_on:
-      - qdrant  # Ensure Qdrant is up before the backend starts
-    runtime: nvidia  # GPU support for backend
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all  # Make GPU available to the backend
+# services:
+  # # Backend service (Django)
+  # web:
+  #   build:
+  #     context: ./backend  # Root directory for backend context
+  #     dockerfile: Dockerfile  # Path to the backend Dockerfile
+  #   container_name: phlaw_backend
+  #   ports:
+  #     - "8000:8000"  # Django backend port
+  #     - "7860:7860"  # GPU services port (if using GPU)
+  #   volumes:
+  #     - ./model_cache:/root/.cache/huggingface  # Cache Huggingface models
+  #     - ./backend:/app/backend  # Mount backend source code
+  #   env_file:
+  #     - ./backend/.env  # Environment variables for the backend
+  #   depends_on:
+  #     - qdrant  # Ensure Qdrant is up before the backend starts
+  #   runtime: nvidia  # GPU support for backend
+  #   environment:
+  #     - NVIDIA_VISIBLE_DEVICES=all  # Make GPU available to the backend
 
-  # Frontend service (Next.js)
-  frontend:
-    build:
-      context: ./frontend # Set context to the frontend directory for the build
-      dockerfile: Dockerfile  # Dockerfile inside the frontend directory
-    container_name: phlaw_frontend
-    ports:
-      - "3000:3000"  # Expose Next.js default port
-    volumes:
-      - ./frontend:/app/frontend  # Sync frontend code into container
-    command: npm run dev  # Run the Next.js development server
-    depends_on:
-      - web  # Ensure backend is up before frontend starts
+  # # Frontend service (Next.js)
+  # frontend:
+  #   build:
+  #     context: ./frontend # Set context to the frontend directory for the build
+  #     dockerfile: Dockerfile  # Dockerfile inside the frontend directory
+  #   container_name: phlaw_frontend
+  #   ports:
+  #     - "3000:3000"  # Expose Next.js default port
+  #   volumes:
+  #     - ./frontend:/app/frontend  # Sync frontend code into container
+  #   command: npm run dev  # Run the Next.js development server
+  #   depends_on:
+  #     - web  # Ensure backend is up before frontend starts
 
   # Qdrant service (vector storage)
+services:
+
   qdrant:
     image: qdrant/qdrant
     container_name: qdrant

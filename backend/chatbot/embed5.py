@@ -14,6 +14,8 @@ load_dotenv()
 
 QDRANT_CLOUD_URL = os.getenv("QDRANT_CLOUD_URL")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
+QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
+QDRANT_PORT = int(os.getenv("QDRANT_PORT", 6333))
 QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "jurisprudence")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "Stern5497/sbert-legal-xlm-roberta-base")
 VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", 768))
@@ -22,9 +24,9 @@ DATA_DIR = "backend/jurisprudence2"
 CACHE_PATH = "backend/backend/chatbot/embedded_cache2.json"
 
 # --- Initialize Qdrant Cloud Client ---
-client = QdrantClient(url=QDRANT_CLOUD_URL, api_key=QDRANT_API_KEY)
-print("🟢 Connected to Qdrant Cloud!")
-print(client.get_collections())
+client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
+# print("🟢 Connected to Qdrant Cloud!")
+# print(client.get_collections())
 
 # Create collection if needed
 if not client.collection_exists(QDRANT_COLLECTION):
@@ -92,8 +94,8 @@ for year in sorted(os.listdir(DATA_DIR)):
     else:
         print("✔️ No new docs found this year")
 
-# Save embedding cache
-with open(CACHE_PATH, "w", encoding="utf-8") as f:
-    json.dump(embedded_cache, f, indent=2)
+    # Save embedding cache
+    with open(CACHE_PATH, "w", encoding="utf-8") as f:
+        json.dump(embedded_cache, f, indent=2)
 
 print("\n🎉 Embedding process complete!")
