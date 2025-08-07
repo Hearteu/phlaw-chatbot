@@ -1,19 +1,8 @@
-# chat_engine.py (memory-optimized)
-
 retriever = None
 
-def truncate_text(text, max_chars=1000):
-    """Safely truncate a string to max_chars."""
-    if not text:
-        return ""
-    return text[:max_chars]
-
-def chat_with_law_bot(query,
-                      max_doc_chars=1000,
-                      max_total_chars=4096,
-                      min_docs=1):
+def chat_with_law_bot(query):
     """
-    Memory-safe chat engine that limits doc size and overall prompt length.
+    Simple chat engine that gives all retrieved context to the generator.
     """
     global retriever
     if retriever is None:
@@ -22,32 +11,19 @@ def chat_with_law_bot(query,
 
     # Get top-k documents from retriever
     docs = retriever.retrieve(query)
-    if not docs or len(docs) < min_docs:
+    if not docs:
         return "No relevant jurisprudence found."
 
-    # Prepare context: only include truncated excerpts, and limit total prompt size
-    context_parts = []
-    total_chars = 0
-
-    for doc in docs:
-        excerpt = truncate_text(doc.get('text'), max_doc_chars)
-        chunk = f"Source: {doc.get('filename')}\n{excerpt}"
-        if total_chars + len(chunk) > max_total_chars:
-            # Stop if adding this chunk would exceed limit
-            break
-        context_parts.append(chunk)
-        total_chars += len(chunk)
-
-    if not context_parts:
-        return "Context could not be constructed due to document size limits."
-
-    context = "\n\n".join(context_parts)
+    # Prepare context: use full text of each doc
+    context = "\n\n".join(
+        f"Source: {doc.get('filename')}\n{doc.get('text')}" for doc in docs
+    )
 
     prompt = (
         f"You are a friendly legal assistant. "
         f"Answer the user's question using the Philippine jurisprudence sources below. "
         f"Explain clearly, summarize where possible, and use conversational language. "
-        f"Do not rephrase issues, just provide the answer in same as the source.\n\n"
+        # f"Do not rephrase issues, just provide the answer in same as the source.\n\n"
         f"Sources:\n{context}\n\nUser Question: {query}\nConversational Answer:"
     )
 

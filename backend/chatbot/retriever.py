@@ -11,11 +11,13 @@ class LegalRetriever:
         load_dotenv()
         QDRANT_CLOUD_URL = os.getenv("QDRANT_CLOUD_URL")
         QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
-        COLLECTION = os.getenv("QDRANT_COLLECTION", "jurisprudence2")
+        COLLECTION = os.getenv("QDRANT_COLLECTION", "jurisprudence")
         EMBED_MODEL = os.getenv("EMBED_MODEL", "Stern5497/sbert-legal-xlm-roberta-base")
+        QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
+        QDRANT_PORT = int(os.getenv("QDRANT_PORT", 6333))
 
         self.model = SentenceTransformer(EMBED_MODEL)
-        self.qdrant = QdrantClient(url=QDRANT_CLOUD_URL, api_key=QDRANT_API_KEY)
+        self.qdrant = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
         self.collection = COLLECTION
         self.data_dir = os.getenv("DATA_DIR", "backend/jurisprudence2")  # fallback/default
 
