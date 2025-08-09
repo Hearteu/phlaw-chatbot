@@ -42,6 +42,7 @@ docs/
 outputs/
 temp/
 cache/
+tessst/
 
 # --- HuggingFace & Qdrant Data
 model_cache/

@@ -1,32 +1,39 @@
+# chat_engine.py
 retriever = None
 
 def chat_with_law_bot(query):
-    """
-    Simple chat engine that gives all retrieved context to the generator.
-    """
     global retriever
     if retriever is None:
         from .retriever import LegalRetriever
         retriever = LegalRetriever()
 
-    # Get top-k documents from retriever
-    docs = retriever.retrieve(query)
+    docs = retriever.retrieve(query, k=6)
     if not docs:
         return "No relevant jurisprudence found."
 
-    # Prepare context: use full text of each doc
+    # If the question mentions "ruling" and we have a ruling section, answer verbatim.
+    wants_ruling = "ruling" in query.lower()
+    ruling_doc = next((d for d in docs if d.get("section") == "ruling"), None)
+
+    if wants_ruling and ruling_doc:
+        # return the ruling text directly (cleaned)
+        return ruling_doc.get("text", "").strip()
+
+    # Otherwise, build a tight context (favor ruling/header first)
+    ordered = sorted(docs, key=lambda d: {"ruling":0, "header":1}.get(d.get("section","body"),2))
     context = "\n\n".join(
-        f"Source: {doc.get('filename')}\n{doc.get('text')}" for doc in docs
+        f"Source: {d.get('filename')} [{d.get('section')}]"
+        f"\n{d.get('text')[:1200]}"
+        for d in ordered[:4]
     )
+    print("Context for query:", context)
 
     prompt = (
-        f"You are a friendly legal assistant. "
-        f"Answer the user's question using the Philippine jurisprudence sources below. "
-        f"Explain clearly, summarize where possible, and use conversational language. "
-        # f"Do not rephrase issues, just provide the answer in same as the source.\n\n"
-        f"Sources:\n{context}\n\nUser Question: {query}\nConversational Answer:"
+        "You are a legal assistant for PH jurisprudence.\n"
+        # "Answer strictly from the provided sources; if unknown, say you don’t know.\n\n"
+        "Quote directly for holdings/rulings; keep the answer faithful to the text.\n\n"
+        f"Sources:\n{context}\n\nQuestion: {query}\nAnswer:"
     )
 
-    # Call your generator to get the final answer
     from .generator import generate_response
     return generate_response(prompt)
