@@ -1,13 +1,12 @@
-# embed.py — batched, section-aware embedding + Qdrant upsert
-
+# embed.py — batched, section-aware embedding + Qdrant upsert (TXT or JSONL)
+import gzip
 import json
 import os
 import re
 import uuid
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import torch
-from cleaner import clean_and_split  # <-- add this import
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, PointStruct, VectorParams
@@ -23,19 +22,26 @@ QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "jurisprudence")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "Stern5497/sbert-legal-xlm-roberta-base")
 VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", 768))
 
-DATA_DIR = os.getenv("DATA_DIR", "backend/jurisprudence2")
+# Source data
+DATA_FORMAT = os.getenv("DATA_FORMAT", "jsonl").lower()   # "txt" | "jsonl"
+DATA_DIR    = os.getenv("DATA_DIR", "backend/jurisprudence2")       # for txt mode
+DATA_FILE   = os.getenv("DATA_FILE", "data/cases.jsonl.gz")         # for jsonl mode
+
+# Cache (for txt mode; list of processed filepaths)
 CACHE_PATH = os.getenv("EMBED_CACHE_PATH", "backend/backend/chatbot/embedded_cache2.json")
 
-# Chunking
-CHUNK_CHARS = int(os.getenv("CHUNK_CHARS", 1200))
+# Chunking/throughput
+CHUNK_CHARS   = int(os.getenv("CHUNK_CHARS", 1200))
 OVERLAP_CHARS = int(os.getenv("OVERLAP_CHARS", 150))
-BATCH_SIZE = int(os.getenv("EMBED_BATCH_SIZE", 16))
-UPSERT_BATCH = int(os.getenv("UPSERT_BATCH", 512))
+BATCH_SIZE    = int(os.getenv("EMBED_BATCH_SIZE", 16))
+UPSERT_BATCH  = int(os.getenv("UPSERT_BATCH", 512))
 
 # -----------------------------
 # Qdrant init
 # -----------------------------
-client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT, grpc_port=6334, prefer_grpc=True, timeout=120.0  )
+client = QdrantClient(
+    host=QDRANT_HOST, port=QDRANT_PORT, grpc_port=6334, prefer_grpc=True, timeout=120.0
+)
 if not client.collection_exists(QDRANT_COLLECTION):
     client.create_collection(
         collection_name=QDRANT_COLLECTION,
@@ -44,7 +50,7 @@ if not client.collection_exists(QDRANT_COLLECTION):
 print(f"✅ Qdrant collection ready: {QDRANT_COLLECTION}")
 
 # -----------------------------
-# Cache (list of processed filepaths)
+# Cache (txt mode: list of processed filepaths)
 # -----------------------------
 os.makedirs(os.path.dirname(CACHE_PATH), exist_ok=True)
 if os.path.exists(CACHE_PATH):
@@ -64,25 +70,10 @@ RULING_REGEX = re.compile(
     r"(WHEREFORE.*?SO ORDERED\.?|ACCORDINGLY.*?SO ORDERED\.?)",
     re.IGNORECASE | re.DOTALL,
 )
-# -----------------------------
-# Helpers
-# -----------------------------
-GR_NO_REGEX = re.compile(r"G\.R\.\s*No(?:s)?\.?\s*\d{5,}", re.IGNORECASE)
-
-def extract_gr_nos(text: str) -> list[str]:
-    raw = GR_NO_REGEX.findall(text)
-    norm = []
-    for m in raw:
-        # unify spacing, collapse multiple spaces
-        s = re.sub(r"\s+", " ", m.strip())
-        # force singular "G.R. No."
-        s = s.replace("G.R. Nos.", "G.R. No.").replace("G.R. No .", "G.R. No.")
-        norm.append(s)
-    return sorted(set(norm))
 
 def find_ruling(text: str) -> Tuple[int, int]:
     """Return (start, end) of the ruling section, or (-1, -1) if not found."""
-    m = RULING_REGEX.search(text)
+    m = RULING_REGEX.search(text or "")
     return (m.start(), m.end()) if m else (-1, -1)
 
 def chunkify(s: str, size: int, overlap: int) -> Iterable[str]:
@@ -100,8 +91,67 @@ def chunkify(s: str, size: int, overlap: int) -> Iterable[str]:
         start += step
 
 def read_text(path: str) -> str:
-    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+    with open(path, "r", encoding="utf-8") as f:
         return f.read()
+
+# -----------------------------
+# JSONL readers (jsonl mode)
+# -----------------------------
+def iter_cases(path: str):
+    """
+    Yield JSONL records from .jsonl or .jsonl.gz (one object per line).
+    """
+    opener = gzip.open if path.endswith(".gz") else open
+    with opener(path, "rt", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                yield json.loads(line)
+            except Exception:
+                # skip malformed lines but continue
+                continue
+
+def text_from_record(rec: Dict[str, Any]) -> str:
+    """
+    Re-create a single text stream preserving your section-aware emphasis:
+    ruling → header → body
+    """
+    s = rec.get("sections") or {}
+    parts: List[str] = []
+    if s.get("ruling"):
+        parts.append(s["ruling"])
+    if s.get("header"):
+        parts.append(s["header"])
+    body = s.get("body") or rec.get("clean_text") or ""
+    if body:
+        parts.append(body)
+    return "\n\n".join(parts).strip()
+
+def record_meta(rec):
+    # 1) full date string present?
+    y = None
+    d = rec.get("promulgation_date")
+    if isinstance(d, str) and len(d) >= 4 and d[:4].isdigit():
+        y = int(d[:4])
+    # 2) otherwise use year hint from crawler
+    if y is None:
+        yh = rec.get("promulgation_year")
+        if isinstance(yh, int) and yh > 0:
+            y = yh
+    # 3) final fallback
+    if y is None:
+        y = 0
+
+    return {
+        "gr_number": rec.get("gr_number"),
+        "title": rec.get("title"),
+        "year": y,
+        "source_url": rec.get("source_url"),
+        "sectioned": True,
+    }
+
 
 # -----------------------------
 # Model (load once)
@@ -110,66 +160,39 @@ print(f"📥 Loading model: {EMBED_MODEL}")
 model = SentenceTransformer(EMBED_MODEL)
 if torch.cuda.is_available():
     model = model.to("cuda")
+
 # -----------------------------
 # Point maker
 # -----------------------------
+def make_points(doc_id: str, text: str, meta: Dict[str, Any]) -> List[PointStruct]:
+    texts: List[str] = []
+    payloads: List[Dict[str, Any]] = []
+    ids: List[str] = []
 
-PRIMARY_GR_RE = re.compile(
-    r"\[\s*G\.R\.\s*No(?:s)?\.?\s*([0-9][0-9\- ,]*)\s*[,\]]",
-    re.I
-)
+    # RULING
+    rs, re_ = find_ruling(text)
+    if rs != -1:
+        ruling_text = text[rs:re_].strip()
+        if ruling_text:
+            texts.append(ruling_text)
+            payloads.append({**meta, "section": "ruling"})
+            ids.append(str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc_id}#ruling")))
 
-def extract_primary_gr_no(text: str) -> str | None:
-        header = text[:2000]  # safer window around the centered caption
-        m = PRIMARY_GR_RE.search(header)
-        return f"G.R. No. {m.group(1)}" if m else None
+    # HEADER (~first 1200 chars)
+    header_snippet = text[:1200].strip()
+    if header_snippet:
+        texts.append(header_snippet)
+        payloads.append({**meta, "section": "header"})
+        ids.append(str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc_id}#header")))
 
-def make_points(doc_id: str, raw_text: str, meta: Dict[str, Any]) -> List[PointStruct]:
-    parts = clean_and_split(raw_text)
-    texts, payloads, ids = [], [], []
-
-    # RULING (highest recall for "Give me the ruling...")
-    if parts["ruling"]:
-        texts.append(parts["ruling"])
-        payloads.append({**meta, "section": "ruling"})
-        ids.append(str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc_id}#ruling")))
-
-    # HEADER (short)
-    if parts["header"]:
-        header_snippet = parts["header"][:1200].strip()
-        if header_snippet:
-            texts.append(header_snippet)
-            payloads.append({**meta, "section": "header"})
-            ids.append(str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc_id}#header")))
-
-    # BODY chunks (already cleaned; excludes ruling duplication)
-    body_text = parts["body"]
-    if parts["disposition"]:
-        # Prefer to keep disposition independent; exclude it from body to avoid dup
-        body_text = body_text.replace(parts["disposition"], "")
-
-    # simple chunker (existing)
+    # BODY (everything except ruling)
+    body_text = (text[:max(0, rs - 1)] + "\n\n" + text[re_:]).strip() if rs != -1 else text
     for idx, chunk in enumerate(chunkify(body_text, CHUNK_CHARS, OVERLAP_CHARS), 1):
-        c = chunk.strip()
-        if not c:
-            continue
-        texts.append(c)
+        texts.append(chunk)
         payloads.append({**meta, "section": "body", "chunk_index": idx})
         ids.append(str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc_id}#body-{idx:03d}")))
 
-    # DISPOSITION as its own section (useful for retrieval)
-    if parts["disposition"]:
-        texts.append(parts["disposition"])
-        payloads.append({**meta, "section": "disposition"})
-        ids.append(str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc_id}#disposition")))
-
-    # METADATA can be short but searchable (optional)
-    if parts["metadata"]:
-        texts.append(parts["metadata"])
-        payloads.append({**meta, "section": "metadata"})
-        ids.append(str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc_id}#metadata")))
-
-    # Encode in one batch (unchanged)
+    # Encode in one batch
     vectors = model.encode(
         texts, batch_size=BATCH_SIZE, convert_to_numpy=True, normalize_embeddings=True
     )
@@ -178,7 +201,6 @@ def make_points(doc_id: str, raw_text: str, meta: Dict[str, Any]) -> List[PointS
         PointStruct(id=pid, vector=vec.tolist(), payload=pl)
         for pid, vec, pl in zip(ids, vectors, payloads)
     ]
-
 
 def upsert_points(points: List[PointStruct]):
     # upsert in manageable batches
@@ -190,6 +212,16 @@ def upsert_points(points: List[PointStruct]):
 # Main ingestion
 # -----------------------------
 def process_dir():
+    """
+    Legacy TXT folder layout:
+      DATA_DIR/
+        2005/
+          jan2005_1.txt
+          ...
+        2006/
+          ...
+    Uses embedded_cache (filepaths) to avoid re-embedding the same files.
+    """
     total_new = 0
     for year in sorted(os.listdir(DATA_DIR)):
         year_path = os.path.join(DATA_DIR, year)
@@ -210,14 +242,7 @@ def process_dir():
 
             try:
                 text = read_text(filepath)
-                # Per-file metadata
-                meta = {"filename": filename, "year": int(year)}
-                primary = extract_primary_gr_no(text)
-                if primary:
-                    meta["primary_gr_no"] = primary
-                # (optional) also keep all cited GRs you already collect:
-                # meta["cited_gr_nos"] = list_of_all_mentions
-
+                meta = {"filename": filename, "year": int(year), "sectioned": False}
                 doc_id = str(uuid.uuid5(uuid.NAMESPACE_URL, filepath))
                 pts = make_points(doc_id, text, meta)
                 pending_points.extend(pts)
@@ -226,13 +251,11 @@ def process_dir():
             except Exception as e:
                 print(f"⚠️  Skipping (read/encode error): {filepath} — {e}")
 
-            # flush periodically to keep memory steady
             if len(pending_points) >= UPSERT_BATCH:
                 upsert_points(pending_points)
                 pending_points.clear()
                 save_cache()
 
-        # flush any remainder
         if pending_points:
             upsert_points(pending_points)
             pending_points.clear()
@@ -242,18 +265,54 @@ def process_dir():
         total_new += added_this_year
 
     print(f"\n🎉 Done. New docs embedded: {total_new}")
-    from qdrant_client.http.models import PayloadSchemaType
 
-    client.create_payload_index(
-        collection_name=QDRANT_COLLECTION,
-        field_name="primary_gr_no",
-        field_schema=PayloadSchemaType.KEYWORD,
-    )
-    client.create_payload_index(
-        collection_name=QDRANT_COLLECTION,
-        field_name="year",
-        field_schema=PayloadSchemaType.INTEGER,
-    )
+def process_jsonl():
+    """
+    New JSONL pipeline (from crawler):
+    - Streams records from DATA_FILE (.jsonl or .jsonl.gz)
+    - Builds doc_id from rec['id'] or source_url
+    - Adds rich metadata (gr_number, title, year, source_url)
+    - Section-aware embedding as before
+    """
+    if not os.path.exists(DATA_FILE):
+        raise FileNotFoundError(f"DATA_FILE not found: {DATA_FILE}")
+
+    pending_points: List[PointStruct] = []
+    added = 0
+
+    for rec in iter_cases(DATA_FILE):
+        try:
+            # Stable ID
+            base_id = rec.get("id") or rec.get("source_url") or str(uuid.uuid4())
+            doc_id = str(uuid.uuid5(uuid.NAMESPACE_URL, base_id))
+
+            text = text_from_record(rec)
+            if not text:
+                continue
+
+            meta = record_meta(rec)
+            pts = make_points(doc_id, text, meta)
+            pending_points.extend(pts)
+            added += 1
+
+            if len(pending_points) >= UPSERT_BATCH:
+                upsert_points(pending_points)
+                pending_points.clear()
+
+        except Exception as e:
+            src = rec.get("source_url") if isinstance(rec, dict) else "unknown"
+            print(f"⚠️  Skipping record ({src}) — {e}")
+
+    if pending_points:
+        upsert_points(pending_points)
+        pending_points.clear()
+
+    print(f"🚀 Uploaded {added} JSONL records")
 
 if __name__ == "__main__":
-    process_dir()
+    if DATA_FORMAT == "jsonl":
+        print(f"📦 Mode: JSONL — {DATA_FILE}")
+        process_jsonl()
+    else:
+        print(f"📦 Mode: TXT — {DATA_DIR}")
+        process_dir()

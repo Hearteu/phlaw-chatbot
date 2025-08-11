@@ -1,6 +1,11 @@
 # chat_engine.py
 retriever = None
 
+def format_source_line(doc: dict) -> str:
+    title = doc.get("title") or doc.get("gr_number") or doc.get("filename") or "Untitled case"
+    url   = doc.get("source_url") or "N/A"
+    return f"Source: {title} [{url}]"
+
 def chat_with_law_bot(query):
     global retriever
     if retriever is None:

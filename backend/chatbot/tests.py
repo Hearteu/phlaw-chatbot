@@ -11,7 +11,7 @@ class ChatAPITestCase(TestCase):
         response = self.client.post(
             '/api/chat/',  # Change if your path is different
             # json.dumps({'query': "Give me the facts, issue, ruling of the G.R. No. 211089."}),
-            json.dumps({'query': "Give me case digest for a case in 2025"}),
+            json.dumps({'query': "What is the ruling in G.R. No. 246027"}),
             # json.dumps({'query': "What is the ruling in G.R. No. 211089?"}),
             
             content_type='application/json'
