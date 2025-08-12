@@ -1,6 +1,7 @@
 "use client";
 
 import type React from "react";
+import { useState } from "react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,6 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Scale, Send, User } from "lucide-react";
-import { useState } from "react";
 
 interface Message {
   id: string;
@@ -23,48 +23,11 @@ interface Message {
 }
 
 export default function Home() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "1",
-      content:
-        "Kumusta! I'm LegalBot PH, your Philippine jurisprudence assistant. I can help you with questions about Philippine laws, Supreme Court decisions, legal principles, and case citations. How may I assist you today?",
-      role: "assistant",
-      timestamp: new Date(Date.now() - 120000),
-    },
-    {
-      id: "2",
-      content:
-        "Hi! Can you explain the doctrine of piercing the corporate veil under Philippine law?",
-      role: "user",
-      timestamp: new Date(Date.now() - 90000),
-    },
-    {
-      id: "3",
-      content:
-        "The doctrine of piercing the corporate veil allows courts to disregard the separate juridical personality of a corporation. Under Philippine jurisprudence, this applies when the corporate fiction is used to defeat public convenience, justify wrong, protect fraud, or defend crime. Key cases include Concept Builders, Inc. v. NLRC (1994) and Lim Tong Lim v. Philippine Fishing Gear Industries (1992).",
-      role: "assistant",
-      timestamp: new Date(Date.now() - 60000),
-    },
-    {
-      id: "4",
-      content:
-        "That's helpful! Can you also cite the specific G.R. numbers for those cases?",
-      role: "user",
-      timestamp: new Date(Date.now() - 30000),
-    },
-    {
-      id: "5",
-      content:
-        "Concept Builders, Inc. v. NLRC is G.R. No. 108734, decided on May 26, 1994. Lim Tong Lim v. Philippine Fishing Gear Industries is G.R. No. 136448, decided on November 3, 1999. These cases established important precedents for when courts may pierce the corporate veil in the Philippines.",
-      role: "assistant",
-      timestamp: new Date(Date.now() - 15000),
-    },
-  ]);
-
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!input.trim()) return;
 
     // Add user message
@@ -79,32 +42,39 @@ export default function Home() {
     setInput("");
     setIsTyping(true);
 
-    // Simulate AI response after a delay
-    setTimeout(() => {
-      const responses = [
-        "That's an excellent legal question. Under Philippine jurisprudence, this principle is well-established through various Supreme Court decisions...",
-        "Based on Philippine law and relevant case law, here's what you need to know about this legal concept...",
-        "The Supreme Court of the Philippines has consistently held in several landmark cases that...",
-        "According to the Civil Code of the Philippines and supporting jurisprudence, this legal principle operates as follows...",
-        "This is a fundamental concept in Philippine law. Let me cite the relevant provisions and case law for you...",
-        "The doctrine you're asking about has been refined through years of Philippine Supreme Court decisions. Here's the current state of the law...",
-        "Under the Revised Penal Code and related jurisprudence, this legal principle is applied in the following manner...",
-        "The Constitutional basis for this principle, as interpreted by the Philippine Supreme Court, establishes that...",
-      ];
+    try {
+      console.log("📡 Sending POST to Django backend...");
+      const res = await fetch("http://127.0.0.1:8000/api/chat/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: input }),
+      });
 
-      const randomResponse =
-        responses[Math.floor(Math.random() * responses.length)];
+      const data = await res.json();
+      console.log("✅ Response from backend:", data);
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: randomResponse,
+        content: data.response ?? data.error ?? "No response",
         role: "assistant",
         timestamp: new Date(),
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
+    } catch (error) {
+      console.error("❌ Error talking to backend:", error);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: (Date.now() + 2).toString(),
+          content: "Error connecting to backend",
+          role: "assistant",
+          timestamp: new Date(),
+        },
+      ]);
+    } finally {
       setIsTyping(false);
-    }, 2000);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -192,7 +162,7 @@ export default function Home() {
                     <Scale className="w-5 h-5" />
                   </AvatarFallback>
                 </Avatar>
-                <div className=" px-4 py-3 shadow-md">
+                <div className="px-4 py-3 shadow-md">
                   <div className="flex items-center space-x-2">
                     <span className="text-sm text-slate-600">
                       Researching jurisprudence
