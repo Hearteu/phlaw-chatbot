@@ -38,9 +38,9 @@ from selectolax.parser import HTMLParser
 # Config (env-overridable)
 # -----------------------------
 BASE_URL     = os.getenv("ELIBRARY_BASE", "https://elibrary.judiciary.gov.ph/")
-OUT_PATH     = os.getenv("CASES_JSONL", "data/cases.jsonl.gz")
+OUT_PATH     = os.getenv("CASES_JSONL", "backend/data/cases.jsonl.gz")
 UA           = os.getenv("CRAWLER_UA", "Mozilla/5.0 (compatible; PHLawBot/1.0)")
-YEAR_START   = int(os.getenv("YEAR_START", 2025))
+YEAR_START   = int(os.getenv("YEAR_START", 2005))
 YEAR_END     = int(os.getenv("YEAR_END", 2025))
 CONCURRENCY  = int(os.getenv("CONCURRENCY", 8))
 SLOWDOWN_MS  = int(os.getenv("SLOWDOWN_MS", 250))

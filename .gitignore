@@ -44,9 +44,13 @@ temp/
 cache/
 tessst/
 
+# --- Backend Data ---
+backend/data/cases.jsonl.gz
 # --- HuggingFace & Qdrant Data
 model_cache/
 qdrant_data/
 volume_backup/
 
 backend/law-chat.Q5_K_M.gguf
+backend/data/*.gz
+

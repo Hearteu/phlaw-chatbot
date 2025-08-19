@@ -3,6 +3,7 @@ import gzip
 import json
 import os
 import re
+import unicodedata
 import uuid
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -25,10 +26,10 @@ VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", 768))
 # Source data
 DATA_FORMAT = os.getenv("DATA_FORMAT", "jsonl").lower()   # "txt" | "jsonl"
 DATA_DIR    = os.getenv("DATA_DIR", "backend/jurisprudence2")       # for txt mode
-DATA_FILE   = os.getenv("DATA_FILE", "data/cases.jsonl.gz")         # for jsonl mode
+DATA_FILE   = os.getenv("DATA_FILE", "backend/data/cases.jsonl.gz")         # for jsonl mode
 
 # Cache (for txt mode; list of processed filepaths)
-CACHE_PATH = os.getenv("EMBED_CACHE_PATH", "backend/backend/chatbot/embedded_cache2.json")
+CACHE_PATH = os.getenv("EMBED_CACHE_PATH", "backend/backend/chatbot/embedded_cache.json")
 
 # Chunking/throughput
 CHUNK_CHARS   = int(os.getenv("CHUNK_CHARS", 1200))
@@ -70,11 +71,24 @@ RULING_REGEX = re.compile(
     r"(WHEREFORE.*?SO ORDERED\.?|ACCORDINGLY.*?SO ORDERED\.?)",
     re.IGNORECASE | re.DOTALL,
 )
+WS_RE = re.compile(r"\s+")
+PUNCT_FIX_RE = re.compile(r"\s+([,.;:!?])")
 
 def find_ruling(text: str) -> Tuple[int, int]:
     """Return (start, end) of the ruling section, or (-1, -1) if not found."""
     m = RULING_REGEX.search(text or "")
     return (m.start(), m.end()) if m else (-1, -1)
+
+def normalize_text(s: str) -> str:
+    """Collapse whitespace/newlines; lightly clean spacing around punctuation."""
+    if not s:
+        return ""
+    # Normalize unicode, unify whitespace
+    s = unicodedata.normalize("NFKC", s)
+    s = WS_RE.sub(" ", s.replace("\r", "\n")).strip()
+    # Remove stray spaces before punctuation: "word ." -> "word."
+    s = PUNCT_FIX_RE.sub(r"\1", s)
+    return s
 
 def chunkify(s: str, size: int, overlap: int) -> Iterable[str]:
     """Simple char-based chunker with overlap."""
@@ -116,18 +130,19 @@ def iter_cases(path: str):
 def text_from_record(rec: Dict[str, Any]) -> str:
     """
     Re-create a single text stream preserving your section-aware emphasis:
-    ruling → header → body
+    ruling → header → body, with whitespace normalized.
     """
     s = rec.get("sections") or {}
     parts: List[str] = []
     if s.get("ruling"):
-        parts.append(s["ruling"])
+        parts.append(normalize_text(s["ruling"]))
     if s.get("header"):
-        parts.append(s["header"])
+        parts.append(normalize_text(s["header"]))
     body = s.get("body") or rec.get("clean_text") or ""
     if body:
-        parts.append(body)
-    return "\n\n".join(parts).strip()
+        parts.append(normalize_text(body))
+    # Join with a single space (we already normalized internals)
+    return " ".join(p for p in parts if p).strip()
 
 def record_meta(rec):
     # 1) full date string present?
@@ -164,12 +179,17 @@ if torch.cuda.is_available():
 # -----------------------------
 # Point maker
 # -----------------------------
-def make_points(doc_id: str, text: str, meta: Dict[str, Any]) -> List[PointStruct]:
+def make_points(
+    doc_id: str,
+    text: str,
+    meta: Dict[str, Any],
+    extra_sections: Optional[Dict[str, str]] = None,
+    ) -> List[PointStruct]:
     texts: List[str] = []
     payloads: List[Dict[str, Any]] = []
     ids: List[str] = []
 
-    # RULING
+    # RULING (from the full, normalized 'text')
     rs, re_ = find_ruling(text)
     if rs != -1:
         ruling_text = text[rs:re_].strip()
@@ -178,19 +198,35 @@ def make_points(doc_id: str, text: str, meta: Dict[str, Any]) -> List[PointStruc
             payloads.append({**meta, "section": "ruling"})
             ids.append(str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc_id}#ruling")))
 
-    # HEADER (~first 1200 chars)
+    # HEADER (~first 1200 chars of normalized text)
     header_snippet = text[:1200].strip()
     if header_snippet:
         texts.append(header_snippet)
         payloads.append({**meta, "section": "header"})
         ids.append(str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc_id}#header")))
 
-    # BODY (everything except ruling)
-    body_text = (text[:max(0, rs - 1)] + "\n\n" + text[re_:]).strip() if rs != -1 else text
+    # BODY (everything except ruling), normalized
+    body_text = (text[:max(0, rs - 1)] + " " + text[re_:]).strip() if rs != -1 else text
     for idx, chunk in enumerate(chunkify(body_text, CHUNK_CHARS, OVERLAP_CHARS), 1):
         texts.append(chunk)
         payloads.append({**meta, "section": "body", "chunk_index": idx})
         ids.append(str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc_id}#body-{idx:03d}")))
+
+    # EXTRA SECTIONS: facts, issues, etc. (normalized + chunked)
+    if extra_sections:
+        for name, content in extra_sections.items():
+            if not content:
+                continue
+            if name.lower() == "ruling":
+                # avoid duplicating ruling
+                continue
+            norm = normalize_text(content)
+            if not norm:
+                continue
+            for idx, chunk in enumerate(chunkify(norm, CHUNK_CHARS, OVERLAP_CHARS), 1):
+                texts.append(chunk)
+                payloads.append({**meta, "section": name.lower(), "chunk_index": idx})
+                ids.append(str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc_id}#{name.lower()}-{idx:03d}")))
 
     # Encode in one batch
     vectors = model.encode(
@@ -268,11 +304,10 @@ def process_dir():
 
 def process_jsonl():
     """
-    New JSONL pipeline (from crawler):
+    JSONL pipeline:
     - Streams records from DATA_FILE (.jsonl or .jsonl.gz)
-    - Builds doc_id from rec['id'] or source_url
-    - Adds rich metadata (gr_number, title, year, source_url)
-    - Section-aware embedding as before
+    - Normalizes whitespace (newlines -> spaces)
+    - Section-aware embedding with extra sections: facts, issues
     """
     if not os.path.exists(DATA_FILE):
         raise FileNotFoundError(f"DATA_FILE not found: {DATA_FILE}")
@@ -282,16 +317,27 @@ def process_jsonl():
 
     for rec in iter_cases(DATA_FILE):
         try:
-            # Stable ID
             base_id = rec.get("id") or rec.get("source_url") or str(uuid.uuid4())
             doc_id = str(uuid.uuid5(uuid.NAMESPACE_URL, base_id))
 
-            text = text_from_record(rec)
-            if not text:
+            full_text = text_from_record(rec)
+            if not full_text:
                 continue
 
             meta = record_meta(rec)
-            pts = make_points(doc_id, text, meta)
+
+            # Gather extra sections if present
+            s = rec.get("sections") or {}
+            extra = {}
+            # accept common keys and simple aliases
+            for key in ("facts", "issues", "issue", "statement_of_facts", "facts_and_issues"):
+                if s.get(key):
+                    # Map aliases to canonical names
+                    canonical = "issues" if key in ("issues", "issue") else "facts"
+                    # Prefer first-found content per canonical name
+                    extra.setdefault(canonical, s[key])
+
+            pts = make_points(doc_id, full_text, meta, extra_sections=extra)
             pending_points.extend(pts)
             added += 1
 
@@ -305,7 +351,6 @@ def process_jsonl():
 
     if pending_points:
         upsert_points(pending_points)
-        pending_points.clear()
 
     print(f"🚀 Uploaded {added} JSONL records")
 
