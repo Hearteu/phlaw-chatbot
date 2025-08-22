@@ -6,6 +6,7 @@ import re
 from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Tuple
 
+import torch
 from django.conf import settings
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import FieldCondition, Filter, MatchValue
@@ -147,7 +148,7 @@ class _JSONLCache:
 class LegalRetriever:
     def __init__(self):
         # Will use CUDA if available
-        self.model = SentenceTransformer(os.getenv("EMBED_MODEL", "Stern5497/sbert-legal-xlm-roberta-base")).to("cuda")
+        self.model = SentenceTransformer(os.getenv("EMBED_MODEL", "Stern5497/sbert-legal-xlm-roberta-base")).to("cuda" if torch.cuda.is_available() else "cpu")
 
         # Faster Qdrant via gRPC; collection must match embed.py
         self.qdrant = QdrantClient(
