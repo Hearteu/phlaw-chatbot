@@ -27,6 +27,7 @@
 
 
 import os
+import re
 
 from llama_cpp import Llama
 
@@ -43,9 +44,13 @@ llm = Llama(
 def generate_response(prompt):
     output = llm(
         prompt,
-        max_tokens=3000,
-        temperature=0.7,
+        max_tokens=900,
+        temperature=0.4,
         top_p=0.9,
+        repeat_penalty=1.1,
         stop=["User:", "Sources:", "Question:", "\n\n"]
     )
-    return output['choices'][0]['text'].strip()
+    text = output['choices'][0]['text']
+    # Remove instruction tokens the model may echo
+    text = re.sub(r"\s*\[/?INST\]\s*", " ", text)
+    return text.strip()

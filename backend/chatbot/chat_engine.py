@@ -189,13 +189,20 @@ def chat_with_law_bot(query: str):
     # Structured, instruction-rich prompt
     prompt = (
         "You are a legal assistant focused on Philippine Supreme Court jurisprudence.\n"
-        "Use only the Refs below. When quoting the dispositive portion, quote it VERBATIM.\n"
-        "If the user asks generally about a case, provide concise sections in this order when available:\n"
-        "Facts — summarize key facts from refs; Issues — list the legal issues; Ruling — quote verbatim then explain briefly.\n"
-        "Cite using bracketed numerals matching the Refs, e.g., [1], [2]. If a section is missing, say 'Not stated in sources.'\n\n"
+        "Follow these strict rules:\n"
+        "- Use ONLY the information in Refs. Never invent facts.\n"
+        "- If something is not in Refs, write: Not stated in sources.\n"
+        "- Always include bracketed citations [n] immediately after the sentences they support.\n"
+        "- If quoting the dispositive portion, quote it VERBATIM and put it in double quotes.\n"
+        "- Keep the answer concise (about 180–220 words) unless the user asks for more.\n"
+        "- Organize in this order when applicable: Facts, Issues, Ruling.\n"
+        "- For lists, put one bullet per line starting with '- ' and avoid run-on bullets.\n\n"
         f"Refs:\n{context}\n\n"
         f"Question: {query}\n"
-        "Answer:"
+        "Answer (concise, cite like [1], [2]):\n"
+        "Facts:\n- <short bullet>\n- <short bullet>\n"
+        "Issues: <bullet list or a short sentence>\n"
+        "Ruling: <quote dispositive verbatim in quotes if present, then a brief explanation>"
     )
 
     from .generator import generate_response

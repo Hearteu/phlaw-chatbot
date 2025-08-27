@@ -3,6 +3,7 @@
 import type React from "react";
 import { useState } from "react";
 
+import RichText from "@/components/RichText";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -133,7 +134,11 @@ export default function Home() {
                       : "bg-white border text-slate-800"
                   }`}
                 >
-                  <p className="text-sm leading-relaxed">{message.content}</p>
+                  {message.role === "assistant" ? (
+                    <RichText content={message.content} className="text-sm leading-relaxed space-y-2" />
+                  ) : (
+                    <p className="text-sm leading-relaxed">{message.content}</p>
+                  )}
                   <p
                     className={`text-xs mt-2 ${
                       message.role === "user"
