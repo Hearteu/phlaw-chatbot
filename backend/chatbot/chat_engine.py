@@ -6,20 +6,17 @@ from .rule_based import RuleBasedResponder
 rb = RuleBasedResponder(bot_name="PHLaw-Chatbot")
 
 # --- Stronger dispositive detection & extraction ---
-# Capture classic dispositive headers and allow common variants before SO ORDERED
 DISPOSITIVE_HDR = r"(?:WHEREFORE|ACCORDINGLY|IN VIEW OF THE FOREGOING|THUS|HENCE|PREMISES CONSIDERED)"
 SO_ORDERED = r"SO\s+ORDERED\.?"
 RULING_REGEX = re.compile(
     rf"{DISPOSITIVE_HDR}[\s\S]{{0,4000}}?{SO_ORDERED}",
     re.IGNORECASE,
 )
-
 # Some decisions omit SO ORDERED but still have a dispositive paragraph
 RULING_NO_SO_FALLBACK = re.compile(
     rf"(?:^{DISPOSITIVE_HDR}[\s\S]{{50,1500}}?$)",
     re.IGNORECASE | re.MULTILINE,
 )
-
 # Catch short single-paragraph orders that end with SO ORDERED without header
 RULING_SO_ORDERED_FALLBACK = re.compile(
     rf"(?s)(?:^|\n\n).{{0,1500}}?{SO_ORDERED}",
@@ -32,7 +29,6 @@ FACTS_HINT_RE = re.compile(
     r"Facts(?:\s+of\s+the\s+Case)?|Statement\s+of\s+Facts|The\s+Facts)\s*[:\-–]?\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
-
 ISSUES_HINT_RE = re.compile(
     r"^\s*(?:Issues?(?:\s+for\s+Resolution)?|Questions?\s+Presented|Issue)\s*[:\-–]?\s*$"
     r"|^\s*(?:[IVX]+\.)?\s*Whether\b",
@@ -41,7 +37,6 @@ ISSUES_HINT_RE = re.compile(
 
 # Keep a single retriever instance (lazy-init for reuse)
 retriever = None
-
 
 # --- Small utils ---
 def _normalize_ws(s: str, max_chars: int = 1600) -> str:
@@ -127,13 +122,15 @@ def _intent(query: str) -> Tuple[bool, bool, bool]:
     wants_issues = want("issues") or "whether" in q or bool(ISSUES_HINT_RE.search(q))
     return wants_ruling, wants_facts, wants_issues
 
+def _has_section(docs: List[Dict], section: str) -> bool:
+    return any((d.get("section") or "").lower() == section for d in docs)
+
 # ---------- context builder ----------
 SECTION_PRIORITY = ["ruling", "issues", "facts", "header", "body"]
 
 def _dedupe_and_rank(docs: List[Dict], wants_ruling: bool, wants_facts: bool, wants_issues: bool) -> List[Dict]:
     """
     Prefer one high-quality snippet per (case_id, section), keep higher score.
-    Also merge adjacent tiny ruling chunks from the same case if needed.
     """
     # Normalize fields
     for d in docs:
@@ -219,6 +216,22 @@ def _build_context(docs: List[Dict]) -> str:
         lines.append(f"{header}\n{snippet}")
     return "\n\n".join(lines)
 
+# --- Output post-validation ---
+def _post_validate(ans: str, wants_facts: bool, wants_ruling: bool) -> str:
+    if not ans:
+        return "Not stated in sources."
+    # Remove placeholder tokens if any slipped
+    ans = ans.replace("[n]", "")
+    # Trim trailing spaces
+    ans = re.sub(r"[ \t]+$", "", ans, flags=re.MULTILINE).strip()
+    # Facts asked but no bullets or Facts: section
+    if wants_facts and ("Facts:" not in ans and "\n- " not in ans):
+        return "Facts: Not stated in sources."
+    # Ruling asked but nothing substantive produced
+    if wants_ruling and "Ruling:" in ans and ("Not stated in sources" not in ans) and ("[" not in ans):
+        ans += " [1]"
+    return ans
+
 # ---------- main entry ----------
 def chat_with_law_bot(query: str):
     global retriever
@@ -231,38 +244,74 @@ def chat_with_law_bot(query: str):
         from .retriever import LegalRetriever
         retriever = LegalRetriever()
 
-    # Pull more for diversification; retriever should already rank by semantic+BM25 hybrid if possible
+    # Pull more for diversification
     docs = retriever.retrieve(query, k=8)
     if not docs:
         return "No relevant jurisprudence found."
 
     wants_ruling, wants_facts, wants_issues = _intent(query)
     chosen = _dedupe_and_rank(docs, wants_ruling, wants_facts, wants_issues)
+
+    # Ensure at least one 'facts' chunk if user explicitly asked for facts
+    if wants_facts and not _has_section(chosen, "facts"):
+        facts_pool = [d for d in docs if (_ensure_section(d) == "facts")]
+        if facts_pool:
+            best_facts = max(facts_pool, key=lambda x: float(x.get("score") or 0.0))
+            # replace the lowest-scoring non-facts doc
+            if chosen:
+                repl_idx = min(range(len(chosen)), key=lambda i: float(chosen[i].get("score") or 0.0))
+                chosen[repl_idx] = best_facts
+            else:
+                chosen = [best_facts]
+
     context = _build_context(chosen)
 
-    # If the user clearly wants the ruling but none of the chosen refs contains a dispositive, tell the model to say so
-    must_note_absent_ruling = wants_ruling and not any(" — ruling — " in line for line in context.splitlines() if line.startswith("["))
+    # Missing-section flags to guide safe fallbacks
+    must_note_absent_ruling = wants_ruling and (" — ruling — " not in context)
+    must_note_absent_facts  = wants_facts  and (" — facts — "  not in context)
 
-    # Structured, instruction-rich prompt with stronger guardrails
+    # -------- Conditional answer template --------
+    if wants_ruling and not (wants_facts or wants_issues):
+        answer_template = (
+            "Ruling: <if dispositive present, put the exact WHEREFORE/So Ordered text in double quotes, "
+            "then a one-sentence explanation with [n]; otherwise write: Not stated in sources.>"
+        )
+    elif wants_facts and not (wants_ruling or wants_issues):
+        answer_template = (
+            "Facts:\n"
+            "- <one fact, ≤25 words, end with a real [1]/[2]/... citation>\n"
+            "- <one fact, ≤25 words, end with a real [n]>\n"
+            "- <one fact, ≤25 words, end with a real [n]>\n"
+            "(Write 3–6 bullets. Do not write any sentence without a bracketed number. Never write the literal '[n]'.)"
+        )
+    elif wants_issues and not (wants_ruling or wants_facts):
+        answer_template = "Issues: <bullet list; each bullet ends with a real [n] citation>"
+    else:
+        # Default: full digest
+        answer_template = (
+            "Facts:\n- <short bullet with [n]>\n- <short bullet with [n]>\n"
+            "Issues: <bullet list or a short sentence with [n]>\n"
+            "Ruling: <if dispositive present, put the exact quote in double quotes, "
+            "then a 1-sentence explanation with [n]; otherwise write: Not stated in sources.>"
+        )
+    # -------- End conditional --------
+
+    # Structured, instruction-rich prompt
     prompt = (
         "You are a legal assistant focused on Philippine Supreme Court jurisprudence.\n"
         "STRICT RULES:\n"
         "1) Use ONLY the information in Refs. Never invent facts.\n"
         "2) If something is not in Refs, write exactly: Not stated in sources.\n"
-        "3) Always add bracketed citations [n] immediately after the sentence they support.\n"
+        "3) Every sentence must end with a bracketed citation like [1], [2]. Never output the literal '[n]'.\n"
         "4) If quoting the dispositive/WHEREFORE portion, quote it VERBATIM in double quotes.\n"
-        "5) Do not mix issues into the ruling. The ruling is only the Court's disposition.\n"
-        "6) Keep the answer concise (≈180–220 words) unless the user asked for more.\n"
-        "7) Organize when applicable: Facts, Issues, Ruling. One bullet per line for facts.\n"
-        f"{'8) If no dispositive text appears in Refs, state: Ruling: Not stated in sources.' if must_note_absent_ruling else ''}\n\n"
+        "5) Keep bullets short (≤25 words each). No run-on bullets.\n"
+        f"{'6) If no dispositive text appears in Refs, write: Ruling: Not stated in sources.' if must_note_absent_ruling else ''}\n"
+        f"{'6) If no facts appear in Refs, write: Facts: Not stated in sources.' if must_note_absent_facts else ''}\n\n"
         f"Refs:\n{context}\n\n"
         f"Question: {query}\n"
-        "Answer (concise; cite like [1], [2]):\n"
-        "Facts:\n- <short bullet with [n]>\n- <short bullet with [n]>\n"
-        "Issues: <bullet list or a short sentence with [n]>\n"
-        "Ruling: <if dispositive present, put the exact quote in double quotes, then a 1-sentence explanation with [n]; "
-        "otherwise write: Not stated in sources.>"
+        f"Answer:\n{answer_template}"
     )
 
     from .generator import generate_response
-    return generate_response(prompt)
+    raw = generate_response(prompt)
+    return _post_validate(raw, wants_facts, wants_ruling)
