@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 
 import RichText from "@/components/RichText";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -28,10 +28,17 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
 
+  // 👇 ref for the dummy "end of messages" div
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  // 👇 auto-scroll every time messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isTyping]);
+
   const handleSend = async () => {
     if (!input.trim()) return;
 
-    // Add user message
     const userMessage: Message = {
       id: Date.now().toString(),
       content: input,
@@ -187,6 +194,9 @@ export default function Home() {
                 </div>
               </div>
             )}
+
+            {/* 👇 dummy div to scroll into view */}
+            <div ref={messagesEndRef} />
           </div>
         </CardContent>
 
