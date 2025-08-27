@@ -142,7 +142,10 @@ export default function Home() {
                   }`}
                 >
                   {message.role === "assistant" ? (
-                    <RichText content={message.content} className="text-sm leading-relaxed space-y-2" />
+                    <RichText
+                      content={message.content}
+                      className="text-sm leading-relaxed space-y-2"
+                    />
                   ) : (
                     <p className="text-sm leading-relaxed">{message.content}</p>
                   )}
