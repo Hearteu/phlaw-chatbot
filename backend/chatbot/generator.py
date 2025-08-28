@@ -31,18 +31,23 @@ import re
 from typing import Any, Dict, List, Optional
 
 import httpx
+from dotenv import load_dotenv
 from llama_cpp import Llama
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_PATH = os.path.join(BASE_DIR, "law-chat.Q5_K_M.gguf")
 
+# Load env from project root and backend directory so REV21_API_KEY can be read from .env
+load_dotenv(os.path.join(os.path.dirname(BASE_DIR), ".env"))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
+
 # Lazy-init local model to avoid loading if Rev21 API is configured and healthy
 _llm: Optional[Llama] = None
 
 REV21_BASE_URL = os.getenv("REV21_BASE_URL", "https://ai-tools.rev21labs.com/api/v1")
-REV21_API_KEY = os.getenv("REV21_API_KEY", "MTc0NTI4NTItYzNkYS00NmQ0LWI0MTktMDc2MmVhYjc2OWE3")
+REV21_API_KEY = os.getenv("REV21_API_KEY", "")
 REV21_ENDPOINT_PATH = os.getenv("REV21_ENDPOINT_PATH", "/chat/completions")
-REV21_ENABLED = os.getenv("REV21_ENABLED", "true").lower() not in {"0", "false", "no"}
+REV21_ENABLED = (os.getenv("REV21_ENABLED", "true").lower() not in {"0", "false", "no"}) and bool(REV21_API_KEY)
 
 
 def _ensure_llm() -> Llama:
