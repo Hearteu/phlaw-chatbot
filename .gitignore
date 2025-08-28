@@ -11,10 +11,10 @@ build/
 *.log
 
 # --- Virtual Environments & Environment Files ---
-# venv/
-# .env
-# .env.*
-# *.env.json
+venv/
+.env
+.env.*
+*.env.json
 
 # --- VS Code & IDEs ---
 .vscode/
