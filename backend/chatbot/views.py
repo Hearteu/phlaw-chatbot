@@ -22,8 +22,9 @@ class ChatView(APIView):
                             status=status.HTTP_400_BAD_REQUEST)
 
         query = serializer.validated_data["query"]
+        history = serializer.validated_data.get("history") or []
         try:
-            answer = chat_with_law_bot(query)
+            answer = chat_with_law_bot(query, history=history)
             # Ensure string response
             if not isinstance(answer, str):
                 answer = str(answer)
