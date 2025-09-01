@@ -24,9 +24,18 @@ interface Message {
 }
 
 export default function Home() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: "welcome",
+      content:
+        "Hello! I'm LegalBot PH, your Philippine Jurisprudence Assistant. What case would you like me to digest for you?",
+      role: "assistant",
+      timestamp: new Date(),
+    },
+  ]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
 
   // 👇 ref for the dummy "end of messages" div
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -35,6 +44,49 @@ export default function Home() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
+
+  // 👇 cycling loading messages after initial delay
+  useEffect(() => {
+    if (!isTyping) return;
+
+    const messages = [
+      "Researching jurisprudence",
+      "Querying legal database",
+      "Analyzing case law",
+      "Generating case digest",
+      "Compiling legal principles",
+    ];
+
+    // First message appears after 5 seconds, then changes every 10 seconds
+    const firstMessageTimer = setTimeout(() => {
+      setLoadingMessageIndex(0);
+    }, 5000);
+
+    const interval = setInterval(() => {
+      setLoadingMessageIndex((prev) => (prev + 1) % messages.length);
+    }, 10000);
+
+    return () => {
+      clearTimeout(firstMessageTimer);
+      clearInterval(interval);
+    };
+  }, [isTyping]);
+
+  // 👇 show loading message after 5 seconds
+  const [showLoadingMessage, setShowLoadingMessage] = useState(false);
+
+  useEffect(() => {
+    if (!isTyping) {
+      setShowLoadingMessage(false);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setShowLoadingMessage(true);
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [isTyping]);
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -49,6 +101,7 @@ export default function Home() {
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsTyping(true);
+    setLoadingMessageIndex(0);
 
     try {
       console.log("📡 Sending POST to Django backend...");
@@ -99,6 +152,14 @@ export default function Home() {
       hour12: true,
     });
   };
+
+  const loadingMessages = [
+    "Researching jurisprudence",
+    "Querying legal database",
+    "Analyzing case law",
+    "Generating case digest",
+    "Compiling legal principles",
+  ];
 
   return (
     <div className="flex flex-col items-center justify-center h-screen p-4 bg-white">
@@ -177,19 +238,21 @@ export default function Home() {
                     <Scale className="w-5 h-5" />
                   </AvatarFallback>
                 </Avatar>
-                <div className="px-4 py-3 shadow-md">
+                <div className="px-4 py-3 shadow-md bg-white border rounded-xl">
                   <div className="flex items-center space-x-2">
-                    <span className="text-sm text-slate-600">
-                      Researching jurisprudence
-                    </span>
+                    {showLoadingMessage && (
+                      <span className="text-sm text-slate-600">
+                        {loadingMessages[loadingMessageIndex]}
+                      </span>
+                    )}
                     <div className="flex space-x-1">
-                      <div className="w-2 h-2 rounded-full animate-bounce"></div>
+                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
                       <div
-                        className="w-2 h-2 rounded-full animate-bounce"
+                        className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
                         style={{ animationDelay: "0.1s" }}
                       ></div>
                       <div
-                        className="w-2 h-2 rounded-full animate-bounce"
+                        className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
                         style={{ animationDelay: "0.2s" }}
                       ></div>
                     </div>
