@@ -25,8 +25,8 @@ VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", 768))
 
 # Source data
 DATA_FORMAT = os.getenv("DATA_FORMAT", "jsonl").lower()   # "txt" | "jsonl"
-DATA_DIR    = os.getenv("DATA_DIR", "backend/jurisprudence2")       # for txt mode
-DATA_FILE   = os.getenv("DATA_FILE", "backend/data/cases.jsonl.gz")         # for jsonl mode
+DATA_DIR    = os.getenv("DATA_DIR", "backend/jurisprudence")       # for txt mode
+DATA_FILE   = os.getenv("DATA_FILE", "backend/data/cases_enhanced.jsonl.gz")         # for jsonl mode
 
 # Cache (for txt mode; list of processed filepaths)
 CACHE_PATH = os.getenv("EMBED_CACHE_PATH", "backend/backend/chatbot/embedded_cache.json")
@@ -73,6 +73,24 @@ RULING_REGEX = re.compile(
 )
 WS_RE = re.compile(r"\s+")
 PUNCT_FIX_RE = re.compile(r"\s+([,.;:!?])")
+CASE_TITLE_LINE_RE = re.compile(
+    r"^(?P<title>.+?)(?:\s*;\s*G\.R\.|\s*G\.R\.|\s*\(G\.R\.|\s*\[G\.R\.|\s*\d{4}|\s*Promulgated|\s*Decided)",
+    re.IGNORECASE | re.MULTILINE,
+)
+CASE_VS_RE = re.compile(r"\b.+?\s+(v\.|vs\.?|versus)\s+.+?\b", re.IGNORECASE)
+CASE_CAPTION_STRONG_RE = re.compile(
+    r"^[A-Z0-9 ,.'\-()]+\s+(V\.|VS\.?|VERSUS)\s+[A-Z0-9 ,.'\-()]+$"
+)
+ADDRESS_NOISE_TERMS = (
+    "padre faura",
+    "ermita",
+    "manila",
+    "philippines",
+)
+GR_BLOCK_RE = re.compile(
+    r"G\.R\.\s+No(?:s)?\.?\s*([0-9][0-9\-*,\s]+)",
+    re.IGNORECASE,
+)
 
 def find_ruling(text: str) -> Tuple[int, int]:
     """Return (start, end) of the ruling section, or (-1, -1) if not found."""
@@ -89,6 +107,103 @@ def normalize_text(s: str) -> str:
     # Remove stray spaces before punctuation: "word ." -> "word."
     s = PUNCT_FIX_RE.sub(r"\1", s)
     return s
+
+def _clean_library_noise(s: str) -> str:
+    if not s:
+        return s
+    return (
+        s.replace("Supreme Court E-Library", "").replace("Information At Your Fingertips", "").strip()
+    )
+
+def derive_case_title(rec: Dict[str, Any]) -> str:
+    """Derive a clean case title from record fields.
+    Preference order: explicit case_title -> parsed header -> provided title -> filename.
+    Removes common library boilerplate and trims around G.R. markers.
+    """
+    # 1) Explicit field
+    title = (rec.get("case_title") or rec.get("case_name") or "").strip()
+    if title:
+        return _clean_library_noise(title)
+
+    def is_address_noise(line: str) -> bool:
+        l = line.lower()
+        return any(term in l for term in ADDRESS_NOISE_TERMS)
+
+    # 2) Parse from header section
+    sections = rec.get("sections") or {}
+    header = _clean_library_noise(sections.get("header") or "")
+    if header:
+        # 2a) Prefer explicit case caption patterns with v./vs.
+        for line in header.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            if is_address_noise(line):
+                continue
+            if CASE_CAPTION_STRONG_RE.match(line) or CASE_VS_RE.search(line):
+                return line
+        m = CASE_TITLE_LINE_RE.search(header)
+        if m and m.group("title"):
+            return m.group("title").strip()
+        # fallback: first non-empty line without boilerplate
+        for line in header.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            if "G.R." in line or line.lower().startswith(("promulgated", "decided")):
+                break
+            if len(line) > 3 and not is_address_noise(line):
+                return line
+
+    # 2b) As a last resort, scan the beginning of body for a case caption
+    body = _clean_library_noise(sections.get("body") or rec.get("clean_text") or "")
+    if body:
+        start = body[:1200]
+        for line in start.splitlines():
+            line = line.strip()
+            if is_address_noise(line):
+                continue
+            if CASE_CAPTION_STRONG_RE.match(line) or CASE_VS_RE.search(line):
+                return line
+
+    # 3) Provided title, cleaned
+    raw_title = _clean_library_noise(rec.get("title") or "").strip()
+    if raw_title and not raw_title.lower().startswith("supreme court e-library"):
+        return raw_title
+
+    # 4) Filename fallback
+    filename = (rec.get("filename") or rec.get("id") or rec.get("source_url") or "").strip()
+    return filename or "Untitled case"
+
+def derive_gr_numbers(rec: Dict[str, Any]) -> Tuple[Optional[str], List[str]]:
+    """Parse G.R. number(s) from record sections.
+    Returns (primary_gr_number, all_gr_numbers_list).
+    Keeps original rec['gr_number'] as primary if present; otherwise first parsed.
+    """
+    existing = (rec.get("gr_number") or "").strip()
+    found: List[str] = []
+
+    sections = rec.get("sections") or {}
+    header = sections.get("header") or ""
+    body = sections.get("body") or rec.get("clean_text") or ""
+
+    def _collect(text: str):
+        if not text:
+            return
+        for m in GR_BLOCK_RE.finditer(text):
+            block = m.group(1)
+            # Split by comma and whitespace, keep ranges like 225568-70 as-is
+            parts = [p.strip().rstrip('*') for p in re.split(r"[,\s]+", block) if p.strip()]
+            for p in parts:
+                if p and p not in found:
+                    found.append(p)
+
+    _collect(header)
+    # Only scan the first 2k chars of body for performance
+    _collect(body[:2000])
+
+    primary = existing or (found[0] if found else None)
+    return primary, found
 
 def chunkify(s: str, size: int, overlap: int) -> Iterable[str]:
     """Simple char-based chunker with overlap."""
@@ -159,11 +274,25 @@ def record_meta(rec):
     if y is None:
         y = 0
 
+    # Optional richer header fields
+    ponente = rec.get("ponente") or rec.get("author") or rec.get("justice")
+    # Prefer explicit division; fall back to en_banc flag label
+    division = rec.get("division") or rec.get("court_division")
+    if not division and isinstance(rec.get("en_banc"), (bool, int)):
+        division = "En Banc" if bool(rec.get("en_banc")) else None
+
+    primary_gr, all_grs = derive_gr_numbers(rec)
+
     return {
-        "gr_number": rec.get("gr_number"),
-        "title": rec.get("title"),
+        "gr_number": primary_gr,
+        "gr_numbers": all_grs or None,
+        "title": derive_case_title(rec),
         "year": y,
+        "promulgation_date": rec.get("promulgation_date"),
         "source_url": rec.get("source_url"),
+        "ponente": ponente,
+        "division": division,
+        "en_banc": bool(rec.get("en_banc")) if rec.get("en_banc") is not None else None,
         "sectioned": True,
     }
 
@@ -307,7 +436,8 @@ def process_jsonl():
     JSONL pipeline:
     - Streams records from DATA_FILE (.jsonl or .jsonl.gz)
     - Normalizes whitespace (newlines -> spaces)
-    - Section-aware embedding with extra sections: facts, issues
+    - Section-aware embedding with extra sections aligned to digest rules:
+      facts, issues, arguments, discussion, citations, keywords
     """
     if not os.path.exists(DATA_FILE):
         raise FileNotFoundError(f"DATA_FILE not found: {DATA_FILE}")
@@ -329,13 +459,41 @@ def process_jsonl():
             # Gather extra sections if present
             s = rec.get("sections") or {}
             extra = {}
-            # accept common keys and simple aliases
-            for key in ("facts", "issues", "issue", "statement_of_facts", "facts_and_issues"):
-                if s.get(key):
-                    # Map aliases to canonical names
-                    canonical = "issues" if key in ("issues", "issue") else "facts"
-                    # Prefer first-found content per canonical name
-                    extra.setdefault(canonical, s[key])
+            # Accept common keys and aliases → map to canonical section names used in retrieval
+            alias_to_canonical = {
+                # facts
+                "facts": "facts",
+                "statement_of_facts": "facts",
+                "facts_and_issues": "facts",
+                # issues
+                "issues": "issues",
+                "issue": "issues",
+                # arguments / reasoning
+                "arguments": "arguments",
+                "reasoning": "arguments",
+                "ratio": "arguments",
+                # discussion / separate opinions
+                "discussion": "discussion",
+                "opinions": "discussion",
+                "separate_opinions": "discussion",
+                "concurring_dissenting": "discussion",
+                # citations / authorities
+                "citations": "citations",
+                "authorities": "citations",
+                # keywords / doctrines / legal terms
+                "keywords": "keywords",
+                "legal_terms": "keywords",
+                "doctrines": "keywords",
+            }
+
+            for key, value in s.items():
+                if not value:
+                    continue
+                canonical = alias_to_canonical.get(key.lower())
+                if not canonical:
+                    continue
+                # Prefer first-found content per canonical name
+                extra.setdefault(canonical, value)
 
             pts = make_points(doc_id, full_text, meta, extra_sections=extra)
             pending_points.extend(pts)

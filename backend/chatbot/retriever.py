@@ -1,413 +1,380 @@
-# retriever.py — JSONL-aware retriever with intent & section-weighted search
+# retriever.py — Optimized legal document retriever with enhanced caching
 import gzip
 import json
 import os
-import re
-from collections import OrderedDict
-from typing import Any, Dict, List, Optional, Tuple
+import time
+from typing import Any, Dict, List, Optional
 
-import torch
-from django.conf import settings
 from qdrant_client import QdrantClient
-from qdrant_client.http.models import FieldCondition, Filter, MatchValue
 from sentence_transformers import SentenceTransformer
 
-# ---------- Regex / signals ----------
-RULING_REGEX = re.compile(r"(WHEREFORE.*?SO ORDERED\.?|ACCORDINGLY.*?SO ORDERED\.?)",
-                          re.IGNORECASE | re.DOTALL)
-GR_IN_QUERY = re.compile(r"G\.?\s*R\.?\s*No(?:s)?\.?\s*[0-9\-–]+", re.I)  # accepts dash/en-dash
+# =============================================================================
+# GLOBAL CACHING FOR PERFORMANCE
+# =============================================================================
+_EMBEDDING_MODEL = None
+_EMBEDDING_MODEL_LOADED = False
+_QDRANT_CLIENT = None
+_COLLECTION_INFO = None
 
-WS_RE = re.compile(r"\s+")
-PUNCT_FIX_RE = re.compile(r"\s+([,.;:!?])")
+def _get_cached_embedding_model():
+    """Get cached SentenceTransformer model with lazy loading"""
+    global _EMBEDDING_MODEL, _EMBEDDING_MODEL_LOADED
+    
+    if _EMBEDDING_MODEL is None and not _EMBEDDING_MODEL_LOADED:
+        print("🔄 Loading SentenceTransformer model...")
+        start_time = time.time()
+        
+        # Use optimized model path
+        model_name = os.getenv("EMBED_MODEL", "Stern5497/sbert-legal-xlm-roberta-base")
+        _EMBEDDING_MODEL = SentenceTransformer(model_name, device="cuda" if os.getenv("USE_CUDA", "true").lower() == "true" else "cpu")
+        
+        load_time = time.time() - start_time
+        print(f"✅ Model loaded in {load_time:.2f}s")
+        _EMBEDDING_MODEL_LOADED = True
+    
+    return _EMBEDDING_MODEL
 
-def _normalize_text(s: str) -> str:
-    if not s:
-        return ""
-    s = WS_RE.sub(" ", s.replace("\r", "\n")).strip()
-    s = PUNCT_FIX_RE.sub(r"\1", s)
-    return s
+def _get_cached_qdrant_client():
+    """Get cached Qdrant client"""
+    global _QDRANT_CLIENT
+    
+    if _QDRANT_CLIENT is None:
+        host = os.getenv("QDRANT_HOST", "localhost")
+        port = int(os.getenv("QDRANT_PORT", 6333))
+        _QDRANT_CLIENT = QdrantClient(host=host, port=port, grpc_port=6334, prefer_grpc=True, timeout=30.0)
+    
+    return _QDRANT_CLIENT
 
-def _extract_ruling(text: str) -> Tuple[int, int]:
-    m = RULING_REGEX.search(text or "")
-    return (m.start(), m.end()) if m else (-1, -1)
-
-def _normalize_gr(raw: str) -> str:
-    s = re.sub(r"\s+", " ", raw.strip())
-    s = re.sub(r"\bNos?\.\b", "No.", s, flags=re.I)
-    s = re.sub(r"^G\.?\s*R\.?\s*No\.\s*", "G.R. No. ", s, flags=re.I)
-    return s
-
-def _chunkify(s: str, size: int, overlap: int) -> List[str]:
-    out: List[str] = []
-    if not s:
-        return out
-    n = len(s)
-    start = 0
-    step = max(1, size - overlap)
-    while start < n:
-        end = min(n, start + size)
-        out.append(s[start:end])
-        if end >= n:
-            break
-        start += step
-    return out
-
-# ---------- Env / config (align with embed.py) ----------
-DATA_FORMAT   = os.getenv("DATA_FORMAT", "jsonl").lower()            # "txt" | "jsonl"
-DATA_FILE     = os.getenv("DATA_FILE", "data/cases.jsonl.gz")        # for jsonl
-CHUNK_CHARS   = int(os.getenv("CHUNK_CHARS", 1200))
-OVERLAP_CHARS = int(os.getenv("OVERLAP_CHARS", 150))
-QDRANT_HOST   = os.getenv("QDRANT_HOST", "localhost")
-QDRANT_PORT   = int(os.getenv("QDRANT_PORT", 6333))
-QDRANT_GRPC   = int(os.getenv("QDRANT_GRPC_PORT", 6334))
-QDRANT_COLL   = os.getenv("QDRANT_COLLECTION", "jurisprudence")
-
-# Preferred sections and weights (used in re-ranking)
-SECTION_PRIORITY = ["ruling", "issues", "facts", "header", "body"]
-SECTION_WEIGHTS  = {"ruling": 1.00, "issues": 0.96, "facts": 0.94, "header": 0.72, "body": 0.66}
-
-# ---------- JSONL access with tiny LRU cache ----------
-class _JSONLCache:
-    def __init__(self, path: str, max_items: int = 512):
-        self.path = path
-        self.max_items = max_items
-        self._by_url: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
-        self._by_id:  "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
-
-    def _touch(self, d: "OrderedDict[str, Dict[str, Any]]", key: str, value: Dict[str, Any]):
-        d[key] = value
-        d.move_to_end(key)
-        while len(d) > self.max_items:
-            d.popitem(last=False)
-
-    def _iter_lines(self):
-        opener = gzip.open if self.path.endswith(".gz") else open
-        with opener(self.path, "rt", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    yield json.loads(line)
-                except Exception:
-                    continue
-
-    def _store_minimal(self, rec: Dict[str, Any]) -> Dict[str, Any]:
-        secs = rec.get("sections") or {}
-        return {
-            "id": rec.get("id"),
-            "source_url": rec.get("source_url"),
-            "gr_number": rec.get("gr_number"),
-            "title": rec.get("title"),
-            "promulgation_date": rec.get("promulgation_date"),
-            "promulgation_year": rec.get("promulgation_year"),
-            "sections": {
-                "ruling": secs.get("ruling") or "",
-                "header": secs.get("header") or "",
-                "body":   secs.get("body")   or "",
-                # If your JSONL already includes facts/issues, we’ll read from here too:
-                "facts":  secs.get("facts")  or secs.get("statement_of_facts") or "",
-                "issues": secs.get("issues") or secs.get("issue") or secs.get("facts_and_issues") or "",
-            },
-            "clean_text": rec.get("clean_text") or "",
-        }
-
-    def get_by_url(self, url: str) -> Optional[Dict[str, Any]]:
-        if not os.path.exists(self.path):
-            return None
-        if url in self._by_url:
-            rec = self._by_url[url]
-            self._by_url.move_to_end(url)
-            return rec
-        for rec in self._iter_lines():
-            if rec.get("source_url") == url:
-                slim = self._store_minimal(rec)
-                self._touch(self._by_url, url, slim)
-                if slim.get("id"):
-                    self._touch(self._by_id, slim["id"], slim)
-                return slim
-        return None
-
-    def get_by_id(self, rid: str) -> Optional[Dict[str, Any]]:
-        if not os.path.exists(self.path):
-            return None
-        if rid in self._by_id:
-            rec = self._by_id[rid]
-            self._by_id.move_to_end(rid)
-            return rec
-        for rec in self._iter_lines():
-            if rec.get("id") == rid:
-                slim = self._store_minimal(rec)
-                self._touch(self._by_id, rid, slim)
-                if slim.get("source_url"):
-                    self._touch(self._by_url, slim["source_url"], slim)
-                return slim
-        return None
-
-# ---------- Retriever ----------
-class LegalRetriever:
-    def __init__(self):
-        # Will use CUDA if available
-        self.model = SentenceTransformer(os.getenv("EMBED_MODEL", "Stern5497/sbert-legal-xlm-roberta-base")).to("cuda" if torch.cuda.is_available() else "cpu")
-
-        # Faster Qdrant via gRPC; collection must match embed.py
-        self.qdrant = QdrantClient(
-            host=QDRANT_HOST,
-            port=QDRANT_PORT,
-            # grpc_port=QDRANT_GRPC,
-            # prefer_grpc=True,
-            timeout=120.0,
-        )
-        self.collection = QDRANT_COLL
-
-        # JSONL cache
-        self.jsonl_cache = _JSONLCache(DATA_FILE, max_items=512)
-
-        # Legacy TXT (kept for backward compatibility)
-        default_data_dir = os.path.join(settings.BASE_DIR, "jurisprudence2")
-        self.data_dir = os.path.abspath(os.getenv("DATA_DIR", default_data_dir))
-
-    # ---------- Intent detection ----------
-    def _detect_intent_sections(self, query: str) -> List[str]:
-        q = (query or "").lower()
-        wants_ruling = any(t in q for t in ["ruling", "decision", "disposition", "wherefore", "so ordered"])
-        wants_facts  = "fact" in q or "statement of facts" in q
-        wants_issues = "issue" in q or "issues" in q or "question presented" in q
-
-        if wants_facts and not (wants_ruling or wants_issues):
-            return ["facts", "header", "body", "issues", "ruling"]
-        if wants_issues and not (wants_ruling or wants_facts):
-            return ["issues", "header", "body", "facts", "ruling"]
-        if wants_ruling and not (wants_facts or wants_issues):
-            return ["ruling", "issues", "facts", "header", "body"]
-        # default priority
-        return SECTION_PRIORITY
-
-    # ---------- Builders for doc outputs ----------
-    def _doc_from_legacy_payload(self, payload: Dict[str, Any], score: float) -> Dict[str, Any]:
-        filename = payload.get("filename")
-        year = payload.get("year")
-        path = os.path.join(self.data_dir, str(int(year)), filename) if filename and year is not None else None
-
-        if not path or not os.path.exists(path):
-            return {
-                "text": f"[Missing file: {path}]",
-                "score": score,
-                "filename": filename,
-                "gr_number": payload.get("gr_number"),
-                "title": payload.get("title"),
-                "source_url": payload.get("source_url"),
-            }
-
-        with open(path, encoding="utf-8") as f:
-            text = f.read()
-        rs, re_ = _extract_ruling(text)
-        excerpt = text[rs:re_].strip() if rs != -1 else text[:1200].strip()
-        return {
-            "text": _normalize_text(excerpt),
-            "score": score,
-            "filename": filename,
-            "gr_number": payload.get("gr_number"),
-            "title": payload.get("title"),
-            "source_url": payload.get("source_url"),
-        }
-
-    def _doc_from_jsonl_payload(self, payload: Dict[str, Any], score: float) -> Dict[str, Any]:
-        src = payload.get("source_url") or ""
-        rid = payload.get("id")
-        rec = self.jsonl_cache.get_by_url(src) or (self.jsonl_cache.get_by_id(rid) if rid else None)
-
-        if not rec:
-            title = payload.get("title") or payload.get("gr_number") or "Untitled case"
-            url   = payload.get("source_url") or "N/A"
-            return {
-                "text": "[Record not found in JSONL corpus]",
-                "score": score,
-                "gr_number": payload.get("gr_number"),
-                "title": title,
-                "source_url": url,
-            }
-
-        section = (payload.get("section") or "").lower()
-        chunk_index = payload.get("chunk_index")
-        secs = rec.get("sections") or {}
-        text = ""
-
-        if section in ("ruling", "header", "facts", "issues"):
-            txt = secs.get(section) or ""
-            text = txt.strip()
-        elif section == "body":
-            body = secs.get("body") or rec.get("clean_text") or ""
-            if body and isinstance(chunk_index, int) and chunk_index >= 1:
-                chunks = _chunkify(body, CHUNK_CHARS, OVERLAP_CHARS)
-                idx = min(chunk_index - 1, max(0, len(chunks) - 1))
-                text = (chunks[idx] if chunks else body[:1200]).strip()
-            else:
-                text = (body[:1200] or "").strip()
-        else:
-            # sensible fallback: prefer ruling > header > facts > issues > clean_text
-            text = (secs.get("ruling") or secs.get("header") or secs.get("facts") or
-                    secs.get("issues") or rec.get("clean_text") or "")[:1200].strip()
-
-        title = rec.get("title") or payload.get("title") or rec.get("gr_number") or "Untitled case"
-        url   = rec.get("source_url") or payload.get("source_url") or "N/A"
-        return {
-            "text": _normalize_text(text) or "[Empty section]",
-            "score": score,
-            "gr_number": rec.get("gr_number") or payload.get("gr_number"),
-            "title": title,
-            "source_url": url,
-            "section": section or payload.get("section"),
-        }
-
-    def _hit_to_doc(self, h) -> Dict[str, Any]:
-        payload = h.payload or {}
-        score = getattr(h, "score", 0.0)
-        is_jsonl = bool(payload.get("sectioned") or payload.get("source_url") or payload.get("id"))
-        if is_jsonl:
-            return self._doc_from_jsonl_payload(payload, score)
-        return self._doc_from_legacy_payload(payload, score)
-
-    # ---------- Exact G.R. No. path ----------
-    def _scroll_by_gr_number(self, gr_no_normalized: str, target_section: Optional[str] = None) -> List[Dict[str, Any]]:
-        """
-        Exact payload match on 'gr_number'. If target_section is set ("facts"/"issues"/"ruling"),
-        return that section when available; fallback to ruling, then header.
-        """
-        results = []
-        next_page = None
-        seen_urls = set()
-
-        while True:
-            points, next_page = self.qdrant.scroll(
-                collection_name=self.collection,
-                scroll_filter=Filter(must=[
-                    FieldCondition(key="gr_number", match=MatchValue(value=gr_no_normalized))
-                ]),
-                with_payload=True,
-                limit=512,
-                offset=next_page
-            )
-            for p in points:
-                pl = p.payload or {}
-                url = pl.get("source_url")
-                if not url or url in seen_urls:
-                    continue
-                seen_urls.add(url)
-
-                if target_section:
-                    # Force-build doc for the requested section from JSONL cache
-                    doc = self._doc_from_jsonl_payload({**pl, "section": target_section}, score=1.0)
-                    if doc.get("text") and "[Record not found" not in doc["text"] and doc["text"] != "[Empty section]":
-                        results.append(doc)
-                        continue  # got the requested section
-
-                # Fallback to ruling, then header
-                doc = self._doc_from_jsonl_payload({**pl, "section": "ruling"}, score=1.0)
-                if doc.get("text") and doc["text"] != "[Empty section]":
-                    results.append(doc)
-                else:
-                    results.append(self._doc_from_jsonl_payload({**pl, "section": "header"}, score=1.0))
-
-            if not next_page:
-                break
-
-        return results
-
-    # ---------- Section-filtered Qdrant search ----------
-    def _search_section(self, query_vector, section: str, limit: int) -> List[Any]:
+def _get_collection_info(collection_name: str) -> Dict[str, Any]:
+    """Get cached collection information"""
+    global _COLLECTION_INFO
+    
+    if _COLLECTION_INFO is None:
+        client = _get_cached_qdrant_client()
         try:
-            return self.qdrant.search(
-                collection_name=self.collection,
-                query_vector=query_vector,
+            info = client.get_collection(collection_name)
+            _COLLECTION_INFO = {
+                "name": collection_name,  # Use the collection name we passed in
+                "vector_count": getattr(info, 'points_count', 0),  # Use points_count instead of vectors_count
+                "status": getattr(info, 'status', 'Unknown')
+            }
+        except Exception as e:
+            print(f"❌ Failed to get collection info: {e}")
+            _COLLECTION_INFO = {"name": collection_name, "vector_count": 0, "status": "Unknown"}
+    
+    return _COLLECTION_INFO
+
+class LegalRetriever:
+    def __init__(self, collection: str = "jurisprudence"):
+        self.collection = collection
+        self.model = _get_cached_embedding_model()
+        self.qdrant = _get_cached_qdrant_client()
+        
+        # Verify collection exists
+        if not self.qdrant.collection_exists(collection):
+            raise ValueError(f"Collection '{collection}' does not exist")
+        
+        # Get collection info
+        self.collection_info = _get_collection_info(collection)
+        vector_count = self.collection_info['vector_count']
+        if vector_count is not None:
+            print(f"📊 Collection: {collection} | Vectors: {vector_count:,}")
+        else:
+            print(f"📊 Collection: {collection} | Vectors: Unknown")
+
+    def retrieve(self, query: str, k: int = 3, is_case_digest: bool = False) -> List[Dict[str, Any]]:
+        """Fast vector search with optimized performance"""
+        print(f"🔍 Query: '{query}' | Retrieving {k} documents...")
+        
+        # Handle G.R. No. queries specifically
+        if "G.R. No." in query.upper():
+            return self._retrieve_gr_case(query, k)
+        
+        print("🔄 Fast vector search...")
+        start_time = time.time()
+        
+        try:
+            # Encode query
+            qv = self.model.encode(query, convert_to_numpy=True, show_progress_bar=False).tolist()
+            
+            # For case digests, retrieve more documents to ensure comprehensive coverage
+            limit = max(30, k * 6) if is_case_digest else max(20, k * 4)
+            
+            # Perform fast search with larger limit for better quality
+            hits = self.qdrant.search(
+                collection_name=self.collection, 
+                query_vector=qv, 
                 limit=limit,
                 with_payload=True,
-                query_filter=Filter(must=[FieldCondition(key="section", match=MatchValue(value=section))]),
+                score_threshold=0.4 if is_case_digest else 0.5  # Lower threshold for case digests
             )
-        except Exception:
+            
+            search_time = time.time() - start_time
+            print(f"✅ Fast search completed: {len(hits)} results in {search_time:.2f}s")
+            
+            # Process and deduplicate results with case digest optimization
+            if is_case_digest:
+                docs = self._process_search_results_for_digest(hits, k)
+            else:
+                docs = self._process_search_results(hits, k)
+            
+            return docs[:k]
+            
+        except Exception as e:
+            print(f"❌ Fast search failed: {e}")
             return []
 
-    def _merge_rerank(self, hits_by_section: Dict[str, List[Any]], query: str, k: int) -> List[Dict[str, Any]]:
-        """
-        Combine hits from multiple section-filtered searches, re-rank with simple weights
-        and intent boosts, then return top-k docs (deduped by (url, section, chunk_index)).
-        """
-        desired = self._detect_intent_sections(query)
-        intent_boost = {s: 1.0 for s in SECTION_WEIGHTS}
-        # Small boost to user-desired lead section
-        if desired and desired[0] in intent_boost:
-            intent_boost[desired[0]] = 1.05
-
-        pool = []
-        for sec, hits in hits_by_section.items():
-            w = SECTION_WEIGHTS.get(sec, 0.6) * intent_boost.get(sec, 1.0)
-            for h in hits:
-                pl = h.payload or {}
-                chunk_idx = pl.get("chunk_index")
-                url = pl.get("source_url")
-                score = getattr(h, "score", 0.0)
-                pool.append((sec, url, chunk_idx, score * w, h))
-
-        # Deduplicate by (url, sec, chunk)
-        seen = set()
-        uniq = []
-        for sec, url, chunk_idx, s, h in sorted(pool, key=lambda x: x[3], reverse=True):
-            key = (url, sec, int(chunk_idx) if chunk_idx is not None else -1)
-            if key in seen:
-                continue
-            seen.add(key)
-            uniq.append((s, h))
-            if len(uniq) >= max(k * 3, 12):  # keep a bit more for doc building
-                break
-
-        docs = [self._hit_to_doc(h) for _, h in uniq]
-        # Final trim to k, keeping order
-        return docs[:k]
-
-    # ---------- Public API ----------
-    def retrieve(self, query: str, k: int = 3) -> List[Dict[str, Any]]:
-        """
-        Returns a list of dicts: {text, score, gr_number, title, source_url, section?}.
-        Strategy:
-          1) If query has a G.R. No., do an exact payload match, return requested section
-             if the user asked (facts/issues/ruling), else return ruling.
-          2) Else, run section-filtered vector searches for the intent-priority sections,
-             merge and re-rank, dedupe, and return top-k snippets.
-        """
-        # 1) Exact G.R. No. path, with section intent
-        m = GR_IN_QUERY.search(query or "")
-        desired_sections = self._detect_intent_sections(query)
-        lead = desired_sections[0] if desired_sections else None
-
-        if m:
-            gr = _normalize_gr(m.group(0))
-            target = None
-            if lead in ("facts", "issues", "ruling"):
-                target = lead
-            docs = self._scroll_by_gr_number(gr, target_section=target)
-            if docs:
-                return docs[:k]
-
-        # 2) Semantic search with section filters
-        qv = self.model.encode(query, convert_to_numpy=True).tolist()
-
-        # Search a few top-priority sections first; widen if needed
-        plan = desired_sections or SECTION_PRIORITY
-        hits_by_section: Dict[str, List[Any]] = {}
-        # Pull more than k per section for better re-ranking
-        per_sec = max(8, k * 4)
-
-        for sec in plan:
-            hits = self._search_section(qv, sec, limit=per_sec)
+    def _retrieve_gr_case(self, query: str, k: int) -> List[Dict[str, Any]]:
+        """Special handling for G.R. No. queries"""
+        print("🎯 G.R. No. query detected - using specialized search...")
+        
+        # Extract G.R. number
+        import re
+        gr_match = re.search(r"G\.R\.\s*No\.\s*(\d+)", query, re.IGNORECASE)
+        if not gr_match:
+            return []
+        
+        gr_number = gr_match.group(1)
+        print(f"🔍 Searching for G.R. No. {gr_number}")
+        
+        # Use payload filtering for exact matches
+        try:
+            hits = self.qdrant.search(
+                collection_name=self.collection,
+                query_vector=self.model.encode(query, convert_to_numpy=True, show_progress_bar=False).tolist(),
+                limit=10,
+                with_payload=True,
+                query_filter={
+                    "must": [
+                        {
+                            "key": "gr_number",
+                            "match": {"text": gr_number}
+                        }
+                    ]
+                }
+            )
+            
             if hits:
-                hits_by_section[sec] = hits
+                return self._process_search_results(hits, k)
+            else:
+                print(f"⚠️ No exact G.R. No. {gr_number} found, falling back to semantic search")
+                return self.retrieve(query, k)
+                
+        except Exception as e:
+            print(f"❌ G.R. No. search failed: {e}")
+            return self.retrieve(query, k)
 
-        # If everything is empty (collection tiny / sections missing), do a global search as fallback
-        if not hits_by_section:
-            hits = self.qdrant.search(collection_name=self.collection, query_vector=qv, limit=max(20, k*5),
-                                      with_payload=True)
-            # Build docs and return
-            docs = [self._hit_to_doc(h) for h in hits][:k]
-            return docs
+    def _process_search_results(self, hits: List, k: int) -> List[Dict[str, Any]]:
+        """Process and deduplicate search results"""
+        seen_titles = set()
+        docs = []
+        
+        for hit in hits:
+            if not hit.payload:
+                continue
+                
+            title = hit.payload.get("title", "Unknown Title")
+            
+            # Skip duplicates
+            if title in seen_titles:
+                continue
+            seen_titles.add(title)
+            
+            # Extract relevant sections
+            doc = {
+                "title": title,
+                "score": hit.score,
+                "url": hit.payload.get("url", ""),
+                "year": hit.payload.get("year", ""),
+                "gr_number": hit.payload.get("gr_number", ""),
+                "content": self._extract_best_section(hit.payload),
+                "metadata": {
+                    "section": hit.payload.get("section", "unknown"),
+                    "chunk_id": hit.payload.get("chunk_id", ""),
+                    "case_type": hit.payload.get("case_type", "")
+                }
+            }
+            
+            docs.append(doc)
+            
+            if len(docs) >= k:
+                break
+        
+        return docs
 
-        return self._merge_rerank(hits_by_section, query, k)
+    def _process_search_results_for_digest(self, hits: List, k: int) -> List[Dict[str, Any]]:
+        """Process search results optimized for case digest generation"""
+        # Group results by case to ensure we get comprehensive coverage
+        case_groups = {}
+        section_priority = ["issues", "facts", "ruling", "arguments", "header", "body"]
+        
+        for hit in hits:
+            if not hit.payload:
+                continue
+                
+            title = hit.payload.get("title", "Unknown Title")
+            section = hit.payload.get("section", "body")
+            
+            # Group by case title
+            if title not in case_groups:
+                case_groups[title] = {}
+            
+            # Store the best result for each section
+            if section not in case_groups[title] or hit.score > case_groups[title][section].get("score", 0):
+                case_groups[title][section] = {
+                    "title": title,
+                    "score": hit.score,
+                    "url": hit.payload.get("url", ""),
+                    "year": hit.payload.get("year", ""),
+                    "gr_number": hit.payload.get("gr_number", ""),
+                    "content": self._extract_best_section(hit.payload),
+                    "metadata": {
+                        "section": section,
+                        "chunk_id": hit.payload.get("chunk_id", ""),
+                        "case_type": hit.payload.get("case_type", "")
+                    }
+                }
+        
+        # Select the best cases with comprehensive section coverage
+        docs = []
+        for title, sections in case_groups.items():
+            # Prioritize sections for case digest
+            case_docs = []
+            for section in section_priority:
+                if section in sections:
+                    case_docs.append(sections[section])
+            
+            # Add remaining sections
+            for section, doc in sections.items():
+                if section not in section_priority:
+                    case_docs.append(doc)
+            
+            # Add the best case to results
+            if case_docs:
+                # Use the highest scoring document as the primary document
+                primary_doc = max(case_docs, key=lambda x: x["score"])
+                docs.append(primary_doc)
+                
+                # Add additional sections if we have space
+                for doc in case_docs:
+                    if doc != primary_doc and len(docs) < k * 2:  # Allow more docs for digests
+                        docs.append(doc)
+        
+        # Sort by score and return top results
+        docs.sort(key=lambda x: x["score"], reverse=True)
+        return docs[:k * 2]  # Return more documents for case digests
+
+    def _extract_best_section(self, payload: Dict[str, Any]) -> str:
+        """Extract the most relevant section content"""
+        # Priority order: facts, issues, ruling, arguments, header
+        sections = ["facts", "issues", "ruling", "arguments", "header"]
+        
+        for section in sections:
+            if section in payload and payload[section]:
+                content = payload[section]
+                # Limit content length for context
+                if len(content) > 800:
+                    content = content[:800] + "..."
+                return content
+        
+        # Fallback to any available content
+        for key, value in payload.items():
+            if isinstance(value, str) and len(value) > 100:
+                return value[:800] + "..." if len(value) > 800 else value
+        
+        # If no content in payload, fetch from original source files
+        return self._fetch_content_from_source(payload)
+
+    def _fetch_content_from_source(self, payload: Dict[str, Any]) -> str:
+        """Fetch content from original source files when Qdrant payload is missing content"""
+        try:
+            gr_number = payload.get("gr_number")
+            if not gr_number:
+                return "No content available - missing G.R. number"
+            
+            # Try to find the case in the enhanced data file
+            content = self._find_case_content(gr_number)
+            if content:
+                return content
+            
+            return f"No content available for {gr_number}"
+            
+        except Exception as e:
+            print(f"⚠️ Error fetching content from source: {e}")
+            return "No content available - error fetching from source"
+
+    def _find_case_content(self, gr_number: str) -> Optional[str]:
+        """Find case content in the enhanced data file by G.R. number"""
+        try:
+            # Try the enhanced file first
+            file_path = "data/cases_enhanced.jsonl.gz"
+            if not os.path.exists(file_path):
+                file_path = "data/cases_improved.jsonl.gz"
+            if not os.path.exists(file_path):
+                file_path = "data/cases.jsonl.gz"
+            
+            if not os.path.exists(file_path):
+                print(f"⚠️ No source data file found")
+                return None
+            
+            with gzip.open(file_path, 'rt', encoding='utf-8') as f:
+                for line in f:
+                    try:
+                        data = json.loads(line.strip())
+                        if data.get("gr_number") == gr_number:
+                            # Extract the best section content
+                            sections = data.get("sections", {})
+                            
+                            # Priority order for sections
+                            priority_sections = ["facts", "issues", "ruling", "arguments", "header", "body", "summary"]
+                            
+                            for section_name in priority_sections:
+                                if section_name in sections and sections[section_name]:
+                                    content = sections[section_name]
+                                    # Clean and limit content
+                                    if isinstance(content, str) and len(content.strip()) > 50:
+                                        # Remove common headers and clean up
+                                        content = content.replace("Supreme Court E-Library", "").strip()
+                                        if len(content) > 800:
+                                            content = content[:800] + "..."
+                                        return content
+                            
+                            # Fallback to clean_text if no sections found
+                            clean_text = data.get("clean_text", "")
+                            if clean_text and len(clean_text.strip()) > 100:
+                                # Remove common headers
+                                clean_text = clean_text.replace("Supreme Court E-Library", "").strip()
+                                if len(clean_text) > 800:
+                                    clean_text = clean_text[:800] + "..."
+                                return clean_text
+                            
+                            return f"Case found but no content available for {gr_number}"
+                    
+                    except json.JSONDecodeError:
+                        continue
+                    except Exception as e:
+                        print(f"⚠️ Error processing line for {gr_number}: {e}")
+                        continue
+            
+            return f"Case {gr_number} not found in source files"
+            
+        except Exception as e:
+            print(f"❌ Error reading source file: {e}")
+            return None
+
+    def get_collection_stats(self) -> Dict[str, Any]:
+        """Get collection statistics"""
+        try:
+            info = self.qdrant.get_collection(self.collection)
+            vector_size = None
+            if hasattr(info, 'config') and hasattr(info.config, 'params') and hasattr(info.config.params, 'vectors'):
+                vector_size = getattr(info.config.params.vectors, 'size', None)
+            return {
+                "name": self.collection,  # Use the collection name we know
+                "vector_count": getattr(info, 'points_count', 0),  # Use points_count instead of vectors_count
+                "status": getattr(info, 'status', 'Unknown'),
+                "vector_size": vector_size
+            }
+        except Exception as e:
+            print(f"❌ Failed to get collection stats: {e}")
+            return {"error": str(e)}
