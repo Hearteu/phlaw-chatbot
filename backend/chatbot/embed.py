@@ -27,6 +27,9 @@ VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", 768))
 DATA_FORMAT = os.getenv("DATA_FORMAT", "jsonl").lower()   # "txt" | "jsonl"
 DATA_DIR    = os.getenv("DATA_DIR", "backend/jurisprudence")       # for txt mode
 DATA_FILE   = os.getenv("DATA_FILE", "backend/data/cases_enhanced.jsonl.gz")         # for jsonl mode
+# Optional year range filter when processing JSONL
+YEAR_START  = int(os.getenv("YEAR_START", 2010))
+YEAR_END    = int(os.getenv("YEAR_END", 2012))
 
 # Cache (for txt mode; list of processed filepaths)
 CACHE_PATH = os.getenv("EMBED_CACHE_PATH", "backend/backend/chatbot/embedded_cache.json")
@@ -452,6 +455,18 @@ def process_jsonl():
 
             full_text = text_from_record(rec)
             if not full_text:
+                continue
+
+            # Year range filter (inclusive) based on promulgation_year/date if present
+            y = rec.get("promulgation_year")
+            if not isinstance(y, int):
+                d = rec.get("promulgation_date")
+                if isinstance(d, str) and len(d) >= 4 and d[:4].isdigit():
+                    try:
+                        y = int(d[:4])
+                    except Exception:
+                        y = None
+            if isinstance(y, int) and (y < YEAR_START or y > YEAR_END):
                 continue
 
             meta = record_meta(rec)

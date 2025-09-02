@@ -40,8 +40,8 @@ from selectolax.parser import HTMLParser
 BASE_URL     = os.getenv("ELIBRARY_BASE", "https://elibrary.judiciary.gov.ph/")
 OUT_PATH     = os.getenv("CASES_JSONL", "backend/data/cases.jsonl.gz")
 UA           = os.getenv("CRAWLER_UA", "Mozilla/5.0 (compatible; PHLawBot/1.0)")
-YEAR_START   = int(os.getenv("YEAR_START", 2005))
-YEAR_END     = int(os.getenv("YEAR_END", 2025))
+YEAR_START   = int(os.getenv("YEAR_START", 2010))
+YEAR_END     = int(os.getenv("YEAR_END", 2012))
 CONCURRENCY  = int(os.getenv("CONCURRENCY", 8))
 SLOWDOWN_MS  = int(os.getenv("SLOWDOWN_MS", 250))
 TIMEOUT_S    = int(os.getenv("TIMEOUT_S", 45))
@@ -74,6 +74,72 @@ def normalize_text(s: str) -> str:
     s = re.sub(r"\n{3,}", "\n\n", s)
     s = re.sub(r"\s+\n", "\n", s)
     return s.strip()
+
+# -----------------------------
+# Field extractors (caption, GR numbers, division, ponente)
+# -----------------------------
+TITLE_NOISE = (
+    "SUPREME COURT", "REPUBLIC OF THE PHILIPPINES", "EN BANC", "FIRST DIVISION",
+    "SECOND DIVISION", "THIRD DIVISION", "PER CURIAM",
+)
+
+CAPTION_RE = re.compile(r"\b(.+?)\s+(v\.|vs\.?|versus)\s+(.+?)\b", re.IGNORECASE)
+CAPTION_STRONG_RE = re.compile(r"^[A-Z0-9 ,.'\-()]+\s+(V\.|VS\.?|VERSUS)\s+[A-Z0-9 ,.'\-()]+$")
+GR_BLOCK_RE = re.compile(r"G\.R\.\s+No(?:s)?\.?\s*([0-9][0-9\-*,\s]+)", re.IGNORECASE)
+
+def _clean_noise(line: str) -> str:
+    s = line.strip()
+    for t in TITLE_NOISE:
+        s = s.replace(t, "")
+    return re.sub(r"\s{2,}", " ", s).strip(",;:- ")
+
+def derive_case_title_from_text(text: str) -> str | None:
+    if not text:
+        return None
+    head = text[:1500]
+    for raw in head.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if CAPTION_STRONG_RE.match(line) or CAPTION_RE.search(line):
+            cleaned = _clean_noise(line)
+            if 10 <= len(cleaned) <= 220:
+                return cleaned
+    candidates = [
+        _clean_noise(l) for l in head.splitlines()
+        if 10 <= len(l.strip()) <= 220 and not any(n in l.upper() for n in TITLE_NOISE)
+    ]
+    return max(candidates, key=len) if candidates else None
+
+def parse_gr_numbers_from_text(text: str) -> tuple[str | None, list[str]]:
+    if not text:
+        return None, []
+    found: list[str] = []
+    for m in GR_BLOCK_RE.finditer(text[:4000]):
+        block = m.group(1)
+        parts = [p.strip().rstrip('*') for p in re.split(r"[,\s]+", block) if p.strip()]
+        for p in parts:
+            if p and p not in found:
+                found.append(p)
+    primary = found[0] if found else None
+    return primary, found
+
+def extract_division_enbanc(text: str) -> tuple[str | None, bool | None]:
+    if not text:
+        return None, None
+    U = text[:800].upper()
+    if "EN BANC" in U:
+        return "En Banc", True
+    for div in ("FIRST DIVISION", "SECOND DIVISION", "THIRD DIVISION"):
+        if div in U:
+            return div.title(), False
+    return None, None
+
+def extract_ponente(text: str) -> str | None:
+    if not text:
+        return None
+    m = re.search(r"\b([A-Z][A-Za-z\-']+(?:\s+[A-Z][A-Za-z\-']+)*)\s*,\s*J\.?\b", text[:3000])
+    return m.group(1) if m else None
 
 def split_sections(text: str):
     m = RULING_REGEX.search(text or "")
@@ -259,11 +325,12 @@ def parse_case(text_base: str, url: str, year_hint: int | None = None, month_hin
                title_guess: str | None = None, page_title: str | None = None):
     text = normalize_text(text_base)
 
-    # GR number
-    gr = None
-    m = re.search(r"G\.\s*R\.\s*No\.\s*[0-9\-]+", text, flags=re.I)
-    if m:
-        gr = m.group(0).strip()
+    # Case title (prefer derived caption over generic page guess)
+    derived_title = derive_case_title_from_text(text)
+    case_title = derived_title or (title_guess if title_guess and CAPTION_RE.search(title_guess) else title_guess)
+
+    # GR numbers (primary + list)
+    gr_primary, gr_all = parse_gr_numbers_from_text(text)
 
     # Date (try patterns)
     date_iso = None
@@ -278,10 +345,16 @@ def parse_case(text_base: str, url: str, year_hint: int | None = None, month_hin
 
     secs = split_sections(text)
 
+    # Division / En Banc and Ponente
+    division, en_banc = extract_division_enbanc(text)
+    ponente = extract_ponente(text)
+
     record = {
         "id": sha256(url),
-        "gr_number": gr,
-        "title": title_guess,                  # set from extractor (may be None)
+        "gr_number": gr_primary,
+        "gr_numbers": gr_all or None,
+        "title": case_title or title_guess,
+        "case_title": case_title,
         "page_title": page_title,              # debug/optional
         "promulgation_date": date_iso,         # may be None
         "promulgation_year": year_hint,        # Fix A: carry year hint from listing
@@ -291,6 +364,9 @@ def parse_case(text_base: str, url: str, year_hint: int | None = None, month_hin
         "clean_version": "v1.0",
         "checksum": sha256(text),
         "crawl_ts": datetime.utcnow().isoformat() + "Z",
+        "ponente": ponente,
+        "division": division,
+        "en_banc": en_banc,
         "sections": secs,
         "clean_text": text,
     }

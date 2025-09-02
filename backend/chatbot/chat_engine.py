@@ -335,6 +335,9 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
     use_juris = _should_query_jurisprudence(query, history)
     print(f"🔍 Query: '{query}' | Jurisprudence: {use_juris}")
     
+    # Derive intent flags early (used for retrieval and formatting)
+    wants_ruling, wants_facts, wants_issues, wants_arguments, wants_keywords, wants_digest = _intent(query)
+
     # Prioritize jurisprudence queries over rule-based responses
     if use_juris:
         if retriever is None:
@@ -365,7 +368,7 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
             return msg
         return _chat_without_retrieval(query, history or [])
 
-    wants_ruling, wants_facts, wants_issues, wants_arguments, wants_keywords, wants_digest = _intent(query)
+    # intents already computed above
     chosen = _dedupe_and_rank(docs, wants_ruling, wants_facts, wants_issues, wants_arguments, wants_keywords, wants_digest)
 
     # Enhanced section prioritization for Law LLM optimization

@@ -112,6 +112,7 @@ def _call_rev21_prompt(prompt: str) -> Optional[str]:
             text = _parse_rev21_response(data)
             if isinstance(text, str) and text.strip():
                 text = re.sub(r"\s*\[/?INST\]\s*", " ", text)
+                print("LLM: REV21 (prompt)")
                 return text.strip()
     except Exception:
         return None
@@ -144,6 +145,7 @@ def _call_rev21_messages(messages: List[Dict[str, str]]) -> Optional[str]:
             text = _parse_rev21_response(data)
             if isinstance(text, str) and text.strip():
                 text = re.sub(r"\s*\[/?INST\]\s*", " ", text)
+                print("LLM: REV21 (messages)")
                 return text.strip()
     except Exception:
         return None
@@ -181,6 +183,7 @@ def generate_response(prompt: str) -> str:
         )
         
         if response and "choices" in response and len(response["choices"]) > 0:
+            print("LLM: law-chat (prompt)")
             return response["choices"][0]["text"].strip()
         else:
             return "I apologize, but I was unable to generate a response."
@@ -214,6 +217,7 @@ def generate_response_from_messages(messages: List[Dict[str, str]]) -> str:
         )
         
         if response and "choices" in response and len(response["choices"]) > 0:
+            print("LLM: law-chat (messages)")
             return response["choices"][0]["text"].strip()
         else:
             return "I apologize, but I was unable to generate a response."
