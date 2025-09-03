@@ -41,7 +41,7 @@ from selectolax.parser import HTMLParser
 BASE_URL     = os.getenv("ELIBRARY_BASE", "https://elibrary.judiciary.gov.ph/")
 OUT_PATH     = os.getenv("CASES_JSONL", "backend/data/cases.jsonl.gz")
 UA           = os.getenv("CRAWLER_UA", "Mozilla/5.0 (compatible; PHLawBot/1.0)")
-YEAR_START   = int(os.getenv("YEAR_START", 2012))
+YEAR_START   = int(os.getenv("YEAR_START", 2011))
 YEAR_END     = int(os.getenv("YEAR_END", 2012))
 CONCURRENCY  = int(os.getenv("CONCURRENCY", 12))  # Higher for HTTP-first approach
 SLOWDOWN_MS  = int(os.getenv("SLOWDOWN_MS", 250))
@@ -246,8 +246,21 @@ def parse_gr_numbers_from_text(text: str) -> tuple[str | None, list[str]]:
         for p in parts:
             if p and p not in found:
                 found.append(p)
-    primary = found[0] if found else None
-    return primary, found
+    
+    # Format GR numbers as "G.R. No. XXXX"
+    formatted_found = []
+    for gr_num in found:
+        if gr_num and gr_num.isdigit():
+            formatted_found.append(f"G.R. No. {gr_num}")
+        elif gr_num and '-' in gr_num and all(part.isdigit() for part in gr_num.split('-')):
+            # Handle ranges like "177857-58"
+            formatted_found.append(f"G.R. No. {gr_num}")
+        else:
+            # Keep as is if already formatted or has special characters
+            formatted_found.append(gr_num)
+    
+    primary = formatted_found[0] if formatted_found else None
+    return primary, formatted_found
 
 def extract_division_enbanc(text: str) -> tuple[str | None, bool | None]:
     if not text:

@@ -28,7 +28,7 @@ DATA_FORMAT = os.getenv("DATA_FORMAT", "jsonl").lower()   # "txt" | "jsonl"
 DATA_DIR    = os.getenv("DATA_DIR", "backend/jurisprudence")       # for txt mode
 DATA_FILE   = os.getenv("DATA_FILE", "backend/data/cases.jsonl.gz")         # for jsonl mode
 # Optional year range filter when processing JSONL
-YEAR_START  = int(os.getenv("YEAR_START", 2012))
+YEAR_START  = int(os.getenv("YEAR_START", 2011))
 YEAR_END    = int(os.getenv("YEAR_END", 2012))
 
 # Cache (for txt mode; list of processed filepaths)
@@ -290,7 +290,8 @@ def record_meta(rec):
         "gr_number": primary_gr,
         "gr_numbers": all_grs or None,
         "title": derive_case_title(rec),
-        "year": y,
+        "year": y,  # Keep for backward compatibility
+        "promulgation_year": y,  # Add the field that Qdrant expects
         "promulgation_date": rec.get("promulgation_date"),
         "source_url": rec.get("source_url"),
         "ponente": ponente,

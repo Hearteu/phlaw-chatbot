@@ -424,7 +424,7 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
             "1) Whether or not [precise legal question grounded in sources].\n"
             "2) Whether or not [next issue, if any].\n\n"
             "Facts\n"
-            "[2–4 short paragraphs. Lead with the substantive narrative (who did what, when, where, why), then procedural history (RTC → CA → SC). Keep it chronological and concise.]\n\n"
+            "[Make a bullet in a new line per sentence. Lead with the substantive narrative (who did what, when, where, why), then procedural history (RTC → CA → SC). Keep it chronological and concise.]\n\n"
             "Ruling\n"
             "- Doctrine/Rule: [state controlling doctrines/tests derived from sources].\n"
             "- Application: [map facts to elements/tests; explain the Court's reasoning].\n"
@@ -435,7 +435,7 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
             "- Holding: [final holding in plain language].\n\n"
             "Discussion\n"
             "[Concurring/dissenting opinions: summarize positions and doctrinal implications. If none, say: 'No separate opinions noted in the sources.']\n\n"
-            "Citations (when applicable)\n"
+            "Citations only if applicable\n"
             "- [Case v. Case], G.R. No. _____, [Date] — [one-line doctrinal takeaway].\n"
             "- [Case v. Case], G.R. No. _____, [Date] — [one-line doctrinal takeaway].\n\n"
             "Legal Terms Breakdown (only if asked)\n"
@@ -447,7 +447,7 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
     elif wants_ruling and not (wants_facts or wants_issues or wants_arguments or wants_keywords):
         answer_template = (
             "Based on the provided sources, the ruling is: <if dispositive present, put the exact WHEREFORE/So Ordered text in double quotes, "
-            "then provide a clear explanation with [n]; otherwise write: Not stated in sources.>"
+            "then provide a clear explanation with court reasoning; otherwise write: Not stated in sources.>"
         )
     elif wants_facts and not (wants_ruling or wants_issues or wants_arguments or wants_keywords):
         answer_template = (
@@ -455,10 +455,10 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
             "- <extract the most relevant fact, ≤30 words, with [n] citation>\n"
             "- <extract another important fact, ≤30 words, with [n] citation>\n"
             "- <extract additional relevant fact, ≤30 words, with [n] citation>\n"
-            "(Provide 3-5 key facts. Each must be supported by the sources with proper citations.)"
+            "(Provide 3-5 key facts. Each must be supported by the sources with proper citations only if applicable.)"
         )
     elif wants_issues and not (wants_ruling or wants_facts or wants_arguments or wants_keywords):
-        answer_template = "The legal issues addressed in this case are: <extract and list the main legal questions with [n] citations>"
+        answer_template = "The legal issues addressed in this case are: <extract and list the main legal questions with [n] citations only if applicable>"
     elif wants_arguments and not (wants_ruling or wants_facts or wants_issues or wants_keywords):
         answer_template = (
             "The legal arguments presented include:\n"
@@ -480,7 +480,7 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
             "Facts:\n- <extract key fact with [n] citation>\n- <extract another key fact with [n] citation>\n\n"
             "Legal Issues:\n- <identify main legal question with [n] citation>\n\n"
             "Arguments:\n- <extract key legal reasoning with [n] citation>\n\n"
-            "Ruling:\n<if dispositive present, quote it verbatim in double quotes with [n] citation; "
+            "Ruling:\n<if dispositive present, quote it verbatim in double quotes with [n] citation only if applicable; then provide a clear explanation with court reasoning"
             "otherwise write: Not stated in sources.>"
         )
     # -------- End enhanced conditional --------
