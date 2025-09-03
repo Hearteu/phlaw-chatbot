@@ -26,9 +26,9 @@ VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", 768))
 # Source data
 DATA_FORMAT = os.getenv("DATA_FORMAT", "jsonl").lower()   # "txt" | "jsonl"
 DATA_DIR    = os.getenv("DATA_DIR", "backend/jurisprudence")       # for txt mode
-DATA_FILE   = os.getenv("DATA_FILE", "backend/data/cases_enhanced.jsonl.gz")         # for jsonl mode
+DATA_FILE   = os.getenv("DATA_FILE", "backend/data/cases.jsonl.gz")         # for jsonl mode
 # Optional year range filter when processing JSONL
-YEAR_START  = int(os.getenv("YEAR_START", 2010))
+YEAR_START  = int(os.getenv("YEAR_START", 2012))
 YEAR_END    = int(os.getenv("YEAR_END", 2012))
 
 # Cache (for txt mode; list of processed filepaths)
@@ -297,6 +297,11 @@ def record_meta(rec):
         "division": division,
         "en_banc": bool(rec.get("en_banc")) if rec.get("en_banc") is not None else None,
         "sectioned": True,
+        # Case classification
+        "case_type": rec.get("case_type"),
+        "case_subtype": rec.get("case_subtype"),
+        "is_administrative": rec.get("is_administrative"),
+        "is_regular_case": rec.get("is_regular_case"),
     }
 
 
@@ -320,6 +325,26 @@ def make_points(
     texts: List[str] = []
     payloads: List[Dict[str, Any]] = []
     ids: List[str] = []
+
+    # CAPTION: lightweight metadata line to anchor title/GR/date/division for retrieval
+    caption_bits = []
+    if meta.get("title"):
+        caption_bits.append(str(meta["title"]))
+    if meta.get("gr_number"):
+        caption_bits.append(f"G.R.: {meta['gr_number']}")
+    if meta.get("promulgation_date"):
+        caption_bits.append(str(meta["promulgation_date"]))
+    if meta.get("division"):
+        caption_bits.append(str(meta["division"]))
+    if meta.get("case_type"):
+        caption_bits.append(f"type:{meta['case_type']}")
+    if meta.get("case_subtype"):
+        caption_bits.append(f"subtype:{meta['case_subtype']}")
+    if caption_bits:
+        caption_text = normalize_text(" | ".join(caption_bits))
+        texts.append(caption_text)
+        payloads.append({**meta, "section": "caption"})
+        ids.append(str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc_id}#caption")))
 
     # RULING (from the full, normalized 'text')
     rs, re_ = find_ruling(text)
@@ -499,6 +524,8 @@ def process_jsonl():
                 "keywords": "keywords",
                 "legal_terms": "keywords",
                 "doctrines": "keywords",
+                # administrative headings
+                "resolution": "ruling",
             }
 
             for key, value in s.items():
