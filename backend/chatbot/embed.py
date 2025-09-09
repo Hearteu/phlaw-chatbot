@@ -1,4 +1,10 @@
-# embed.py — batched, section-aware embedding + Qdrant upsert (TXT or JSONL)
+# embed.py — Optimized batched, section-aware embedding + Qdrant upsert for 21k cases
+# Optimizations:
+# - Increased chunk size from 1200 to 2000 chars for better context
+# - Optimized overlap from 150 to 200 chars (10% ratio)
+# - Increased batch sizes for better throughput (32 embed, 1024 upsert)
+# - Legal document boundary-aware chunking (respects WHEREFORE, ISSUES, FACTS, etc.)
+# - Improved header chunk size from 1200 to 2000 chars
 import gzip
 import json
 import os
@@ -28,17 +34,34 @@ DATA_FORMAT = os.getenv("DATA_FORMAT", "jsonl").lower()   # "txt" | "jsonl"
 DATA_DIR    = os.getenv("DATA_DIR", "backend/jurisprudence")       # for txt mode
 DATA_FILE   = os.getenv("DATA_FILE", "backend/data/cases.jsonl.gz")         # for jsonl mode
 # Optional year range filter when processing JSONL
-YEAR_START  = int(os.getenv("YEAR_START", 2011))
-YEAR_END    = int(os.getenv("YEAR_END", 2012))
+YEAR_START  = int(os.getenv("YEAR_START", 2005))
+YEAR_END    = int(os.getenv("YEAR_END", 2006))
 
 # Cache (for txt mode; list of processed filepaths)
 CACHE_PATH = os.getenv("EMBED_CACHE_PATH", "backend/backend/chatbot/embedded_cache.json")
 
-# Chunking/throughput
-CHUNK_CHARS   = int(os.getenv("CHUNK_CHARS", 1200))
-OVERLAP_CHARS = int(os.getenv("OVERLAP_CHARS", 150))
-BATCH_SIZE    = int(os.getenv("EMBED_BATCH_SIZE", 16))
-UPSERT_BATCH  = int(os.getenv("UPSERT_BATCH", 512))
+# Chunking/throughput - Optimized for 21k cases
+CHUNK_CHARS   = int(os.getenv("CHUNK_CHARS", 2000))      # Increased from 1200 for better context
+OVERLAP_CHARS = int(os.getenv("OVERLAP_CHARS", 200))     # Optimized overlap ratio (10%)
+BATCH_SIZE    = int(os.getenv("EMBED_BATCH_SIZE", 32))   # Increased from 16 for better throughput
+UPSERT_BATCH  = int(os.getenv("UPSERT_BATCH", 1024))     # Increased from 512 for efficiency
+
+# -----------------------------
+# JSONL retrieval helper
+# -----------------------------
+def load_case_from_jsonl(case_id: str, jsonl_path: str = DATA_FILE) -> Optional[Dict[str, Any]]:
+    """Load full case text from JSONL file by case ID"""
+    try:
+        with gzip.open(jsonl_path, 'rt', encoding='utf-8') as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                case = json.loads(line)
+                if case.get('id') == case_id or case.get('gr_number') == case_id:
+                    return case
+    except Exception as e:
+        print(f"Error loading case {case_id}: {e}")
+    return None
 
 # -----------------------------
 # Qdrant init
@@ -209,18 +232,55 @@ def derive_gr_numbers(rec: Dict[str, Any]) -> Tuple[Optional[str], List[str]]:
     return primary, found
 
 def chunkify(s: str, size: int, overlap: int) -> Iterable[str]:
-    """Simple char-based chunker with overlap."""
+    """Optimized chunker with legal document boundary awareness."""
     if not s:
         return
     n = len(s)
     start = 0
     step = max(1, size - overlap)
+    
     while start < n:
         end = min(n, start + size)
-        yield s[start:end]
+        
         if end >= n:
+            yield s[start:end]
             break
-        start += step
+        
+        # Try to break at legal document boundaries
+        chunk = s[start:end]
+        
+        # Priority 1: Legal section boundaries (WHEREFORE, ISSUES, FACTS, etc.)
+        legal_boundaries = ['WHEREFORE', 'ISSUES', 'FACTS', 'RULING', 'DECISION', 'ARGUMENTS']
+        best_boundary = -1
+        for boundary in legal_boundaries:
+            boundary_pos = chunk.rfind(boundary)
+            if boundary_pos > size * 0.6:  # If boundary is in last 40% of chunk
+                best_boundary = max(best_boundary, boundary_pos)
+        
+        # Priority 2: Sentence boundary
+        if best_boundary == -1:
+            last_period = chunk.rfind('.')
+            if last_period > size * 0.7:  # If period is in last 30% of chunk
+                best_boundary = last_period + 1
+        
+        # Priority 3: Paragraph boundary
+        if best_boundary == -1:
+            last_newline = chunk.rfind('\n\n')
+            if last_newline > size * 0.8:  # If double newline is in last 20% of chunk
+                best_boundary = last_newline + 2
+        
+        # Priority 4: Single newline
+        if best_boundary == -1:
+            last_newline = chunk.rfind('\n')
+            if last_newline > size * 0.8:  # If newline is in last 20% of chunk
+                best_boundary = last_newline + 1
+        
+        # Apply the best boundary found
+        if best_boundary > 0:
+            end = start + best_boundary
+        
+        yield s[start:end]
+        start = end - overlap
 
 def read_text(path: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
@@ -249,47 +309,93 @@ def text_from_record(rec: Dict[str, Any]) -> str:
     """
     Re-create a single text stream preserving your section-aware emphasis:
     ruling → header → body, with whitespace normalized.
+    Enhanced to work with both current and legacy dataset formats.
     """
     s = rec.get("sections") or {}
     parts: List[str] = []
-    if s.get("ruling"):
-        parts.append(normalize_text(s["ruling"]))
-    if s.get("header"):
-        parts.append(normalize_text(s["header"]))
-    body = s.get("body") or rec.get("clean_text") or ""
+    
+    # Priority 1: Ruling section (most important for legal decisions)
+    ruling = s.get("ruling") or rec.get("ruling", "")
+    if ruling:
+        parts.append(normalize_text(ruling))
+    
+    # Priority 2: Header section (case title and basic info)
+    header = s.get("header") or rec.get("header", "")
+    if header:
+        parts.append(normalize_text(header))
+    
+    # Priority 3: Body section (main content)
+    body = s.get("body") or rec.get("body", "") or rec.get("clean_text", "")
     if body:
         parts.append(normalize_text(body))
+    
+    # Priority 4: Additional sections for comprehensive coverage
+    additional_sections = ["facts", "issues", "arguments"]
+    for section in additional_sections:
+        content = s.get(section, "")
+        if content and content.strip():
+            parts.append(normalize_text(content))
+    
     # Join with a single space (we already normalized internals)
     return " ".join(p for p in parts if p).strip()
 
 def record_meta(rec):
-    # 1) full date string present?
+    # Enhanced year extraction with multiple fallbacks
     y = None
-    d = rec.get("promulgation_date")
-    if isinstance(d, str) and len(d) >= 4 and d[:4].isdigit():
-        y = int(d[:4])
-    # 2) otherwise use year hint from crawler
+    
+    # 1) Try top-level year field first (for enhanced dataset)
+    if 'year' in rec and rec['year']:
+        y = int(rec['year']) if isinstance(rec['year'], (int, str)) and str(rec['year']).isdigit() else None
+    
+    # 2) Try promulgation_year
     if y is None:
         yh = rec.get("promulgation_year")
         if isinstance(yh, int) and yh > 0:
             y = yh
-    # 3) final fallback
+        elif isinstance(yh, str) and yh.isdigit():
+            y = int(yh)
+    
+    # 3) Try promulgation_date
+    if y is None:
+        d = rec.get("promulgation_date")
+        if isinstance(d, str) and len(d) >= 4 and d[:4].isdigit():
+            y = int(d[:4])
+    
+    # 4) Try to extract from source_url or other fields
+    if y is None:
+        # Look for year patterns in various fields
+        for field in ['source_url', 'title', 'case_title']:
+            if field in rec and rec[field]:
+                year_match = re.search(r'\b(19|20)\d{2}\b', str(rec[field]))
+                if year_match:
+                    y = int(year_match.group())
+                    break
+    
+    # 5) Final fallback
     if y is None:
         y = 0
 
-    # Optional richer header fields
+    # Enhanced metadata extraction
     ponente = rec.get("ponente") or rec.get("author") or rec.get("justice")
-    # Prefer explicit division; fall back to en_banc flag label
+    
+    # Division handling with better fallbacks
     division = rec.get("division") or rec.get("court_division")
     if not division and isinstance(rec.get("en_banc"), (bool, int)):
         division = "En Banc" if bool(rec.get("en_banc")) else None
-
+    
+    # G.R. number handling
     primary_gr, all_grs = derive_gr_numbers(rec)
-
+    
+    # Enhanced title extraction
+    title = derive_case_title(rec)
+    
+    # Quality metrics
+    quality_metrics = rec.get("quality_metrics", {})
+    
     return {
         "gr_number": primary_gr,
         "gr_numbers": all_grs or None,
-        "title": derive_case_title(rec),
+        "title": title,
         "year": y,  # Keep for backward compatibility
         "promulgation_year": y,  # Add the field that Qdrant expects
         "promulgation_date": rec.get("promulgation_date"),
@@ -299,19 +405,30 @@ def record_meta(rec):
         "en_banc": bool(rec.get("en_banc")) if rec.get("en_banc") is not None else None,
         "sectioned": True,
         # Case classification
-        "case_type": rec.get("case_type"),
+        "case_type": rec.get("case_type", "regular"),
         "case_subtype": rec.get("case_subtype"),
-        "is_administrative": rec.get("is_administrative"),
-        "is_regular_case": rec.get("is_regular_case"),
+        "is_administrative": rec.get("is_administrative", False),
+        "is_regular_case": rec.get("is_regular_case", True),
+        # Quality metrics
+        "quality_score": quality_metrics.get("sections_count", 0),
+        "has_ruling": quality_metrics.get("has_ruling", False),
+        "has_facts": quality_metrics.get("has_facts", False),
+        "has_issues": quality_metrics.get("has_issues", False),
     }
 
 
 # -----------------------------
-# Model (load once)
+# Model (load once) - Use centralized cached model
 # -----------------------------
 print(f"📥 Loading model: {EMBED_MODEL}")
-model = SentenceTransformer(EMBED_MODEL)
-if torch.cuda.is_available():
+# Import the centralized cached model function
+import sys
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from chatbot.model_cache import get_cached_embedding_model
+
+model = get_cached_embedding_model()
+if torch.cuda.is_available() and not str(model.device).startswith('cuda'):
     model = model.to("cuda")
 
 # -----------------------------
@@ -356,24 +473,36 @@ def make_points(
             payloads.append({**meta, "section": "ruling"})
             ids.append(str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc_id}#ruling")))
 
-    # HEADER (~first 1200 chars of normalized text)
-    header_snippet = text[:1200].strip()
+    # HEADER (~first 2000 chars of normalized text) - Optimized size
+    header_snippet = text[:2000].strip()
     if header_snippet:
         texts.append(header_snippet)
         payloads.append({**meta, "section": "header"})
         ids.append(str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc_id}#header")))
 
     # BODY (everything except ruling), normalized
-    body_text = (text[:max(0, rs - 1)] + " " + text[re_:]).strip() if rs != -1 else text
-    for idx, chunk in enumerate(chunkify(body_text, CHUNK_CHARS, OVERLAP_CHARS), 1):
-        texts.append(chunk)
-        payloads.append({**meta, "section": "body", "chunk_index": idx})
-        ids.append(str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc_id}#body-{idx:03d}")))
+    # OPTION: Skip body chunks to reduce storage and use JSONL for full text
+    # Uncomment the next 4 lines to enable body chunking:
+    # body_text = (text[:max(0, rs - 1)] + " " + text[re_:]).strip() if rs != -1 else text
+    # for idx, chunk in enumerate(chunkify(body_text, CHUNK_CHARS, OVERLAP_CHARS), 1):
+    #     texts.append(chunk)
+    #     payloads.append({**meta, "section": "body", "chunk_index": idx})
+    #     ids.append(str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc_id}#body-{idx:03d}")))
+    
+    # Store full text reference for JSONL retrieval
+    if rs != -1:
+        body_text = (text[:max(0, rs - 1)] + " " + text[re_:]).strip()
+        if body_text:
+            texts.append(f"FULL_TEXT_REFERENCE: {doc_id}")  # Placeholder for full text
+            payloads.append({**meta, "section": "full_text_ref", "has_full_text": True})
+            ids.append(str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc_id}#full_text_ref")))
 
     # EXTRA SECTIONS: facts, issues, etc. (normalized + chunked)
+    # Only store key sections, not all content
     if extra_sections:
+        key_sections = ["facts", "issues", "held", "disposition"]  # Only important sections
         for name, content in extra_sections.items():
-            if not content:
+            if not content or name.lower() not in key_sections:
                 continue
             if name.lower() == "ruling":
                 # avoid duplicating ruling
@@ -381,10 +510,10 @@ def make_points(
             norm = normalize_text(content)
             if not norm:
                 continue
-            for idx, chunk in enumerate(chunkify(norm, CHUNK_CHARS, OVERLAP_CHARS), 1):
-                texts.append(chunk)
-                payloads.append({**meta, "section": name.lower(), "chunk_index": idx})
-                ids.append(str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc_id}#{name.lower()}-{idx:03d}")))
+            # Store key sections as single chunks (not split)
+            texts.append(norm)
+            payloads.append({**meta, "section": name.lower()})
+            ids.append(str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc_id}#{name.lower()}")))
 
     # Encode in one batch
     vectors = model.encode(

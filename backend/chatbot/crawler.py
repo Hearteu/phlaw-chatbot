@@ -41,8 +41,8 @@ from selectolax.parser import HTMLParser
 BASE_URL     = os.getenv("ELIBRARY_BASE", "https://elibrary.judiciary.gov.ph/")
 OUT_PATH     = os.getenv("CASES_JSONL", "backend/data/cases.jsonl.gz")
 UA           = os.getenv("CRAWLER_UA", "Mozilla/5.0 (compatible; PHLawBot/1.0)")
-YEAR_START   = int(os.getenv("YEAR_START", 2011))
-YEAR_END     = int(os.getenv("YEAR_END", 2012))
+YEAR_START   = int(os.getenv("YEAR_START", 2010))
+YEAR_END     = int(os.getenv("YEAR_END", 2025))
 CONCURRENCY  = int(os.getenv("CONCURRENCY", 12))  # Higher for HTTP-first approach
 SLOWDOWN_MS  = int(os.getenv("SLOWDOWN_MS", 250))
 TIMEOUT_S    = int(os.getenv("TIMEOUT_S", 45))
@@ -74,8 +74,8 @@ BODY_DATE_PATTERNS = [
     r"Promulgated\s*(?:on)?\s*(\w+\s+\d{1,2},\s+\d{4})",
     r"Decided\s*(?:on)?\s*:\s*(\w+\s+\d{1,2},\s+\d{4})",
     r"Decided\s*(?:on)?\s*(\w+\s+\d{1,2},\s+\d{4})",
-    # Avoid dates in WHEREFORE clauses that reference lower court decisions
-    r"(?<!WHEREFORE.*?promulgated\s+on\s+)(?<!affirms.*?promulgated\s+on\s+)(?<!decision\s+promulgated\s+on\s+)(\w+\s+\d{1,2},\s+\d{4})",
+    # Simple date pattern without lookbehind
+    r"(\w+\s+\d{1,2},\s+\d{4})",
 ]
 
 # -----------------------------
@@ -84,12 +84,120 @@ BODY_DATE_PATTERNS = [
 def sha256(s: str) -> str:
     return "sha256:" + hashlib.sha256(s.encode("utf-8", "ignore")).hexdigest()
 
+def clean_website_headers(text: str) -> str:
+    """Remove Supreme Court E-Library website headers and navigation"""
+    if not text:
+        return ""
+    
+    # Find the start of actual case content (look for G.R. pattern)
+    gr_match = re.search(r'\[.*?G\.R\.\s+No\.?\s*\d+.*?\]', text)
+    if gr_match:
+        # Start from the G.R. line
+        text = text[gr_match.start():]
+    
+    # Remove all website-related content more aggressively
+    website_patterns = [
+        r"Supreme Court E-Library.*?Information At Your Fingertips",
+        r"HOME\s*PHILIPPINE REPORTS E-BOOKS\s*REPUBLIC ACTS\s*CHIEF JUSTICES\s*NEWS & ADVISORIES\s*SITE MAP\s*ABOUT US",
+        r"The Supreme Court E-Library.*?Toggle posts",
+        r"CLICK THE IMAGE TO SEARCH.*?libraryservices\.sc@judiciary\.gov\.ph",
+        r"Foreign Supreme Courts.*?United States of America",
+        r"Volume in drive.*?bytes free",
+        r"Directory of.*?Volume Serial Number",
+        r"File\(s\)\s+\d+\s+bytes",
+        r"Dir\(s\)\s+\d+\s+bytes free",
+        r"Toggle posts\s*A\s*A\+\s*A\+\+",
+        r"CONTACT:\s*Supreme Court of the Philippines.*?libraryservices\.sc@judiciary\.gov\.ph",
+        r"\(632\)\s*\d{3}-\d{4}",
+        r"^A\s*A\+\s*A\+\+.*?View printer friendly version",
+        r"View printer friendly version.*?Phil\.",
+        r"^\d+\s+Phil\.\s+\d+",
+        r"Supreme Court E-Library\s*Information At Your Fingertips",
+        r"The E-Library Development Team",
+        r"Toggle posts",
+        r"CLICK THE IMAGE TO SEARCH",
+        r"CONTACT:",
+        r"Supreme Court of the Philippines",
+        r"Library Services,",
+        r"Padre Faura, Ermita, Manila, Philippines 1000",
+        # Additional aggressive patterns
+        r"Supreme Court E-Library",
+        r"Information At Your Fingertips",
+        r"The E-Library Development Team",
+        r"Toggle posts",
+        r"CLICK THE IMAGE TO SEARCH",
+        r"CONTACT:",
+        r"Supreme Court of the Philippines",
+        r"Library Services,",
+        r"Padre Faura, Ermita, Manila, Philippines 1000",
+        r"Foreign Supreme Courts",
+        r"Korea, South",
+        r"Malaysia",
+        r"Singapore",
+        r"United States of America",
+    ]
+    
+    for pattern in website_patterns:
+        text = re.sub(pattern, "", text, flags=re.IGNORECASE | re.DOTALL | re.MULTILINE)
+    
+    # Remove lines that are just navigation elements
+    lines = text.split('\n')
+    cleaned_lines = []
+    
+    for line in lines:
+        line = line.strip()
+        if line:  # Skip empty lines
+            # Skip if line contains website elements
+            if any(phrase in line.upper() for phrase in [
+                'SUPREME COURT E-LIBRARY',
+                'INFORMATION AT YOUR FINGERTIPS',
+                'THE E-LIBRARY DEVELOPMENT TEAM',
+                'TOGGLE POSTS',
+                'CLICK THE IMAGE TO SEARCH',
+                'CONTACT:',
+                'SUPREME COURT OF THE PHILIPPINES',
+                'LIBRARY SERVICES,',
+                'PADRE FAURA, ERMITA, MANILA, PHILIPPINES 1000',
+                'FOREIGN SUPREME COURTS',
+                'KOREA, SOUTH',
+                'MALAYSIA',
+                'SINGAPORE',
+                'UNITED STATES OF AMERICA',
+                'HOME',
+                'ABOUT US',
+                'SITE MAP',
+                'NEWS & ADVISORIES',
+                'A+',
+                'A++',
+            ]):
+                continue
+            
+            # Skip lines that are just caps or navigation
+            if (re.match(r'^[A-Z\s]+$', line) or 
+                re.match(r'^[A-Z]\+$', line) or 
+                re.match(r'^\d+\s+Phil\.\s+\d+$', line) or
+                line in ['A', 'A+', 'A++', 'HOME', 'ABOUT US', 'SITE MAP', 'NEWS & ADVISORIES']):
+                continue
+            
+            cleaned_lines.append(line)
+    
+    return '\n'.join(cleaned_lines).strip()
+
 def normalize_text(s: str) -> str:
     if not s:
         return ""
+    
+    # Clean website headers first
+    s = clean_website_headers(s)
+    
+    # Normalize whitespace
+    s = re.sub(r"\r\n", "\n", s)
+    s = re.sub(r"\r", "\n", s)
     s = re.sub(r"[ \t]{2,}", " ", s)
     s = re.sub(r"\n{3,}", "\n\n", s)
     s = re.sub(r"\s+\n", "\n", s)
+    s = re.sub(r"^\s+", "", s, flags=re.MULTILINE)
+    s = re.sub(r"\s+$", "", s, flags=re.MULTILINE)
     return s.strip()
 
 # -----------------------------
@@ -316,19 +424,148 @@ def extract_ponente(text: str) -> str | None:
             return m.group(1)
     return None
 
+def extract_facts_section(text: str) -> str:
+    """Extract facts section with improved detection"""
+    if not text:
+        return ""
+    
+    # Enhanced facts patterns
+    facts_patterns = [
+        re.compile(r"^(?:FACTS|FACTUAL\s+ANTECEDENTS|ANTECEDENT\s+FACTS|STATEMENT\s+OF\s+FACTS|THE\s+FACTS)\s*[:\-–]?\s*$", re.IGNORECASE | re.MULTILINE),
+        re.compile(r"^(?:FACTS\s+OF\s+THE\s+CASE|BACKGROUND\s+FACTS|CASE\s+FACTS)\s*[:\-–]?\s*$", re.IGNORECASE | re.MULTILINE),
+        re.compile(r"^(?:CASE\s+BACKGROUND|FACTUAL\s+BACKGROUND|NARRATIVE\s+OF\s+FACTS)\s*[:\-–]?\s*$", re.IGNORECASE | re.MULTILINE),
+    ]
+    
+    for pattern in facts_patterns:
+        match = pattern.search(text)
+        if match:
+            start = match.end()
+            # Find the end of facts section
+            end_patterns = [
+                re.compile(r"^(?:ISSUES?|QUESTIONS?|RULING|DECISION|WHEREFORE)", re.IGNORECASE | re.MULTILINE),
+                re.compile(r"^(?:ARGUMENTS?|DISCUSSION|ANALYSIS)", re.IGNORECASE | re.MULTILINE),
+            ]
+            
+            end_pos = len(text)
+            for end_pattern in end_patterns:
+                end_match = end_pattern.search(text[start:])
+                if end_match:
+                    end_pos = min(end_pos, start + end_match.start())
+            
+            facts_text = text[start:end_pos].strip()
+            if len(facts_text) > 50:  # Ensure meaningful content
+                return facts_text
+    
+    return ""
+
+def extract_issues_section(text: str) -> str:
+    """Extract issues section with improved detection"""
+    if not text:
+        return ""
+    
+    # Enhanced issues patterns
+    issues_patterns = [
+        re.compile(r"^(?:ISSUES?|QUESTIONS?\s+PRESENTED|LEGAL\s+ISSUES?|ISSUES?\s+FOR\s+RESOLUTION)\s*[:\-–]?\s*$", re.IGNORECASE | re.MULTILINE),
+        re.compile(r"^(?:[IVX]+\.)?\s*WHETHER\b", re.IGNORECASE | re.MULTILINE),
+        re.compile(r"^(?:THE\s+ISSUES?|PRINCIPAL\s+ISSUES?|MAIN\s+ISSUES?)\s*[:\-–]?\s*$", re.IGNORECASE | re.MULTILINE),
+    ]
+    
+    for pattern in issues_patterns:
+        match = pattern.search(text)
+        if match:
+            start = match.end()
+            # Find the end of issues section
+            end_patterns = [
+                re.compile(r"^(?:FACTS?|RULING|DECISION|WHEREFORE|ARGUMENTS?)", re.IGNORECASE | re.MULTILINE),
+                re.compile(r"^(?:DISCUSSION|ANALYSIS|REASONING)", re.IGNORECASE | re.MULTILINE),
+            ]
+            
+            end_pos = len(text)
+            for end_pattern in end_patterns:
+                end_match = end_pattern.search(text[start:])
+                if end_match:
+                    end_pos = min(end_pos, start + end_match.start())
+            
+            issues_text = text[start:end_pos].strip()
+            if len(issues_text) > 30:  # Ensure meaningful content
+                return issues_text
+    
+    return ""
+
+def extract_arguments_section(text: str) -> str:
+    """Extract arguments/discussion section with improved detection"""
+    if not text:
+        return ""
+    
+    # Enhanced arguments patterns
+    arguments_patterns = [
+        re.compile(r"^(?:ARGUMENTS?|DISCUSSION|REASONING|ANALYSIS|LEGAL\s+REASONING)\s*[:\-–]?\s*$", re.IGNORECASE | re.MULTILINE),
+        re.compile(r"^(?:COURT\s+ANALYSIS|LEGAL\s+ANALYSIS|DISCUSSION\s+AND\s+ANALYSIS)\s*[:\-–]?\s*$", re.IGNORECASE | re.MULTILINE),
+    ]
+    
+    for pattern in arguments_patterns:
+        match = pattern.search(text)
+        if match:
+            start = match.end()
+            # Find the end of arguments section
+            end_patterns = [
+                re.compile(r"^(?:RULING|DECISION|WHEREFORE|DISPOSITION)", re.IGNORECASE | re.MULTILINE),
+                re.compile(r"^(?:FACTS?|ISSUES?)", re.IGNORECASE | re.MULTILINE),
+            ]
+            
+            end_pos = len(text)
+            for end_pattern in end_patterns:
+                end_match = end_pattern.search(text[start:])
+                if end_match:
+                    end_pos = min(end_pos, start + end_match.start())
+            
+            arguments_text = text[start:end_pos].strip()
+            if len(arguments_text) > 100:  # Ensure meaningful content
+                return arguments_text
+    
+    return ""
+
 def split_sections(text: str):
-    m = RULING_REGEX.search(text or "")
-    if not m:
-        return {
-            "header": (text[:1200] or "").strip(),
-            "body": (text or "").strip(),
-            "ruling": "",
-        }
-    rs, re_ = m.span()
-    header = (text[:1200] or "").strip()
-    ruling = text[rs:re_].strip()
-    body = (text[:max(0, rs)] + "\n\n" + text[re_:]).strip()
-    return {"header": header, "body": body, "ruling": ruling}
+    """Enhanced section splitting with better extraction"""
+    if not text:
+        return {"header": "", "body": "", "ruling": "", "facts": "", "issues": "", "arguments": ""}
+    
+    # Extract specific sections
+    facts = extract_facts_section(text)
+    issues = extract_issues_section(text)
+    arguments = extract_arguments_section(text)
+    
+    # Extract ruling using existing logic
+    m = RULING_REGEX.search(text)
+    ruling = ""
+    if m:
+        ruling = text[m.start():m.end()].strip()
+    
+    # Extract header (first 1000 characters, cleaned)
+    header = text[:1000].strip() if text else ""
+    
+    # Body is the remaining content after removing extracted sections
+    body = text
+    if facts:
+        body = body.replace(facts, "")
+    if issues:
+        body = body.replace(issues, "")
+    if ruling:
+        body = body.replace(ruling, "")
+    if arguments:
+        body = body.replace(arguments, "")
+    
+    # Clean up body
+    body = re.sub(r"\n\s*\n\s*\n+", "\n\n", body).strip()
+    
+    return {
+        "header": header,
+        "body": body,
+        "ruling": ruling,
+        "facts": facts,
+        "issues": issues,
+        "arguments": arguments
+    }
 
 def load_existing_ids(path: str) -> set[str]:
     ids: set[str] = set()
@@ -355,13 +592,26 @@ def load_existing_ids(path: str) -> set[str]:
 # -----------------------------
 # Discovery (requests + BS4): months → case URLs (+ year/month hints)
 # -----------------------------
-def fetch_page(url: str, timeout=15):
-    try:
-        r = requests.get(url, headers=HEADERS, timeout=timeout)
-        r.raise_for_status()
-        return BeautifulSoup(r.content, "html.parser")
-    except Exception:
-        return None
+def fetch_page(url: str, timeout=15, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=timeout)
+            if r.status_code == 503:
+                print(f"⚠️ Server unavailable (503), retrying in {2**attempt} seconds...")
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(2**attempt)
+                    continue
+            r.raise_for_status()
+            return BeautifulSoup(r.content, "html.parser")
+        except Exception as e:
+            if attempt < max_retries - 1:
+                print(f"⚠️ Request failed (attempt {attempt + 1}), retrying...")
+                import time
+                time.sleep(2**attempt)
+            else:
+                print(f"❌ All retry attempts failed: {e}")
+    return None
 
 def extract_month_links():
     soup = fetch_page(BASE_URL)
@@ -611,6 +861,9 @@ def parse_case(text_base: str, url: str, year_hint: int | None = None, month_hin
     date_iso = extract_promulgation_date(text)
 
     secs = split_sections(text)
+    # Ensure body is not empty; always preserve full body content
+    if not secs.get("body"):
+        secs["body"] = (text or "").strip()
 
     # Division / En Banc and Ponente
     division, en_banc = extract_division_enbanc(text)
@@ -619,11 +872,24 @@ def parse_case(text_base: str, url: str, year_hint: int | None = None, month_hin
     # Classify case type
     classification = classify_case_type(case_title or title_guess or "", gr_primary)
 
+    # Robust title fallback if still missing
+    fallback_title = case_title or title_guess or (url.rsplit('/', 1)[-1] if url else None) or page_title
+
+    # Add quality metrics
+    quality_metrics = {
+        "has_facts": bool(secs.get("facts")),
+        "has_issues": bool(secs.get("issues")),
+        "has_ruling": bool(secs.get("ruling")),
+        "has_arguments": bool(secs.get("arguments")),
+        "text_length": len(text),
+        "sections_count": len([k for k, v in secs.items() if v and k != "header"]),
+    }
+
     record = {
         "id": sha256(url),
         "gr_number": gr_primary,
         "gr_numbers": gr_all or None,
-        "title": case_title or title_guess,
+        "title": fallback_title,
         "case_title": case_title,
         "page_title": page_title,              # debug/optional
         "promulgation_date": date_iso,         # may be None
@@ -631,19 +897,24 @@ def parse_case(text_base: str, url: str, year_hint: int | None = None, month_hin
         "promulgation_month": month_hint,      # optional
         "court": "Supreme Court",
         "source_url": url,
-        "clean_version": "v1.0",
+        "clean_version": "v2.0",  # Updated version for improved data
         "checksum": sha256(text),
         "crawl_ts": datetime.utcnow().isoformat() + "Z",
         "ponente": ponente,
         "division": division,
         "en_banc": en_banc,
         "sections": secs,
+        # Always include cleaned full body text for hybrid retrieval
         "clean_text": text,
+        # Helpful flags
+        "has_gr_number": bool(gr_primary),
         # Case classification
         "case_type": classification["case_type"],
         "case_subtype": classification["case_subtype"],
         "is_administrative": classification["is_administrative"],
         "is_regular_case": classification["is_regular_case"],
+        # Quality metrics
+        "quality_metrics": quality_metrics,
     }
     return record
 

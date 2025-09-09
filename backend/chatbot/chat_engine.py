@@ -210,20 +210,56 @@ def _build_context(docs: List[Dict]) -> str:
     If a 'ruling' ref is present, ensure the snippet contains the dispositive text verbatim.
     """
     lines = []
-    for i, d in enumerate(docs, 1):
+    item_index = 0
+    for d in docs:
+        # Derive robust title
         title = _title(d)
+        if not title or title.strip().lower() in {"n/a", "untitled", "untitled case"}:
+            meta = d.get("metadata", {}) or {}
+            title = (
+                meta.get("title")
+                or meta.get("case_title")
+                or d.get("title")
+                or d.get("case_title")
+                or d.get("gr_number")
+                or meta.get("gr_number")
+                or (d.get("url") or "").rsplit("/", 1)[-1]
+            )
         url   = _source(d)
         sec   = d.get("section", "body")
         text  = d.get("content") or d.get("text") or ""
-        snippet = _normalize_ws(text)
+        
+        # Clean up the text content using the same patterns as retriever
+        if text:
+            # Remove metadata noise patterns
+            text = re.sub(r'\s*—\s*(?:body|header|facts|issues|ruling|arguments|keywords)\s*—\s*[^—\n]*', '', text)
+            # Remove specific "— N/A" patterns
+            text = re.sub(r'\s*—\s*N/A\s*', '', text)
+            # Remove any remaining "— [anything]" patterns at end of lines
+            text = re.sub(r'\s*—\s*[^—\n]*$', '', text, flags=re.MULTILINE)
+            # Remove other common noise patterns
+            text = re.sub(r'\s*—\s*[^—]*\s*—\s*[^—]*\s*$', '', text)
+            # Remove "Supreme Court E-Library" boilerplate
+            text = re.sub(r'Supreme Court E-Library[^—]*', '', text, flags=re.IGNORECASE)
+            # Clean up multiple spaces and newlines
+            text = re.sub(r'\s+', ' ', text).strip()
+        
+        snippet = _normalize_ws(text) if text else ""
 
         # Force dispositive extraction for ruling sections, so generator can quote verbatim safely
-        if sec == "ruling":
+        if sec == "ruling" and text:
             extracted = _extract_dispositive(text)
             if extracted:
                 snippet = extracted
 
-        header = f"[{i}] {title} — {sec} — {url}"
+        # Skip entries that still have no usable title or content
+        if not (title and title.strip()) or not (snippet and snippet.strip()):
+            continue
+        
+        # Only show section if it's meaningful (not just "body")
+        section_display = f" — {sec}" if sec and sec != "body" else ""
+        item_index += 1
+        header = f"[{item_index}] {title}{section_display} — {url}"
         lines.append(f"{header}\n{snippet}")
     return "\n\n".join(lines)
 
@@ -341,8 +377,13 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
     # Prioritize jurisprudence queries over rule-based responses
     if use_juris:
         if retriever is None:
-            from .retriever import LegalRetriever
-            retriever = LegalRetriever()
+            try:
+                from .retriever import LegalRetriever
+                retriever = LegalRetriever()
+                print("✅ Using Enhanced Legal Retriever")
+            except ImportError as e:
+                print(f"❌ Failed to load Legal Retriever: {e}")
+                retriever = None
         
         try:
             docs = retriever.retrieve(query, k=8, is_case_digest=wants_digest)
@@ -440,9 +481,19 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
             "- [Case v. Case], G.R. No. _____, [Date] — [one-line doctrinal takeaway].\n\n"
             "Legal Terms Breakdown (only if asked)\n"
             "- [Term]: [plain definition] — [how it is applied here], [rule/source if in text].\n\n"
-            "IMPORTANT: Never invent facts. If something isn't in the sources, write: 'Not stated in sources.' "
-            "Frame each issue using the 'Whether or not …' convention. Base issues ONLY on the retrieved text. "
-            "Include case header inline at the very top of Facts or Issue if present in sources: Case name; G.R. No.; Date; Ponente; (Division/En Banc if present)."
+            "IMPORTANT RULES:\n"
+            "1. Never invent facts. If something isn't in the sources, write: 'Not stated in sources.'\n"
+            "2. Frame each issue using the 'Whether or not …' convention. Base issues ONLY on the retrieved text.\n"
+            "3. Include case header inline at the very top of Facts or Issue if present in sources: Case name; G.R. No.; Date; Ponente; (Division/En Banc if present).\n"
+            "4. CRITICAL: Do NOT include any metadata noise such as:\n"
+            "   - '— body — N/A'\n"
+            "   - '— N/A'\n"
+            "   - '— header —'\n"
+            "   - 'Supreme Court E-Library'\n"
+            "   - Any patterns with '—' symbols\n"
+            "5. Focus ONLY on actual legal content from the sources.\n"
+            "6. If you see noise patterns in the source text, ignore them completely.\n"
+            "7. Provide a proper structured digest, not a list of case titles."
         )
     elif wants_ruling and not (wants_facts or wants_issues or wants_arguments or wants_keywords):
         answer_template = (

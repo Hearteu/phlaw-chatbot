@@ -1,0 +1,48 @@
+{
+  "case_1": {
+    "case_id": "case_1",
+    "title": "People v. Smith",
+    "gr_number": "G.R. No. 123456",
+    "year": 2020,
+    "legal_concepts": [
+      "constitution",
+      "due process",
+      "murder",
+      "constitutional"
+    ],
+    "legal_citations": [],
+    "case_references": [],
+    "legal_area": "constitutional",
+    "court_division": "First Division",
+    "ponente": "Justice Reyes"
+  },
+  "case_2": {
+    "case_id": "case_2",
+    "title": "People v. Jones",
+    "gr_number": "G.R. No. 123457",
+    "year": 2020,
+    "legal_concepts": [
+      "murder"
+    ],
+    "legal_citations": [],
+    "case_references": [],
+    "legal_area": "criminal",
+    "court_division": "First Division",
+    "ponente": "Justice Reyes"
+  },
+  "case_3": {
+    "case_id": "case_3",
+    "title": "Doe v. Municipality",
+    "gr_number": "G.R. No. 123458",
+    "year": 2021,
+    "legal_concepts": [
+      "land reform",
+      "eminent domain"
+    ],
+    "legal_citations": [],
+    "case_references": [],
+    "legal_area": "special",
+    "court_division": "Second Division",
+    "ponente": "Justice Santos"
+  }
+}
