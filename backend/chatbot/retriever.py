@@ -288,8 +288,8 @@ class LegalRetriever:
         entities = query_analysis.entities
         print(f"🔍 Extracted entities: {sum(len(v) for v in entities.values())} total")
         
-        # Step 3: Use base retriever's hybrid method
-        all_candidates = super().retrieve(query, k=k*2, is_case_digest=is_case_digest, use_hybrid=True)
+        # Step 3: Perform vector search
+        all_candidates = self._perform_vector_search(query, k=k*2, is_case_digest=is_case_digest)
         print(f"📋 Retrieved {len(all_candidates)} candidates from base retriever")
         
         # Step 4: Advanced reranking if available
@@ -309,6 +309,31 @@ class LegalRetriever:
         print(f"✅ Hybrid enhanced retrieval: {len(final_results)} final results")
         
         return final_results
+    
+    def _perform_vector_search(self, query: str, k: int, is_case_digest: bool) -> List[Dict[str, Any]]:
+        """Perform vector search using Qdrant"""
+        try:
+            # Encode query to vector
+            query_vector = self.model.encode([query], convert_to_numpy=True, normalize_embeddings=True)[0]
+            
+            # Search Qdrant
+            search_results = self.qdrant.search(
+                collection_name=self.collection,
+                query_vector=query_vector.tolist(),
+                limit=k,
+                with_payload=True
+            )
+            
+            # Convert results to document format
+            results = []
+            for hit in search_results:
+                doc = self._convert_hit_to_doc(hit, 'vector_search')
+                results.append(doc)
+            
+            return results
+        except Exception as e:
+            print(f"Error in vector search: {e}")
+            return []
     
     def _apply_similarity_recommendations(self, query: str, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Apply case similarity recommendations to enhance results"""
@@ -534,11 +559,23 @@ class LegalRetriever:
     def _semantic_search(self, query: str, k: int, is_case_digest: bool) -> List[Dict[str, Any]]:
         """Perform semantic vector search"""
         try:
-            # Use the parent class semantic search
-            results = super().retrieve(query, k, is_case_digest)
-            # Add match type to results
-            for result in results:
-                result['match_type'] = 'semantic_search'
+            # Encode query to vector
+            query_vector = self.model.encode([query], convert_to_numpy=True, normalize_embeddings=True)[0]
+            
+            # Search Qdrant
+            search_results = self.qdrant.search(
+                collection_name=self.collection,
+                query_vector=query_vector.tolist(),
+                limit=k,
+                with_payload=True
+            )
+            
+            # Convert results to document format
+            results = []
+            for hit in search_results:
+                doc = self._convert_hit_to_doc(hit, 'semantic_search')
+                results.append(doc)
+            
             return results
         except Exception as e:
             print(f"Error in semantic search: {e}")

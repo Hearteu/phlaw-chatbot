@@ -216,6 +216,10 @@ ADMIN_COMPLAINT_RE = re.compile(r"^(.+?),\s*COMPLAINANT,\s*VS\.?\s*(.+?),\s*RESP
 
 # Enhanced RE: prefix patterns for various administrative case formats
 RE_PREFIX_PATTERNS = [
+    # RE: [COMPLAINANT] VS. [RESPONDENT] (most common format)
+    re.compile(r"^RE:\s*(.+?)\s+VS\.?\s+(.+?)(?:\s+RESOLUTION|\s+DECISION|\s+ORDER)?$", re.IGNORECASE),
+    # RE: [COMPLAINANT], COMPLAINANT, VS. [RESPONDENT], RESPONDENT
+    re.compile(r"^RE:\s*(.+?),\s*COMPLAINANT,\s*VS\.?\s*(.+?),\s*RESPONDENT", re.IGNORECASE),
     # RE: VERIFIED COMPLAINT OF [COMPLAINANT] AGAINST [RESPONDENTS]
     re.compile(r"^RE:\s*VERIFIED\s+COMPLAINT\s+OF\s+(.+?)\s+AGAINST\s+(.+?)$", re.IGNORECASE),
     # RE: COMPLAINT FILED BY [COMPLAINANT] AGAINST [RESPONDENT]
@@ -240,7 +244,11 @@ SPECIAL_ADMIN_PATTERNS = [
 BODY_TEXT_INDICATORS = [
     "this is an", "this case is", "the case at bar", "the instant case", 
     "the present case", "this petition", "this appeal", "the foregoing",
-    "of the court of appeals", "dated", "resolution", "decision"
+    "of the court of appeals", "dated", "resolution", "decision",
+    "against respondent", "for grave misconduct", "dishonesty and breach",
+    "records officer", "office of administrative services", "court administrator",
+    "this is a", "the instant", "the foregoing", "complainant claims",
+    "respondent served", "while respondent", "complainant states"
 ]
 GR_BLOCK_RE = re.compile(r"G\.R\.\s+No(?:s)?\.?\s*([0-9][0-9\-*,\s]+)", re.IGNORECASE)
 
@@ -272,10 +280,13 @@ def _extract_admin_title(line: str) -> str | None:
                 # Pattern with complainant and respondent
                 complainant = match.group(1).strip()
                 respondent = match.group(2).strip()
+                # Clean up the extracted parts
+                complainant = _clean_noise(complainant)
+                respondent = _clean_noise(respondent)
                 return f"{complainant}, COMPLAINANT, VS. {respondent}, RESPONDENT"
             elif len(match.groups()) == 1:
                 # Pattern with single group (like SUBPOENA or ANONYMOUS LETTER)
-                return match.group(1).strip()
+                return _clean_noise(match.group(1).strip())
     
     # Try special administrative patterns (IN RE: format)
     for pattern in SPECIAL_ADMIN_PATTERNS:
@@ -294,7 +305,29 @@ def _extract_admin_title(line: str) -> str | None:
                         person_parts = person_part.split(',')
                         if person_parts:
                             return person_parts[0].strip()
-                return case_description
+                return _clean_noise(case_description)
+    
+    return None
+
+def _extract_am_case_title(text: str) -> str | None:
+    """Extract title specifically for A.M. cases with RE: format"""
+    # Look for A.M. NO. pattern followed by RE: pattern
+    am_pattern = re.compile(r"A\.M\.\s+NO\.\s+([0-9\-]+[A-Z]?)\s*-\s*RE:\s*(.+?)(?:\s+RESOLUTION|\s+DECISION|\s+ORDER)?$", re.IGNORECASE | re.MULTILINE)
+    match = am_pattern.search(text)
+    if match:
+        am_number = match.group(1).strip()
+        case_title = match.group(2).strip()
+        return f"A.M. NO. {am_number} - {case_title}"
+    
+    # Look for just RE: pattern in the first few lines
+    lines = text.split('\n')[:10]  # Check first 10 lines
+    for line in lines:
+        line = line.strip()
+        if line.startswith('RE:') and 'VS.' in line.upper():
+            # Extract the full RE: title
+            re_match = re.match(r'^RE:\s*(.+?)(?:\s+RESOLUTION|\s+DECISION|\s+ORDER)?$', line, re.IGNORECASE)
+            if re_match:
+                return f"RE: {re_match.group(1).strip()}"
     
     return None
 
@@ -303,7 +336,12 @@ def derive_case_title_from_text(text: str) -> str | None:
         return None
     head = text[:1500]
     
-    # Priority 1: Standard VS. format
+    # Priority 1: A.M. cases with RE: format (most specific)
+    am_title = _extract_am_case_title(text)
+    if am_title and 10 <= len(am_title) <= 500:
+        return am_title
+    
+    # Priority 2: Standard VS. format
     for raw in head.splitlines():
         line = raw.strip()
         if not line:
@@ -313,7 +351,7 @@ def derive_case_title_from_text(text: str) -> str | None:
             if 10 <= len(cleaned) <= 400:
                 return cleaned
     
-    # Priority 2: Administrative case formats
+    # Priority 3: Administrative case formats
     for raw in head.splitlines():
         line = raw.strip()
         if not line:
@@ -322,7 +360,7 @@ def derive_case_title_from_text(text: str) -> str | None:
         if admin_title and 10 <= len(admin_title) <= 400:
             return admin_title
     
-    # Priority 3: Fallback candidates (avoid body text)
+    # Priority 4: Fallback candidates (avoid body text)
     candidates = []
     for raw in head.splitlines():
         line = raw.strip()
@@ -872,8 +910,29 @@ def parse_case(text_base: str, url: str, year_hint: int | None = None, month_hin
     # Classify case type
     classification = classify_case_type(case_title or title_guess or "", gr_primary)
 
-    # Robust title fallback if still missing
-    fallback_title = case_title or title_guess or (url.rsplit('/', 1)[-1] if url else None) or page_title
+    # Robust title fallback if still missing (avoid body text)
+    def is_valid_title_candidate(title: str) -> bool:
+        if not title or len(title) < 10:
+            return False
+        title_lower = title.lower()
+        # Check if it looks like body text
+        if any(indicator in title_lower for indicator in BODY_TEXT_INDICATORS):
+            return False
+        # Check if it's too long (likely body text)
+        if len(title) > 200:
+            return False
+        return True
+    
+    # Try fallback options in order of preference
+    fallback_title = case_title
+    if not fallback_title or not is_valid_title_candidate(fallback_title):
+        fallback_title = title_guess if is_valid_title_candidate(title_guess or "") else None
+    if not fallback_title:
+        fallback_title = page_title if is_valid_title_candidate(page_title or "") else None
+    if not fallback_title:
+        # Last resort: use URL fragment or generic title
+        url_fragment = url.rsplit('/', 1)[-1] if url else None
+        fallback_title = url_fragment if is_valid_title_candidate(url_fragment or "") else "Untitled Case"
 
     # Add quality metrics
     quality_metrics = {

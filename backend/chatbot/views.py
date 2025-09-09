@@ -1,7 +1,5 @@
 # chatbot/views.py
 import logging
-import threading
-from contextlib import contextmanager
 from functools import lru_cache
 
 from rest_framework import status
@@ -42,35 +40,6 @@ def clear_llm_cache():
     _LLM_LOADED = False
     logger.info("🧹 Cleared LLM cache.")
 
-@contextmanager
-def timeout_handler(seconds, query, history):
-    """Windows-compatible timeout handler using threading"""
-    result = [None]
-    exception = [None]
-    
-    def target():
-        try:
-            answer = chat_with_law_bot(query, history=history)
-            result[0] = answer
-        except Exception as e:
-            exception[0] = e
-    
-    # Create and start thread
-    thread = threading.Thread(target=target)
-    thread.daemon = True
-    thread.start()
-    
-    # Wait for completion or timeout
-    thread.join(seconds)
-    
-    if thread.is_alive():
-        # Thread is still running - timeout occurred
-        raise TimeoutError(f"Operation timed out after {seconds} seconds")
-    
-    if exception[0]:
-        raise exception[0]
-    
-    yield result[0]
 
 class ChatView(APIView):
     # Disable auth/CSRF for simple local testing. Remove these in prod.
@@ -96,24 +65,13 @@ class ChatView(APIView):
             logger.warning(f"LLM pre-loading failed: {e}")
         
         try:
-            # Add timeout protection (60 seconds max)
-            try:
-                with timeout_handler(60, query, history) as answer:
-                    # Ensure string response
-                    if not isinstance(answer, str):
-                        answer = str(answer)
-                    return Response({"response": answer}, status=status.HTTP_200_OK)
-            except TimeoutError:
-                logger.warning("Chat request timed out after 60 seconds")
-                return Response({
-                    "response": "I apologize, but your request is taking longer than expected. Please try a simpler question or try again."
-                }, status=status.HTTP_200_OK)
-            except Exception as e:
-                logger.exception("chat failed: %s", e)
-                # Return a fallback response instead of crashing
-                return Response({
-                    "response": "I apologize, but I'm experiencing technical difficulties. Please try a simpler question or try again."
-                }, status=status.HTTP_200_OK)
+            # Call chat_with_law_bot directly without timeout
+            answer = chat_with_law_bot(query, history=history)
+            
+            # Ensure string response
+            if not isinstance(answer, str):
+                answer = str(answer)
+            return Response({"response": answer}, status=status.HTTP_200_OK)
         except Exception as e:
             logger.exception("chat failed: %s", e)
             # Match your existing contract: generic 500 with error field

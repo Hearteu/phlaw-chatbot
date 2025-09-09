@@ -2,6 +2,7 @@
 import re
 from typing import Dict, List, Tuple
 
+from .intent_processor import IntentAnalysis, intent_processor
 from .rule_based import RuleBasedResponder
 
 rb = RuleBasedResponder(bot_name="PHLaw-Chatbot")
@@ -367,6 +368,11 @@ def _format_history(history: List[Dict]) -> str:
 def chat_with_law_bot(query: str, history: List[Dict] = None):
     global retriever
     
+    # LLM-based intent analysis
+    intent_analysis = intent_processor.analyze_intent(query, history)
+    print(f"🧠 Intent: {intent_analysis.intent.value} | Complexity: {intent_analysis.complexity.value} | Confidence: {intent_analysis.confidence:.2f}")
+    print(f"🎯 Routing: {intent_analysis.routing_decision}")
+    
     # Enhanced jurisprudence detection for Law LLM optimization
     use_juris = _should_query_jurisprudence(query, history)
     print(f"🔍 Query: '{query}' | Jurisprudence: {use_juris}")
@@ -374,8 +380,12 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
     # Derive intent flags early (used for retrieval and formatting)
     wants_ruling, wants_facts, wants_issues, wants_arguments, wants_keywords, wants_digest = _intent(query)
 
-    # Prioritize jurisprudence queries over rule-based responses
-    if use_juris:
+    # Use intent-based routing with fallback to rule-based
+    if intent_analysis.routing_decision == "rule_based":
+        # Handle legal term definitions and simple queries
+        print("📚 Routing to rule-based responder")
+        return _handle_rule_based_query(query, history, intent_analysis)
+    elif intent_analysis.routing_decision == "jurisprudence" or use_juris:
         if retriever is None:
             try:
                 from .retriever import LegalRetriever
@@ -386,7 +396,26 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
                 retriever = None
         
         try:
-            docs = retriever.retrieve(query, k=8, is_case_digest=wants_digest)
+            # Use reformulated queries if available, otherwise use original
+            search_queries = intent_analysis.reformulated_queries if intent_analysis.reformulated_queries else [query]
+            docs = []
+            
+            # Try each reformulated query
+            for search_query in search_queries[:2]:  # Limit to first 2 queries
+                search_docs = retriever.retrieve(search_query, k=8, is_case_digest=wants_digest)
+                docs.extend(search_docs)
+                if len(docs) >= 8:  # If we have enough results, break
+                    break
+            
+            # Remove duplicates based on source_url
+            seen_urls = set()
+            unique_docs = []
+            for doc in docs:
+                url = doc.get('source_url', '')
+                if url not in seen_urls:
+                    seen_urls.add(url)
+                    unique_docs.append(doc)
+            docs = unique_docs[:8]  # Limit to 8 results
             if docs and len(docs) > 0:
                 print(f"🔍 Found {len(docs)} jurisprudence documents for query: '{query}'")
                 # We have jurisprudence results, proceed with enhanced processing
@@ -603,6 +632,17 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
         raw = generate_response(prompt)
     return _post_validate(raw, wants_facts, wants_ruling, wants_arguments, wants_keywords, wants_digest)
 
+
+
+def _handle_rule_based_query(query: str, history: List[Dict], intent_analysis: IntentAnalysis) -> str:
+    """Handle queries that should use rule-based responder"""
+    # Try rule-based responder first
+    msg = rb.answer(query)
+    if msg is not None:
+        return msg
+    
+    # Fallback to general response
+    return _chat_without_retrieval(query, history)
 
 def _chat_without_retrieval(query: str, history: List[Dict]) -> str:
     from .generator import generate_response, generate_response_from_messages

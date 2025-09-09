@@ -92,7 +92,7 @@ def _call_rev21_prompt(prompt: str) -> Optional[str]:
     }
     payload = {
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 1200,
+        "max_tokens": 2000,
         "temperature": 0.4,
         "top_p": 0.9,
     }
@@ -125,7 +125,7 @@ def _call_rev21_messages(messages: List[Dict[str, str]]) -> Optional[str]:
     }
     payload = {
         "messages": messages,
-        "max_tokens": 1200,
+        "max_tokens": 2000,
         "temperature": 0.4,
         "top_p": 0.9,
     }
@@ -178,7 +178,7 @@ def generate_response(prompt: str) -> str:
             # Use more conservative generation parameters to avoid CUDA tensor issues
             response = llm(
                 prompt,
-                max_tokens=256,  # Further reduced to avoid CUDA tensor issues
+                max_tokens=1024,  # Increased for better responses
                 temperature=0.3,
                 top_p=0.85,
                 repeat_penalty=1.1,
@@ -236,7 +236,7 @@ def generate_response_from_messages(messages: List[Dict[str, str]]) -> str:
         # Use more conservative generation parameters to avoid CUDA tensor issues
         response = llm(
             prompt,
-            max_tokens=256,  # Further reduced to avoid CUDA tensor issues
+            max_tokens=1024,  # Increased for better responses
             temperature=0.3,
             top_p=0.85,
             repeat_penalty=1.1,
@@ -376,7 +376,7 @@ G. STYLE & SAFETY
         llm = _ensure_llm()
         response = llm(
             enhanced_prompt,
-            max_tokens=1400,
+            max_tokens=2000,
             temperature=0.3,
             top_p=0.85,
             repeat_penalty=1.1,
