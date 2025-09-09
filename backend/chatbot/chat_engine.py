@@ -274,14 +274,19 @@ def _should_query_jurisprudence(query: str, history: List[Dict] = None) -> bool:
     if not q:
         return False
     
+    # Check for rule-based patterns first (glossary definitions)
+    from .rule_based import DEFINE_RE, ELEMENTS_RE
+    if DEFINE_RE.search(q) or ELEMENTS_RE.search(q):
+        return False  # These should go to rule-based, not jurisprudence
+    
     # Enhanced jurisprudence detection for Law LLM optimization
     
-    # 1. Direct legal terms
+    # 1. Direct legal terms (but exclude glossary terms)
     for t in KEY_TERMS_NEED_JURIS:
         if t in q:
             return True
     
-    # 2. Question patterns with legal context
+    # 2. Question patterns with legal context (but exclude definition queries)
     if re.search(r"\b(what|when|whether|who|how|where|which)\b", q):
         legal_context = any(term in q for term in ["case", "ruling", "decision", "court", "legal", "law", "supreme", "title", "parties"])
         if legal_context:
