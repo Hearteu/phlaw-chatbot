@@ -1,332 +1,337 @@
-"""
-Rule-based responder for general chat (small-talk, time/date, math, unit conversion,
-coin toss/dice, jokes, quick definitions) with a safe arithmetic evaluator.
-
-How to use (recommended wiring in chat_engine.py):
-    from .rule_based import RuleBasedResponder
-    rb = RuleBasedResponder(bot_name="PHLawBot")
-
-    def chat_with_law_bot(query: str):
-        # 1) Let the rule-based try first
-        msg = rb.answer(query)
-        if msg is not None:
-            return msg
-
-        # 2) Otherwise, fall back to your legal retriever/LLM pipeline
-        ...
-
-If you want it to ALWAYS reply (standalone), call answer_general(..., force=True).
-
-Notes:
-- Pure standard library (no extra deps).
-- Defaults to Asia/Manila time. Override with env APP_TIMEZONE or constructor.
-- Designed to be conservative: only intercepts clearly general intents. If unsure,
-  it returns None so your legal pipeline can handle the query.
-"""
+# backend/chatbot/rule_based.py
 from __future__ import annotations
-
-import ast
-import datetime as dt
-import math
-import os
-import random
-import re
+import os, re, json, difflib
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional
+from pathlib import Path
+from typing import Dict, List, Any, Optional, Tuple
 
-try:
-    from zoneinfo import ZoneInfo  # Python 3.9+
-except Exception:  # pragma: no cover
-    ZoneInfo = None  # type: ignore
+# -----------------------------------------------------------------------------
+# Case-patterns: if these match, we DEFER to retriever/LLM (return None)
+# -----------------------------------------------------------------------------
+GR_RE = re.compile(r"\bG\.\s*R\.\s*(?:No\.|Nos\.)?\s*\d{1,6}(?:-\d{1,6})?\b", re.I)
+CASE_NAME_RE = re.compile(r"\b([A-Z][A-Za-z'.()\- ]+)\s+v\.?s?\.?\s+([A-Z][A-Za-z'.()\- ]+)\b")
 
+# -----------------------------------------------------------------------------
+# Query-intent patterns we CAN answer deterministically (glossary fast path)
+# -----------------------------------------------------------------------------
+DEFINE_RE   = re.compile(r"^(what\s+is|define|meaning\s+of|ano\s+ang)\b", re.I)
+ELEMENTS_RE = re.compile(r"\b(elements|tests?)\s+of\s+(.+)", re.I)
+RULE_45_65_RE = re.compile(r"rule\s*45\s*(?:vs|versus|v\.?)\s*65", re.I)
 
-# -----------------------------
-# Utilities
-# -----------------------------
-_DEF_JOKES = [
-    "Why did the computer show up at work late? It had a hard drive.",
-    "I told my code a joke. It didn't get it — no sense of humor in the compiler.",
-    "Why do programmers prefer dark mode? Because light attracts bugs.",
-]
-
-_POSITIVE_ACK = [
-    "You're welcome!",
-    "Walang anuman!",
-    "Happy to help!",
-    "No worries!",
-]
-
-_CAPABILITIES = (
-    "I can chat, give the current time/date, do safe arithmetic (including sqrt, pow),\n"
-    "convert °C↔°F and km↔mi, flip a coin, roll dice, tell a joke, and give quick,\n"
-    "high-level definitions. For live data (news, stocks, weather), I defer to the main bot."
-)
-
-_ALLOWED_FUNCS = {
-    "sqrt": math.sqrt,
-    "pow": math.pow,
-    "log": math.log,  # natural log
-    "log10": math.log10,
-    "sin": math.sin,
-    "cos": math.cos,
-    "tan": math.tan,
+# -----------------------------------------------------------------------------
+# Normalization helpers
+# -----------------------------------------------------------------------------
+NORMALIZE_MAP = {
+    "versus": "v.", "vs.": "v.", "vs": "v.",
+    "people of the philippines": "people",
+    "sec.": "section", "§": "section",
+    "ra ": "republic act ", "r.a.": "republic act",
 }
-_ALLOWED_NAMES = {"pi": math.pi, "e": math.e}
+def _norm(s: str) -> str:
+    s = s or ""
+    s = s.strip().lower()
+    for a, b in NORMALIZE_MAP.items():
+        s = s.replace(a, b)
+    s = re.sub(r"\s+", " ", s)
+    return s
 
+# -----------------------------------------------------------------------------
+# Glossary index (supports multiple JSON sources; tolerant schema)
+#  - Accepts: {"entries":[...]} OR a plain list of entries
+#  - Each entry: {"term", "aliases"[], "definition", "elements"[], "anchors"[] ...}
+#  - Also tolerates a file with {"terms":[...]} (no definitions) -> ignored
+# -----------------------------------------------------------------------------
+class GlossaryIndex:
+    def __init__(self, entries: List[Dict[str, Any]]):
+        # Keep only entries with definitions
+        clean: List[Dict[str, Any]] = []
+        for e in entries:
+            term = (e.get("term") or "").strip()
+            defi = (e.get("definition") or "").strip()
+            if term and defi:
+                # normalize aliases to list[str]
+                aliases = e.get("aliases") or []
+                if isinstance(aliases, str):
+                    aliases = [aliases]
+                e["aliases"] = [a for a in (x.strip() for x in aliases) if a]
+                clean.append(e)
 
-class _SafeMath(ast.NodeVisitor):
-    """Very small, safe arithmetic evaluator supporting + - * / // % ** and sqrt, log, sin...
-    Example: "(2+3)*sqrt(16) - 5" -> 15.0
-    """
+        self.entries = clean
+        self.by_term: Dict[str, Dict[str, Any]] = {}
+        self.alias_to_term: Dict[str, str] = {}
 
-    def __init__(self, expr: str):
-        self.expr = expr
+        for e in self.entries:
+            canon = _norm(e["term"])
+            self.by_term[canon] = e
+            for a in e.get("aliases", []):
+                self.alias_to_term[_norm(a)] = canon
 
-    def visit(self, node):  # type: ignore
-        if isinstance(node, ast.Expression):
-            return self.visit(node.body)
-        if isinstance(node, ast.Num):  # py<3.8
-            return node.n
-        if isinstance(node, ast.Constant):
-            if isinstance(node.value, (int, float)):
-                return node.value
-            raise ValueError("Only numeric constants allowed")
-        if isinstance(node, ast.BinOp):
-            left = self.visit(node.left)
-            right = self.visit(node.right)
-            if isinstance(node.op, ast.Add):
-                return left + right
-            if isinstance(node.op, ast.Sub):
-                return left - right
-            if isinstance(node.op, ast.Mult):
-                return left * right
-            if isinstance(node.op, ast.Div):
-                return left / right
-            if isinstance(node.op, ast.FloorDiv):
-                return left // right
-            if isinstance(node.op, ast.Mod):
-                return left % right
-            if isinstance(node.op, ast.Pow):
-                return left ** right
-            raise ValueError("Operator not allowed")
-        if isinstance(node, ast.UnaryOp):
-            val = self.visit(node.operand)
-            if isinstance(node.op, ast.UAdd):
-                return +val
-            if isinstance(node.op, ast.USub):
-                return -val
-            raise ValueError("Unary operator not allowed")
-        if isinstance(node, ast.Call):
-            if not isinstance(node.func, ast.Name):
-                raise ValueError("Only simple functions allowed")
-            func_name = node.func.id
-            if func_name not in _ALLOWED_FUNCS:
-                raise ValueError("Function not allowed")
-            args = [self.visit(a) for a in node.args]
-            return _ALLOWED_FUNCS[func_name](*args)
-        if isinstance(node, ast.Name):
-            if node.id in _ALLOWED_NAMES:
-                return _ALLOWED_NAMES[node.id]
-            raise ValueError("Unknown name")
-        raise ValueError("Disallowed expression")
+        # Build a name set (terms + aliases) for fuzzy search
+        self.name_set = set(self.by_term.keys()) | set(self.alias_to_term.keys())
+
+    @staticmethod
+    def _load_one(path: Path) -> List[Dict[str, Any]]:
+        if not path.exists():
+            return []
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+        if isinstance(data, dict):
+            if "entries" in data and isinstance(data["entries"], list):
+                return data["entries"]
+            # ignore {"terms": [...]} lists without definitions
+            return []
+        if isinstance(data, list):
+            return data
+        return []
 
     @classmethod
-    def eval(cls, expr: str) -> float:
-        tree = ast.parse(expr, mode="eval")
-        return float(cls(expr).visit(tree))
+    def from_files(cls, paths: List[Path]) -> "GlossaryIndex":
+        all_entries: List[Dict[str, Any]] = []
+        for p in paths:
+            all_entries.extend(cls._load_one(p))
+        # Minimal seed if nothing loaded (so app still boots)
+        if not all_entries:
+            all_entries = SEED_ENTRIES
+        return cls(all_entries)
 
+    # quick intent test
+    def is_definition_query(self, q: str) -> bool:
+        qn = _norm(q)
+        return bool(DEFINE_RE.search(qn) or ELEMENTS_RE.search(qn))
 
-# -----------------------------
-# Rule-based engine
-# -----------------------------
+    # main search: exact → substring → fuzzy (difflib)
+    def search(self, q: str, k: int = 5) -> List[Tuple[float, Dict[str, Any]]]:
+        qn = _norm(q)
+        results: List[Tuple[float, Dict[str, Any]]] = []
+
+        # 1) exact alias
+        if qn in self.alias_to_term:
+            e = self.by_term[self.alias_to_term[qn]]
+            return [(100.0, e)]
+
+        # 2) exact canonical
+        if qn in self.by_term:
+            return [(99.0, self.by_term[qn])]
+
+        # 3) substring match (aliases + terms)
+        cand_idx: Dict[str, Dict[str, Any]] = {}
+        for name in self.name_set:
+            if name in qn or qn in name:
+                canon = self.alias_to_term.get(name, name)
+                e = self.by_term.get(canon)
+                if e:
+                    cand_idx[canon] = e
+        for e in cand_idx.values():
+            # small boost for more bar-relevant terms, if present
+            score = 82.0 + (e.get("bar_importance", 3) - 3) * 2.0
+            results.append((score, e))
+
+        # 4) fuzzy (edit distance similarity)
+        names = list(self.name_set)
+        close = difflib.get_close_matches(qn, names, n=k*3, cutoff=0.72)
+        for name in close:
+            canon = self.alias_to_term.get(name, name)
+            e = self.by_term.get(canon)
+            if not e:
+                continue
+            ratio = difflib.SequenceMatcher(a=qn, b=name).ratio()
+            score = 70.0 + ratio * 20.0 + (e.get("bar_importance", 3) - 3) * 2.0
+            results.append((score, e))
+
+        # de-dup + rank
+        best: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+        for sc, e in results:
+            key = _norm(e["term"])
+            if key not in best or sc > best[key][0]:
+                best[key] = (sc, e)
+
+        ranked = sorted(best.values(), key=lambda x: x[0], reverse=True)[:k]
+        return ranked
+
+    def format_answer(self, entry: Dict[str, Any], *, want_elements: bool = False) -> str:
+        parts: List[str] = [f"{entry['term']}: {entry['definition']}"]
+        els = entry.get("elements") or []
+        if want_elements and els:
+            parts.append("Elements:\n" + "\n".join(f"- {x}" for x in els))
+        anchors = entry.get("anchors") or []
+        if anchors:
+            a = "; ".join(f"{x.get('type','')}: {x.get('id','')}" for x in anchors if x)
+            if a.strip():
+                parts.append(f"Anchors: {a}")
+        return "\n".join(parts)
+
+# -----------------------------------------------------------------------------
+# Optional seed (keeps bot usable if JSON files are missing)
+# -----------------------------------------------------------------------------
+SEED_ENTRIES: List[Dict[str, Any]] = [
+    {
+        "term": "Writ of Amparo",
+        "aliases": ["amparo"],
+        "definition": "Extraordinary remedy protecting the rights to life, liberty, and security against actual or threatened violations.",
+        "anchors": [{"type": "AM", "id": "A.M. No. 07-9-12-SC"}],
+        "bar_importance": 5,
+        "elements": []
+    },
+    {
+        "term": "Writ of Habeas Data",
+        "aliases": ["habeas data"],
+        "definition": "Remedy allowing access, correction, or destruction of personal data held by government or private entities to protect privacy in relation to life, liberty, or security.",
+        "anchors": [{"type": "AM", "id": "A.M. No. 08-1-16-SC"}],
+        "bar_importance": 5,
+        "elements": []
+    },
+    {
+        "term": "Writ of Kalikasan",
+        "aliases": ["kalikasan"],
+        "definition": "Special remedy addressing environmental damage of such magnitude as to prejudice life, health, or property of inhabitants in two or more cities or provinces.",
+        "anchors": [{"type": "AM", "id": "A.M. No. 09-6-8-SC"}],
+        "bar_importance": 5,
+        "elements": []
+    },
+    {
+        "term": "Rule 45",
+        "aliases": ["petition for review on certiorari"],
+        "definition": "Mode of appeal to the Supreme Court on questions of law.",
+        "anchors": [{"type": "Rule", "id": "Rule 45"}],
+        "bar_importance": 5,
+        "elements": []
+    },
+    {
+        "term": "Rule 65",
+        "aliases": ["certiorari", "prohibition", "mandamus"],
+        "definition": "Special civil actions to correct acts without or in excess of jurisdiction or with grave abuse of discretion; not a substitute for a lost appeal.",
+        "anchors": [{"type": "Rule", "id": "Rule 65"}],
+        "bar_importance": 5,
+        "elements": []
+    },
+    {
+        "term": "Chain of Custody (RA 9165)",
+        "aliases": ["chain of custody", "section 21 ra 9165", "sec 21 ra 9165"],
+        "definition": "Recorded movement and safekeeping of seized drugs from seizure to presentation in court (marking, inventory, photographing, witness presence, turnover).",
+        "anchors": [{"type": "Statute", "id": "Sec. 21, RA 9165"}],
+        "bar_importance": 5,
+        "elements": []
+    },
+    {
+        "term": "Forum shopping",
+        "aliases": [],
+        "definition": "Filing multiple actions involving the same parties and causes to secure a favorable judgment; prohibited and sanctionable.",
+        "anchors": [],
+        "bar_importance": 4,
+        "elements": []
+    },
+    {
+        "term": "Res judicata",
+        "aliases": [],
+        "definition": "A final judgment on the merits by a court of competent jurisdiction bars re-litigation of the same cause between the same parties.",
+        "anchors": [],
+        "bar_importance": 4,
+        "elements": []
+    },
+]
+
+# -----------------------------------------------------------------------------
+# Resolve glossary files (you can list multiple files, comma-separated)
+# Defaults try your merged + scribd JSON; falls back to seed if absent.
+# -----------------------------------------------------------------------------
+def _resolve_glossary_files() -> List[Path]:
+    env = os.getenv("GLOSSARY_FILES", "")
+    candidates: List[Path] = []
+    if env.strip():
+        for p in env.split(","):
+            path = Path(p.strip())
+            if path.suffix.lower() == ".json":
+                candidates.append(path)
+    else:
+        # Common defaults in your repo
+        candidates = [
+            Path("backend/data/glossary.json"),
+            Path("backend/data/ph_legal_dictionary_merged.json"),
+            Path("backend/data/scribd_terms_with_meanings.json"),
+            Path("/mnt/data/ph_legal_dictionary_merged.json"),
+            Path("/mnt/data/scribd_terms_with_meanings.json"),
+        ]
+    # keep only existing, but let GlossaryIndex handle empty
+    return [p for p in candidates if p.exists()]
+
+_GLOSSARY = GlossaryIndex.from_files(_resolve_glossary_files())
+
+# -----------------------------------------------------------------------------
+# Public class used by chat_engine.py
+# -----------------------------------------------------------------------------
 @dataclass
 class RuleBasedResponder:
-    bot_name: str = os.getenv("BOT_NAME", "PHLawBot")
-    timezone: str = os.getenv("APP_TIMEZONE", "Asia/Manila")
-    # Whether to use emojis in outputs (set RB_EMOJI=0 to disable for ASCII-only consoles)
-    use_emoji: bool = bool(int(os.getenv("RB_EMOJI", "1")))
+    bot_name: str = os.getenv("BOT_NAME", "PHLaw-Chatbot")
 
     def answer(self, query: str, history: Optional[List[Dict[str, str]]] = None) -> Optional[str]:
-        """Return a plain-text reply if this looks like a general chat intent; else None.
-        The optional history is a list of {"role": "user"|"assistant", "content": str}.
+        """
+        Jurisprudence-only, deterministic answers.
+        Returns a string response or None (to defer to retrieval + LLM).
         """
         q = (query or "").strip()
         if not q:
-            return "Say something and I'll help. :)"
+            return None
 
-        lo = q.lower()
+        # If precise case reference, DEFER
+        if GR_RE.search(q) or CASE_NAME_RE.search(q):
+            return None
 
-        # Greetings / small talk (English + Filipino cues)
-        if re.search(r"\b(hi|hello|hey|good\s+(morning|afternoon|evening))\b|kumusta|kamusta", lo):
-            return self._greet()
+        # Rule 45 vs 65 quick distinction
+        if RULE_45_65_RE.search(q):
+            a = _GLOSSARY.search("Rule 45", k=1)
+            b = _GLOSSARY.search("Rule 65", k=1)
+            if a and b:
+                defn45 = a[0][1].get("definition", "").strip()
+                defn65 = b[0][1].get("definition", "").strip()
+                if defn45 and defn65:
+                    return (
+                        f"Rule 45: {defn45}\n"
+                        f"Rule 65: {defn65}\n"
+                        "Use Rule 45 for errors of law in judgments; Rule 65 for jurisdictional errors (grave abuse of discretion)."
+                    )
+            return None  # let LLM explain if glossary lacks both
 
-        if re.search(r"\b(thank(s| you)|salamat)\b", lo):
-            return random.choice(_POSITIVE_ACK)
+        # Definition / elements queries → glossary fast path
+        qn = _norm(q)
+        want_elements = False
+        if DEFINE_RE.search(qn):
+            # strip leading "what is/define/meaning of/ano ang"
+            m = re.search(r"^(?:what\s+is|define|meaning\s+of|ano\s+ang)\s+(.+)", qn, re.I)
+            key = (m.group(1) if m else q).strip(" ?.")
+            matches = _GLOSSARY.search(key, k=3)
+            if matches and matches[0][0] >= 78.0:
+                return _GLOSSARY.format_answer(matches[0][1], want_elements=False)
+            return None
 
-        if re.search(r"who\s+are\s+you|anong\s+pangalan\s+mo|sino\s+ka", lo):
-            return f"I'm {self.bot_name}, your friendly assistant. I can chat, help with quick math, time/date, unit conversions, and more."
+        m_el = ELEMENTS_RE.search(q)
+        if m_el:
+            want_elements = True
+            key = m_el.group(2).strip(" ?.")
+            matches = _GLOSSARY.search(key, k=3)
+            if matches and matches[0][0] >= 78.0:
+                return _GLOSSARY.format_answer(matches[0][1], want_elements=True)
+            return None
 
-        if re.search(r"\bhelp\b|what\s+can\s+you\s+do|paano\s+kita\s+magagamit", lo):
-            return _CAPABILITIES
-
-        # Time / date / day
-        if re.search(r"what\s+time\s+is\s+it|current\s+time|oras\s+ngayon", lo):
-            return self._now_time()
-        if re.search(r"what\s+is\s+the\s+date|date\s+today|petsa\s+ngayon", lo):
-            return self._today_date()
-        if re.search(r"what\s+day\s+is\s+it|anong\s+araw\s+ngayon", lo):
-            return self._today_day()
-
-        # Unit conversions (°C ↔ °F)
-        m = re.search(r"(-?\d+(?:\.\d+)?)\s*(?:°?\s*C|celsius)\s*(?:to|in|→)\s*(?:°?\s*F|fahrenheit)", lo)
-        if m:
-            c = float(m.group(1))
-            f = (c * 9 / 5) + 32
-            return f"{c:g} °C ≈ {f:.2f} °F"
-        m = re.search(r"(-?\d+(?:\.\d+)?)\s*(?:°?\s*F|fahrenheit)\s*(?:to|in|→)\s*(?:°?\s*C|celsius)", lo)
-        if m:
-            f = float(m.group(1))
-            c = (f - 32) * 5 / 9
-            return f"{f:g} °F ≈ {c:.2f} °C"
-
-        # Distance conversions (km ↔ mi)
-        m = re.search(r"(-?\d+(?:\.\d+)?)\s*(?:km|kilometers?)\s*(?:to|in|→)\s*(?:mi|miles?)", lo)
-        if m:
-            km = float(m.group(1))
-            mi = km * 0.621371
-            return f"{km:g} km ≈ {mi:.2f} mi"
-        m = re.search(r"(-?\d+(?:\.\d+)?)\s*(?:mi|miles?)\s*(?:to|in|→)\s*(?:km|kilometers?)", lo)
-        if m:
-            mi = float(m.group(1))
-            km = mi / 0.621371
-            return f"{mi:g} mi ≈ {km:.2f} km"
-
-        # Coin / dice / joke
-        if re.search(r"(coin|flip)", lo):
-            prefix = "🪙 " if self.use_emoji else ""
-            return f"{prefix}{random.choice(['Heads', 'Tails'])}"
-        if re.search(r"(dice|roll|d6)", lo):
-            prefix = "🎲 " if self.use_emoji else ""
-            return f"{prefix}You rolled a {random.randint(1, 6)}"
-        if re.search(r"\bjoke\b|patawa|knock\s*knock", lo):
-            return random.choice(_DEF_JOKES)
-
-        # Quick math: "what is 2+2", "calculate ...", or raw arithmetic like "2*(3+4)"
-        math_expr = self._extract_math(lo)
-        if math_expr is not None:
-            try:
-                val = _SafeMath.eval(math_expr)
-                return f"{math_expr} = {val:g}"
-            except Exception:
-                return "I couldn't evaluate that expression safely. Try basic arithmetic or sqrt/log/sin."
-
-        # Weather / live info disclaimer
-        if re.search(r"weather|forecast|ulan|bagyo|news|stock|price|exchange\s+rate", lo):
-            return (
-                "I can't fetch live data here. For weather, news, and prices, please ask the main bot "
-                "or provide a summary you want me to explain."
-            )
-
-        # "What is / Who is ..." → high-level definition template (non-live)
-        m = re.search(r"^(what\s+is|who\s+is|ano\s+ang)\s+(.+?)\??$", lo)
-        if m:
-            term = m.group(2).strip().rstrip("? .")
-            if term:
-                return (
-                    f"{term.title()}: In general terms, this refers to a concept/topic people discuss often. "
-                    f"Without external sources I can only give a broad idea. If you share more context, "
-                    f"I can tailor an explanation."
-                )
-
-        # If the query clearly looks non-legal chit-chat (e.g., emojis, casual small talk keywords),
-        # keep the conversation going rather than passing to the legal pipeline.
-        if re.search(r"\b(how\s+are\s+you|kumusta\s+ka)\b|😊|😁|😂|🥲|🤣|👉|👌|👍", lo):
-            return "Doing great! How can I assist you today?"
-
-        # Not clearly a general-chat intent: let the legal pipeline handle it.
+        # Not a deterministic glossary-style query → defer to retrieval/LLM
         return None
 
-    # -------- helpers --------
-    def _greet(self) -> str:
-        now = self._now_dt()
-        hour = now.hour
-        if hour < 12:
-            tod = "Good morning"
-        elif hour < 18:
-            tod = "Good afternoon"
-        else:
-            tod = "Good evening"
-        return f"{tod}! I'm {self.bot_name}. How can I help?"
-
-    def _now_dt(self) -> dt.datetime:
-        tz = None
-        if ZoneInfo is not None:
-            try:
-                tz = ZoneInfo(self.timezone)
-            except Exception:
-                tz = None
-        return dt.datetime.now(tz) if tz else dt.datetime.now()
-
-    def _now_time(self) -> str:
-        now = self._now_dt()
-        return now.strftime("%I:%M %p").lstrip("0") + f" ({self.timezone})"
-
-    def _today_date(self) -> str:
-        now = self._now_dt()
-        return now.strftime("%B %d, %Y") + f" ({self.timezone})"
-
-    def _today_day(self) -> str:
-        now = self._now_dt()
-        return now.strftime("%A") + f" ({self.timezone})"
-
-    def _extract_math(self, lo: str) -> Optional[str]:
-        # Replace unicode square root symbol and caret to Python syntax
-        cleaned = lo.replace("^", "**").replace("√", "sqrt(")
-        if "sqrt(" in cleaned and not cleaned.endswith(")"):
-            cleaned += ")"  # naive fix for cases like "√9"
-
-        # Triggers
-        m = re.search(r"(?:what\s+is|calculate|compute)\s+([\s0-9+\-*/().%^eπpi]+)$", cleaned)
-        if m:
-            expr = m.group(1).strip()
-            expr = expr.replace("π", "pi").replace(" ", "")
-            if expr:
-                return expr
-
-        # If the whole query looks like math already (e.g., "2*(3+4)/5")
-        if re.fullmatch(r"[\s0-9+\-*/().%^eπpi]+", cleaned):
-            expr = cleaned.replace("π", "pi").replace(" ", "")
-            return expr
-
-        return None
-
-
-def answer_general(query: str, history: Optional[List[Dict[str, str]]] = None, *, force: bool = True) -> str:
-    """Convenience wrapper. If force=True and no rule matched, return a friendly fallback."""
-    resp = RuleBasedResponder().answer(query, history)
-    if resp is None and force:
-        return (
-            "I'm here to chat and help with time/date, math, quick conversions, and more. "
-            "For detailed legal questions, I'll defer to the main legal assistant."
-        )
-    return resp or ""
-
-
-if __name__ == "__main__":  # simple manual tests
-    # Make console-safe output on Windows terminals that aren't UTF-8
-    import sys
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
-
-    rb = RuleBasedResponder(use_emoji=False)
+# -----------------------------------------------------------------------------
+# Manual smoke test (run this file directly)
+# -----------------------------------------------------------------------------
+if __name__ == "__main__":
+    rb = RuleBasedResponder()
     tests = [
-        "Hello", "thanks", "what time is it", "date today", "what day is it",
-        "25 c to f", "100 fahrenheit to celsius", "10 km to mi", "3.1 mi to km",
-        "flip a coin", "roll dice", "tell me a joke",
-        "what is 2 + 2", "calculate (2+3)*sqrt(16) - 5", "2*(3+4)/5",
-        "what is entropy?", "kumusta", "how are you",
+        "What is amparo?",
+        "define rule 65",
+        "meaning of chain of custody",
+        "elements of forum shopping",
+        "Rule 45 vs 65",
+        "What is the ruling in G.R. No. 211089?",
+        "People v. Dizon",
+        "ano ang writ of kalikasan",
     ]
     for t in tests:
-        print(t, "->", rb.answer(t) or "")
+        ans = rb.answer(t)
+        print(f"{t} -> {ans if ans is not None else 'None (defer)'}")
