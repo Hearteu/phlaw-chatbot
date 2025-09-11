@@ -1,11 +1,84 @@
-# chat_engine.py — Enhanced Law LLM chat engine with optimized embeddings
+# chat_engine.py — Simplified Law LLM chat engine (GR-number path vs keyword path)
 import re
 from typing import Dict, List, Tuple
 
-from .intent_processor import IntentAnalysis, intent_processor
-from .rule_based import RuleBasedResponder
+from .debug_logger import log_debug, log_error, log_info, log_warning
 
-rb = RuleBasedResponder(bot_name="PHLaw-Chatbot")
+
+def _extract_gr_number(query: str) -> str:
+    """Extract G.R. number from query, returns numeric part or empty string."""
+    if not query:
+        return ""
+    q = query.strip()
+    # Common patterns: "G.R. No. 123456", "GR No. 123456", bare digits with separators
+    m = re.search(r"G\.R\.?\s*No\.?\s*([0-9\-]+)", q, re.IGNORECASE)
+    if m:
+        return m.group(1)
+    m = re.search(r"GR\s*No\.?\s*([0-9\-]+)", q, re.IGNORECASE)
+    if m:
+        return m.group(1)
+    # Fallback: a long number that looks like GR (7+ digits)
+    m = re.search(r"\b(\d{5,})\b", q)
+    return m.group(1) if m else ""
+
+def _normalize_gr_display(value: str) -> str:
+    """Return a clean 'G.R. No. <num>' or 'Unknown' if not parseable."""
+    if not value:
+        return "Unknown"
+    # if already contains a GR pattern, extract numeric part
+    m = re.search(r"G\.R\.?\s*No\.?\s*([0-9\-]+)", value, re.IGNORECASE)
+    if not m:
+        m = re.search(r"\b(\d{5,})\b", value)
+    num = m.group(1) if m else ""
+    return f"G.R. No. {num}" if num else "Unknown"
+
+def _display_title(d: Dict) -> str:
+    """Prefer proper case titles; otherwise, provide a concise fallback."""
+    meta = d.get("metadata", {}) or {}
+    # Prefer explicit title-like fields
+    title = (
+        d.get("title")
+        or meta.get("title")
+        or meta.get("case_title")
+        or meta.get("header")
+        or ""
+    )
+    if title:
+        t = title.strip()
+        # If looks like a case title or is reasonably short, use as-is (with trim)
+        if re.search(r"\b(v\.|vs\.|versus)\b", t, re.IGNORECASE) or len(t) <= 120:
+            return t if len(t) <= 120 else (t[:117] + "...")
+    # Try to infer a title from content lines containing v./vs.
+    text = d.get("content") or d.get("text") or ""
+    if text:
+        for line in (text.split('\n')[:10]):
+            line = line.strip()
+            if len(line) >= 20 and re.search(r"\b(v\.|vs\.|versus)\b", line, re.IGNORECASE):
+                return line[:117] + "..." if len(line) > 120 else line
+    # Fallback to generic label to avoid duplicating GR in title and suffix
+    return "Untitled case"
+
+def _title_from_query(query: str) -> str:
+    """Create a readable case-like title from user keywords as a fallback."""
+    if not query:
+        return "Untitled case"
+    q = query.strip()
+    # Normalize vs variants
+    q = re.sub(r"\bversus\b", "v.", q, flags=re.IGNORECASE)
+    q = re.sub(r"\bvs\.?\b", "v.", q, flags=re.IGNORECASE)
+    # Title case but keep v. lowercase
+    parts = [p for p in re.split(r"\s+", q) if p]
+    out = []
+    for p in parts:
+        if p.lower() in {"v.", "vs.", "vs", "versus"}:
+            out.append("v.")
+        else:
+            out.append(p[:1].upper() + p[1:])
+    return " ".join(out)
+
+def _advanced_retrieve(retriever, query: str, k: int = 8, is_case_digest: bool = False, history: List[Dict] = None):
+    """Unified retrieval wrapper (uses retriever.retrieve)."""
+    return retriever.retrieve(query, k=k, is_case_digest=is_case_digest)
 
 # --- Stronger dispositive detection & extraction ---
 DISPOSITIVE_HDR = r"(?:WHEREFORE|ACCORDINGLY|IN VIEW OF THE FOREGOING|THUS|HENCE|PREMISES CONSIDERED)"
@@ -108,27 +181,862 @@ def _extract_dispositive(text: str) -> str:
         return _normalize_ws(m.group(0), max_chars=1200)
     return ""
 
-def _intent(query: str) -> Tuple[bool, bool, bool, bool, bool, bool]:
-    q = (query or "").lower()
-
-    # negation-aware toggles (e.g., "not the facts", "no issues")
-    def want(term: str) -> bool:
-        if term not in q:
-            return False
-        # crude negation check within a short window
-        return not re.search(rf"(?:no|not|without)\s+{re.escape(term)}", q)
-
-    wants_ruling = any(want(t) for t in ["ruling", "decision", "disposition", "wherefore", "so ordered", "wherefore clause"])
-    # for facts/issues we also allow direct words, not only headings
-    wants_facts  = want("facts")  or bool(FACTS_HINT_RE.search(q))
-    wants_issues = want("issues") or "whether" in q or bool(ISSUES_HINT_RE.search(q))
-    wants_arguments = any(want(t) for t in ["argument", "arguments", "reasoning", "legal reasoning", "doctrine"])
-    wants_keywords = any(want(t) for t in ["keyword", "keywords", "legal term", "doctrine", "principle"])
-    wants_digest = any(want(t) for t in ["digest", "case digest", "full digest", "complete digest", "comprehensive digest"])
-    return wants_ruling, wants_facts, wants_issues, wants_arguments, wants_keywords, wants_digest
+# Removed title/intent heuristics for simplified engine
 
 def _has_section(docs: List[Dict], section: str) -> bool:
     return any((d.get("section") or "").lower() == section for d in docs)
+
+def _generate_case_summary(docs: List[Dict], query: str, retriever=None, history: List[Dict] = None) -> str:
+    """Generate a brief summary of the case from retrieved documents"""
+    if not docs:
+        return "No case information found."
+    
+    # Get the main case document (highest score)
+    main_doc = max(docs, key=lambda x: x.get("score", 0.0))
+    
+    # Try to find the correct case by looking for exact matches first
+    exact_match_doc = None
+    query_lower = query.lower().strip()
+    query_words = set(query_lower.split())
+    
+    log_debug(f"🔍 Looking for exact match for query: '{query_lower}'")
+    log_debug(f"🔍 Query words: {query_words}")
+    
+    # First, try to find a document that matches the query exactly
+    for i, doc in enumerate(docs):
+        title = (doc.get("title", "") or doc.get("metadata", {}).get("title", "")).lower().strip()
+        gr = doc.get("gr_number", "") or doc.get("metadata", {}).get("gr_number", "")
+        score = doc.get("score", 0.0)
+        
+        log_debug(f"  Doc {i+1}: '{title[:50]}...' | G.R. {gr} | Score: {score:.3f}")
+
+        if not title:
+            continue
+
+        # More strict matching: check for exact phrase match first
+        if query_lower in title or title in query_lower:
+            exact_match_doc = doc
+            log_debug(f"  ✅ Exact phrase match found: '{title[:50]}...'")
+            break
+        # Then check for significant word overlap (at least 4 words for better precision)
+        elif len(query_words.intersection(set(title.split()))) >= 4:
+            exact_match_doc = doc
+            log_debug(f"  ✅ Significant word overlap found: '{title[:50]}...'")
+            break
+    
+    # Use exact match document if found, otherwise use main document
+    source_doc = exact_match_doc if exact_match_doc else main_doc
+    
+    if exact_match_doc:
+        log_debug(f"🔍 Using exact match document: G.R. {exact_match_doc.get('gr_number', 'Unknown')}")
+    else:
+        log_debug(f"🔍 No exact match found, using main document: G.R. {main_doc.get('gr_number', 'Unknown')}")
+    
+    # Extract metadata from the chosen document
+    case_title = (source_doc.get("metadata", {}).get("title", "") or 
+                 source_doc.get("title", "") or 
+                 source_doc.get("metadata", {}).get("case_title", "") or
+                 query)  # Fallback to query if no title found
+    
+    gr_number = (source_doc.get("metadata", {}).get("gr_number", "") or 
+                source_doc.get("gr_number", "") or 
+                source_doc.get("metadata", {}).get("case_id", "") or
+                "Not available")
+    
+    # Clean up G.R. number to avoid duplication
+    if gr_number and gr_number != "Not available":
+        # Remove "G.R. No." prefix if it exists to avoid duplication
+        gr_number = re.sub(r'^G\.R\.\s+No\.\s*', '', gr_number, flags=re.IGNORECASE).strip()
+        if gr_number:
+            gr_number = f"G.R. No. {gr_number}"
+        else:
+            gr_number = "Not available"
+    
+    ponente = (source_doc.get("metadata", {}).get("ponente", "") or 
+              source_doc.get("ponente", "") or 
+              source_doc.get("metadata", {}).get("justice", "") or
+              "Not available")
+    
+    date = (source_doc.get("metadata", {}).get("promulgation_date", "") or 
+           source_doc.get("metadata", {}).get("date", "") or 
+           source_doc.get("date", "") or 
+           source_doc.get("metadata", {}).get("decision_date", "") or
+           "Not available")
+    
+    case_type = (source_doc.get("metadata", {}).get("case_type", "") or 
+                source_doc.get("case_type", "") or 
+                source_doc.get("metadata", {}).get("type", "") or
+                "Not available")
+    
+    log_debug(f"🔍 Final metadata - Title: {case_title[:50]}... | G.R.: {gr_number} | Ponente: {ponente}")
+    
+    # Try to load full case content from JSONL file
+    full_case_content = None
+    if gr_number and gr_number != "Not available":
+        # Clean the G.R. number for JSONL lookup (remove display formatting)
+        jsonl_gr_number = re.sub(r'^G\.R\.\s+No\.\s*', '', gr_number, flags=re.IGNORECASE).strip()
+        log_debug(f"🔍 Loading full case content from JSONL for G.R. {jsonl_gr_number}...")
+        try:
+            from .retriever import load_case_from_jsonl
+            full_case_content = load_case_from_jsonl(jsonl_gr_number)
+            if full_case_content:
+                log_debug(f"✅ Loaded full case content: {len(str(full_case_content))} characters")
+            else:
+                log_warning(f"⚠️ No full case content found for G.R. {jsonl_gr_number}")
+        except Exception as e:
+            log_warning(f"⚠️ Error loading full case content: {e}")
+    
+    # If we have full case content, use it for better summary
+    if full_case_content:
+        log_debug("🔍 Using full case content for summary generation...")
+        # Extract content from full case (using actual JSONL fields)
+        facts_content = full_case_content.get("body", "")  # Use body for facts
+        issues_content = full_case_content.get("header", "")  # Use header for issues
+        ruling_content = full_case_content.get("ruling", "")
+        decision_content = full_case_content.get("body", "")  # Use body for decision content
+        
+        # Use LLM to generate a proper storytelling summary from JSONL content
+        log_debug("🔍 Using LLM to generate storytelling summary from JSONL content...")
+        
+        # Prepare context for LLM
+        context_parts = []
+        if facts_content and len(facts_content.strip()) > 100:
+            context_parts.append(f"FACTS: {facts_content[:2000]}...")
+        if ruling_content and len(ruling_content.strip()) > 100:
+            context_parts.append(f"RULING: {ruling_content[:2000]}...")
+        
+        context = "\n\n".join(context_parts) if context_parts else "No detailed content available."
+        
+        # Create a prompt for storytelling summary
+        storytelling_prompt = f"""Create a 5-sentence case summary for this Philippine Supreme Court case:
+
+Case: {case_title}
+G.R. No.: {gr_number}
+Ponente: {ponente}
+
+Context:
+{context}
+
+Write exactly 5 complete sentences that tell the story of this case. Start with who the parties are, then what happened, what the legal question was, how the court decided, and what the outcome was. Do not include any numbered lists or questions - just write the 5 sentences directly."""
+
+        try:
+            from .generator import generate_legal_response
+            print(f"🔍 Calling LLM with prompt length: {len(storytelling_prompt)} characters")
+            print(f"🔍 Context length: {len(context)} characters")
+            raw_summary = generate_legal_response(storytelling_prompt, context="", is_case_digest=False)
+            print(f"🔍 Raw LLM output: '{raw_summary[:200]}...' (length: {len(raw_summary)})")
+            
+            # Clean up the LLM output
+            summary_text = raw_summary.strip()
+            
+            # Remove common LLM artifacts
+            summary_text = re.sub(r'^\[INST\].*?\[/INST\]\s*', '', summary_text, flags=re.DOTALL)
+            summary_text = re.sub(r'^Assistant:\s*', '', summary_text)
+            summary_text = re.sub(r'^Response:\s*', '', summary_text)
+            summary_text = re.sub(r'^Summary:\s*', '', summary_text)
+            summary_text = re.sub(r'^\[INST\].*?$', '', summary_text, flags=re.MULTILINE)
+            summary_text = re.sub(r'^\[/INST\].*?$', '', summary_text, flags=re.MULTILINE)
+            summary_text = re.sub(r'^\d+\.\s*', '', summary_text, flags=re.MULTILINE)  # Remove numbered list format
+            
+            # Ensure it ends with a period
+            if summary_text and not summary_text.endswith('.'):
+                summary_text += '.'
+            
+            print(f"✅ Generated LLM storytelling summary: {len(summary_text)} characters")
+            print(f"✅ Cleaned summary: '{summary_text[:200]}...'")
+        except Exception as e:
+            print(f"⚠️ LLM generation failed: {e}, using fallback")
+            # Fallback to simple extraction
+            summary_text = f"This case involves {case_title}. The case was decided by the Supreme Court of the Philippines and involves legal proceedings between the parties."
+        
+        print(f"✅ Generated storytelling summary from full case content: {len(summary_text)} characters")
+        
+        # Final fallback: if summary is still empty or too short, create a basic one
+        if not summary_text or len(summary_text.strip()) < 50:
+            print("⚠️ Summary too short, creating fallback summary from JSONL content...")
+            if facts_content and len(facts_content.strip()) > 100:
+                # Extract first meaningful sentence from facts
+                sentences = facts_content.split('.')
+                for sentence in sentences:
+                    sentence = sentence.strip()
+                    if len(sentence) > 50 and 'petitioner' in sentence.lower():
+                        # Clean up the sentence to remove metadata noise
+                        clean_sentence = re.sub(r'^\d+,\s*December\s+\d+,\s+\d+\s*\]\s*', '', sentence)
+                        clean_sentence = re.sub(r'^\d+,\s*[A-Za-z]+\s+\d+,\s+\d+\s*\]\s*', '', clean_sentence)
+                        clean_sentence = re.sub(r'^\d+\s*\]\s*', '', clean_sentence)
+                        clean_sentence = re.sub(r'^[A-Z\s]+\s*$', '', clean_sentence)  # Remove all-caps lines
+                        if clean_sentence and len(clean_sentence.strip()) > 30:
+                            summary_text = f"This case involves {case_title}. {clean_sentence}."
+                            break
+            if not summary_text or len(summary_text.strip()) < 50:
+                summary_text = f"This case involves {case_title}. The case was decided by the Supreme Court of the Philippines and involves legal proceedings between the parties."
+            print(f"✅ Created fallback summary: {len(summary_text)} characters")
+    else:
+        # No JSONL content available, try to extract from retrieved documents
+        print("⚠️ No JSONL content available, trying to extract from retrieved documents...")
+        
+        # Try to find meaningful content from the retrieved documents
+        best_content = ""
+        for doc in docs:
+            content = doc.get("content", "") or doc.get("text", "")
+            if content and len(content.strip()) > len(best_content):
+                best_content = content
+        
+        if best_content and len(best_content.strip()) > 100:
+            # Try to extract a meaningful summary from the content
+            sentences = best_content.split('.')
+            meaningful_sentences = []
+            
+            for sentence in sentences:
+                sentence = sentence.strip()
+                if (len(sentence) > 30 and 
+                    not sentence.startswith(('G.R. No.', 'Supreme Court', 'E-Library', '—', 'The relevant', 'On 02 August', '[', 'PANGANIBAN')) and
+                    not sentence.endswith(('for short', 'as follows', 'Decision, as follows')) and
+                    not sentence.isupper() and
+                    any(word in sentence.lower() for word in ['petitioner', 'respondent', 'alleged', 'claimed', 'contended', 'filed', 'sought', 'requested', 'dispute', 'agreement', 'contract', 'breach', 'damages', 'injury', 'loss', 'court', 'held', 'found', 'determined', 'concluded', 'ruled', 'decided'])):
+                    meaningful_sentences.append(sentence)
+                    if len(meaningful_sentences) >= 3:
+                        break
+            
+            if meaningful_sentences:
+                summary_text = '. '.join(meaningful_sentences) + '.'
+            else:
+                summary_text = f"This case involves {case_title}. The case was decided by the Supreme Court of the Philippines and involves legal proceedings between the parties."
+        else:
+            summary_text = f"This case involves {case_title}. The case was decided by the Supreme Court of the Philippines and involves legal proceedings between the parties."
+    
+    return f"**{case_title}**\n\n**G.R. No.:** {gr_number}\n**Ponente:** {ponente}\n**Date:** {date}\n**Case Type:** {case_type}\n\n**Brief Summary:**\n{summary_text}"
+
+def _extract_summary_from_chunks(docs: List[Dict], case_title: str) -> str:
+    """Extract summary from document chunks (original method)"""
+    # Get the main case document (highest score)
+    main_doc = max(docs, key=lambda x: x.get("score", 0.0))
+    
+    # Try to find better content by searching for more specific sections
+    # Look for documents with substantial content (not just captions)
+    best_content = ""
+    best_section = ""
+    current_gr = main_doc.get("gr_number", "") or main_doc.get("metadata", {}).get("gr_number", "")
+    
+    # First, try to find content from the same case with substantial length
+    print(f"🔍 Looking for content for G.R. {current_gr}")
+    print(f"🔍 Available documents: {len(docs)}")
+    
+    for i, doc in enumerate(docs):
+        doc_gr = doc.get("gr_number", "") or doc.get("metadata", {}).get("gr_number", "")
+        doc_content = doc.get("content", "") or doc.get("text", "")
+        doc_section = doc.get("section", "unknown")
+        
+        print(f"  Doc {i+1}: section='{doc_section}', gr='{doc_gr}', content_len={len(doc_content)}")
+        if len(doc_content) > 50:
+            content_preview = doc_content[:100]
+            print(f"    Preview: {content_preview}...")
+        
+        # Only consider content from the same case
+        if doc_gr == current_gr and doc_content and len(doc_content.strip()) > len(best_content):
+            # Be more aggressive in selecting content - prefer any substantial content
+            if (doc_section.lower() in ['facts', 'issues', 'ruling', 'header', 'body', 'full_text_ref'] or 
+                len(doc_content.strip()) > 100):  # Reduced from 200 to 100 chars
+                best_content = doc_content
+                best_section = doc_section
+                print(f"🔍 Selected content from section '{doc_section}', length={len(doc_content)}")
+    
+    # If no good content found from same case, try any content
+    if not best_content:
+        print("🔍 No same-case content found, trying any available content...")
+        for doc in docs:
+            doc_content = doc.get("content", "") or doc.get("text", "")
+            doc_section = doc.get("section", "unknown")
+            
+            if doc_content and len(doc_content.strip()) > len(best_content):
+                best_content = doc_content
+                best_section = doc_section
+                print(f"🔍 Selected fallback content from section '{doc_section}', length={len(doc_content)}")
+    
+    # Use the best content found
+    content = best_content if best_content else (main_doc.get("content", "") or main_doc.get("text", ""))
+    
+    # Try to extract a better summary from the content
+    if content and len(content.strip()) > 20:  # Reduced from 100 to 20
+        # Clean up the content first
+        clean_content = re.sub(r'\s*—\s*[^—]*\s*—\s*', ' ', content)
+        clean_content = re.sub(r'\s+', ' ', clean_content).strip()
+        
+        # Different strategies based on section type
+        if best_section == 'facts':
+            # For facts section, look for the main factual narrative
+            summary_text = _extract_facts_summary(clean_content, case_title)
+        elif best_section == 'issues':
+            # For issues section, extract the legal questions
+            summary_text = _extract_issues_summary(clean_content, case_title)
+        elif best_section == 'ruling':
+            # For ruling section, extract the court's decision
+            summary_text = _extract_ruling_summary(clean_content, case_title)
+        else:
+            # For other sections, use general extraction
+            summary_text = _extract_general_summary(clean_content, case_title)
+    else:
+        # If still no good content, try to combine content from multiple sections
+        combined_content = ""
+        for doc in docs:
+            doc_content = doc.get("content", "") or doc.get("text", "")
+            if doc_content and len(doc_content.strip()) > 10:  # Reduced from 50 to 10
+                combined_content += " " + doc_content
+                if len(combined_content) > 500:
+                    break
+        
+        if combined_content and len(combined_content.strip()) > 20:  # Reduced from 100 to 20
+            # Clean and extract meaningful content
+            clean_content = re.sub(r'\s*—\s*[^—]*\s*—\s*', ' ', combined_content)
+            clean_content = re.sub(r'\s+', ' ', clean_content).strip()
+            summary_text = _extract_general_summary(clean_content, case_title)
+        else:
+            # Last resort: try to extract any meaningful content from the case title itself
+            if case_title and len(case_title) > 50:
+                summary_text = f"This case involves {case_title}. The case was decided by the Supreme Court of the Philippines."
+            else:
+                summary_text = f"Case involving {case_title}. Details not available in the retrieved documents."
+    
+    return summary_text
+
+def _extract_meaningful_sentences(content: str, max_sentences: int, keywords: List[str]) -> List[str]:
+    """Extract meaningful sentences with specific keywords"""
+    if not content or not content.strip():
+        return []
+    
+    # Clean the content first
+    content = re.sub(r'\s+', ' ', content).strip()
+    
+    # Split by sentences more intelligently
+    sentences = re.split(r'[.!?]+', content)
+    meaningful_sentences = []
+    
+    # First pass: look for sentences with keywords
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if (len(sentence) > 30 and  # Increased minimum length
+            not sentence.startswith(('G.R. No.', 'Supreme Court', 'E-Library', '—', 'The relevant', 'On 02 August', '[', 'PANGANIBAN')) and
+            not sentence.endswith(('for short', 'as follows', 'Decision, as follows')) and
+            not sentence.isupper() and  # Skip all-caps sentences
+            any(word in sentence.lower() for word in keywords)):
+            meaningful_sentences.append(sentence)
+            if len(meaningful_sentences) >= max_sentences:
+                break
+    
+    # Second pass: if we don't have enough, be more lenient
+    if len(meaningful_sentences) < max_sentences:
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if (len(sentence) > 40 and  # Longer sentences for better context
+                not sentence.startswith(('G.R. No.', 'Supreme Court', 'E-Library', '—', 'The relevant', 'On 02 August', '[', 'PANGANIBAN')) and
+                not sentence.endswith(('for short', 'as follows', 'Decision, as follows')) and
+                sentence not in meaningful_sentences and
+                not any(bad_word in sentence.lower() for bad_word in ['summarized in', 'challenged decision', 'procedural and factual']) and
+                not sentence.isupper() and  # Skip all-caps sentences
+                not sentence.startswith(('The Case', 'This case', 'The general'))):  # Skip generic starts
+                meaningful_sentences.append(sentence)
+                if len(meaningful_sentences) >= max_sentences:
+                    break
+    
+    # Third pass: if still not enough, take any decent sentences
+    if len(meaningful_sentences) < max_sentences:
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if (len(sentence) > 50 and  # Even longer sentences
+                not sentence.startswith(('G.R. No.', 'Supreme Court', 'E-Library', '—', 'The relevant', 'On 02 August', '[', 'PANGANIBAN')) and
+                not sentence.endswith(('for short', 'as follows', 'Decision, as follows')) and
+                sentence not in meaningful_sentences and
+                not sentence.isupper() and
+                not any(bad_word in sentence.lower() for bad_word in ['summarized in', 'challenged decision', 'procedural and factual', 'the case', 'this case', 'the general']) and
+                not sentence.startswith(('The Case', 'This case', 'The general'))):
+                meaningful_sentences.append(sentence)
+                if len(meaningful_sentences) >= max_sentences:
+                    break
+    
+    return meaningful_sentences
+
+def _extract_facts_summary(content: str, case_title: str) -> str:
+    """Extract summary from facts section"""
+    sentences = content.split('.')
+    meaningful_sentences = []
+    
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if (len(sentence) > 20 and 
+            not sentence.startswith(tuple(case_title.split()[:3])) and
+            not sentence.startswith(('G.R. No.', 'Supreme Court', 'E-Library', '—')) and
+            any(word in sentence.lower() for word in ['petitioner', 'respondent', 'alleged', 'claimed', 'contended', 'filed', 'sought', 'requested', 'dispute', 'agreement', 'contract', 'breach', 'damages', 'injury', 'loss'])):
+            meaningful_sentences.append(sentence)
+            if len(' '.join(meaningful_sentences)) > 400:
+                break
+    
+    if meaningful_sentences:
+        return '. '.join(meaningful_sentences) + '.'
+    else:
+        return content[:300] + "..." if len(content) > 300 else content
+
+def _extract_issues_summary(content: str, case_title: str) -> str:
+    """Extract summary from issues section"""
+    sentences = content.split('.')
+    meaningful_sentences = []
+    
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if (len(sentence) > 20 and
+            not sentence.startswith(tuple(case_title.split()[:3])) and
+            not sentence.startswith(('G.R. No.', 'Supreme Court', 'E-Library', '—')) and
+            any(word in sentence.lower() for word in ['whether', 'issue', 'question', 'problem', 'dispute', 'controversy', 'matter', 'case', 'court', 'decision', 'ruling'])):
+            meaningful_sentences.append(sentence)
+            if len(' '.join(meaningful_sentences)) > 400:
+                break
+    
+    if meaningful_sentences:
+        return '. '.join(meaningful_sentences) + '.'
+    else:
+        return content[:300] + "..." if len(content) > 300 else content
+
+def _extract_ruling_summary(content: str, case_title: str) -> str:
+    """Extract summary from ruling section"""
+    sentences = content.split('.')
+    meaningful_sentences = []
+    
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if (len(sentence) > 20 and
+            not sentence.startswith(tuple(case_title.split()[:3])) and
+            not sentence.startswith(('G.R. No.', 'Supreme Court', 'E-Library', '—')) and
+            any(word in sentence.lower() for word in ['court', 'held', 'found', 'determined', 'concluded', 'ruled', 'decided', 'therefore', 'accordingly', 'wherefore', 'so ordered'])):
+            meaningful_sentences.append(sentence)
+            if len(' '.join(meaningful_sentences)) > 400:
+                break
+    
+    if meaningful_sentences:
+        return '. '.join(meaningful_sentences) + '.'
+    else:
+        return content[:300] + "..." if len(content) > 300 else content
+
+def _extract_general_summary(content: str, case_title: str) -> str:
+    """Extract summary from general content"""
+    sentences = content.split('.')
+    meaningful_sentences = []
+    
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if (len(sentence) > 20 and
+            not sentence.startswith(tuple(case_title.split()[:3])) and
+            not sentence.startswith(('G.R. No.', 'Supreme Court', 'E-Library', '—')) and
+            any(word in sentence.lower() for word in ['case', 'court', 'decision', 'ruling', 'facts', 'issues', 'petitioner', 'respondent', 'contract', 'agreement', 'dispute', 'claim', 'alleged', 'held', 'found', 'determined', 'whether', 'problem', 'matter'])):
+            meaningful_sentences.append(sentence)
+            if len(' '.join(meaningful_sentences)) > 400:
+                break
+    
+    if meaningful_sentences:
+        return '. '.join(meaningful_sentences) + '.'
+    else:
+        return content[:300] + "..." if len(content) > 300 else content
+
+def _find_relevant_cases(docs: List[Dict], retriever, history: List[Dict] = None) -> List[Dict]:
+    """Find relevant cases with similar case type"""
+    if not docs or not retriever:
+        return []
+    
+    # Get case type from main document with better fallbacks
+    main_doc = max(docs, key=lambda x: x.get("score", 0.0))
+    case_type = (main_doc.get("metadata", {}).get("case_type", "") or 
+                main_doc.get("case_type", "") or 
+                main_doc.get("metadata", {}).get("type", ""))
+    
+    if not case_type or case_type == "Not available":
+        # Try to extract case type from content or use a generic search
+        content = main_doc.get("content", "") or main_doc.get("text", "")
+        if "contract" in content.lower():
+            case_type = "contract"
+        elif "criminal" in content.lower():
+            case_type = "criminal"
+        elif "administrative" in content.lower():
+            case_type = "administrative"
+        else:
+            case_type = "civil"  # Default fallback
+    
+    # Search for cases with similar case type and legal concepts
+    try:
+        # Try a more specific search for similar cases
+        case_title = main_doc.get("title", "") or main_doc.get("metadata", {}).get("title", "")
+        search_queries = [
+            f"case type {case_type}",
+            f"similar to {case_title}",
+            f"contract cases",
+            f"civil cases"
+        ]
+        
+        relevant_docs = []
+        for search_query in search_queries:
+            docs = _advanced_retrieve(retriever, search_query, k=3, is_case_digest=False, history=history)
+            relevant_docs.extend(docs)
+            if len(relevant_docs) >= 5:
+                break
+        # Filter out the current case
+        current_gr = (main_doc.get("metadata", {}).get("gr_number", "") or 
+                     main_doc.get("gr_number", "") or 
+                     main_doc.get("metadata", {}).get("case_id", ""))
+        relevant_docs = [d for d in relevant_docs if (d.get("metadata", {}).get("gr_number", "") or d.get("gr_number", "")) != current_gr]
+        
+        # Filter out bad documents completely before processing
+        good_docs = []
+        for doc in relevant_docs:
+            title = (doc.get("metadata", {}).get("title", "") or 
+                    doc.get("title", "") or 
+                    doc.get("metadata", {}).get("case_title", ""))
+            
+            # Comprehensive list of bad title patterns
+            bad_title_patterns = [
+                "docketed as", "against the advice", "ceased reporting", "came back only",
+                "administrative case for", "crim. case no", "people v", "unknown", "third division",
+                "chico-nazario", "honorable", "presiding judge", "just ceased", "came back only",
+                "rommel", "baybay", "presiding judge", "this branch", "starting 6 april",
+                "c-63250", "alex sabayan", "chico-nazario", "third division", "senate and the house",
+                "congress commenced", "regular session", "commission on appointments", "constituted on",
+                "august 2004", "july 2004", "164978", "g.r. no. g.r. no", "g.r. no. unknown"
+            ]
+            
+            # Check if title is bad
+            is_bad_title = any(pattern in title.lower() for pattern in bad_title_patterns)
+            
+            # Skip if bad title or too short
+            if is_bad_title or len(title.strip()) < 20:
+                print(f"⚠️ Skipping document with bad title: '{title[:50]}...'")
+                continue
+            
+            # Try to extract better title from content
+            content = doc.get("content", "") or doc.get("text", "")
+            if content:
+                lines = content.split('\n')
+                for line in lines[:15]:  # Check first 15 lines
+                    line = line.strip()
+                    # Look for proper case titles with v. or vs.
+                    if (len(line) > 30 and 
+                        ('v.' in line or 'vs.' in line or 'versus' in line.lower()) and
+                        not any(bad_word in line.lower() for bad_word in bad_title_patterns) and
+                        not line.startswith(('—', 'Supreme Court', 'E-Library', 'The factual', 'On 02 August'))):
+                        # Update with better title
+                        if 'metadata' not in doc:
+                            doc['metadata'] = {}
+                        doc['metadata']['title'] = line
+                        doc['title'] = line
+                        break
+            
+            # Only add if we have a good title now
+            final_title = doc.get("title", "") or doc.get("metadata", {}).get("title", "")
+            if len(final_title.strip()) >= 20 and not any(pattern in final_title.lower() for pattern in bad_title_patterns):
+                good_docs.append(doc)
+            else:
+                print(f"⚠️ Skipping document after title extraction: '{final_title[:50]}...'")
+        
+        relevant_docs = good_docs
+        
+        # Return up to 3 good cases, or fewer if we don't have enough
+        return relevant_docs[:3] if relevant_docs else []
+    except Exception as e:
+        print(f"⚠️ Error finding relevant cases: {e}")
+        return []
+
+def _generate_case_summary_from_jsonl(full_case_content: Dict, query: str, retriever, history: List[Dict] = None) -> str:
+    """Generate case summary directly from JSONL content using LLM"""
+    print("🔍 Generating case summary from JSONL content using LLM...")
+    
+    # Extract metadata
+    case_title = full_case_content.get("title", "") or full_case_content.get("case_title", "")
+    gr_number = full_case_content.get("gr_number", "")
+    
+    # Clean up G.R. number to avoid duplication
+    if gr_number:
+        # Remove "G.R. No." prefix if it exists to avoid duplication
+        gr_number = re.sub(r'^G\.R\.\s+No\.\s*', '', gr_number, flags=re.IGNORECASE).strip()
+        if gr_number:
+            gr_number = f"G.R. No. {gr_number}"
+        else:
+            gr_number = "Not available"
+    else:
+        gr_number = "Not available"
+    
+    ponente = full_case_content.get("ponente", "")
+    date = full_case_content.get("promulgation_date", "") or full_case_content.get("date", "")
+    case_type = full_case_content.get("case_type", "") or "regular"
+    
+    # Extract content sections
+    facts_content = full_case_content.get("body", "")
+    ruling_content = full_case_content.get("ruling", "")
+    
+    # Prepare context for LLM
+    context_parts = []
+    if facts_content and len(facts_content.strip()) > 100:
+        context_parts.append(f"FACTS: {facts_content[:2000]}...")
+    if ruling_content and len(ruling_content.strip()) > 100:
+        context_parts.append(f"RULING: {ruling_content[:2000]}...")
+    
+    context = "\n\n".join(context_parts) if context_parts else "No detailed content available."
+    
+    # Create a prompt for storytelling summary
+    storytelling_prompt = f"""Create a 5-sentence case summary for this Philippine Supreme Court case:
+
+Case: {case_title}
+G.R. No.: {gr_number}
+Ponente: {ponente}
+
+Context:
+{context}
+
+Write exactly 5 complete sentences that tell the story of this case. Start with who the parties are, then what happened, what the legal question was, how the court decided, and what the outcome was. Do not include any numbered lists or questions - just write the 5 sentences directly."""
+
+    try:
+        from .generator import generate_legal_response
+        raw_summary = generate_legal_response(storytelling_prompt, context="", is_case_digest=False)
+        
+        # Clean up the LLM output
+        summary_text = raw_summary.strip()
+        
+        # Remove common LLM artifacts
+        summary_text = re.sub(r'^\[INST\].*?\[/INST\]\s*', '', summary_text, flags=re.DOTALL)
+        summary_text = re.sub(r'^Assistant:\s*', '', summary_text)
+        summary_text = re.sub(r'^Response:\s*', '', summary_text)
+        summary_text = re.sub(r'^Summary:\s*', '', summary_text)
+        summary_text = re.sub(r'^\[INST\].*?$', '', summary_text, flags=re.MULTILINE)
+        summary_text = re.sub(r'^\[/INST\].*?$', '', summary_text, flags=re.MULTILINE)
+        summary_text = re.sub(r'^\d+\.\s*', '', summary_text, flags=re.MULTILINE)  # Remove numbered list format
+        
+        # Ensure it ends with a period
+        if summary_text and not summary_text.endswith('.'):
+            summary_text += '.'
+        
+        print(f"✅ Generated LLM storytelling summary: {len(summary_text)} characters")
+    except Exception as e:
+        print(f"⚠️ LLM generation failed: {e}, using fallback")
+        summary_text = f"This case involves {case_title}. The case was decided by the Supreme Court of the Philippines and involves legal proceedings between the parties."
+    
+    # Find related cases using retriever (if available)
+    relevant_cases = []
+    if retriever:
+        try:
+            # Search for related cases
+            related_docs = _advanced_retrieve(retriever, f"{case_title} similar cases", k=3, history=history)
+            relevant_cases = _find_relevant_cases(related_docs, retriever, history)
+        except Exception as e:
+            print(f"⚠️ Error finding related cases: {e}")
+    
+    # Build response
+    response_parts = [f"**{case_title}**\n\n**G.R. No.:** {gr_number}\n**Ponente:** {ponente}\n**Date:** {date}\n**Case Type:** {case_type}\n\n**Brief Summary:**\n{summary_text}"]
+    
+    if relevant_cases:
+        response_parts.append("\n**Related Cases:**")
+        for i, case in enumerate(relevant_cases, 1):
+            case_title = (case.get("title", "") or 
+                         case.get("metadata", {}).get("title", "") or 
+                         case.get("metadata", {}).get("case_title", ""))
+            case_gr = (case.get("gr_number", "") or 
+                      case.get("metadata", {}).get("gr_number", "") or 
+                      "Unknown")
+            case_type = (case.get("case_type", "") or 
+                        case.get("metadata", {}).get("case_type", "") or 
+                        "regular")
+            response_parts.append(f"{i}. {case_title} (G.R. No. {case_gr}) - {case_type}")
+    
+    response_parts.append("\nWhat would you like to know about this case?")
+    response_parts.append("• Case Digest - Complete structured summary")
+    response_parts.append("• Ruling - Court's decision and reasoning") 
+    response_parts.append("• Facts - Case background and events")
+    response_parts.append("• Issues - Legal questions raised")
+    response_parts.append("• Arguments - Legal reasoning and doctrines")
+    
+    return "\n".join(response_parts)
+
+def _handle_case_title_query(query: str, docs: List[Dict], retriever, history: List[Dict]) -> str:
+    """Handle case title queries with summary and relevant cases"""
+    print("🎯 Handling case title query with enhanced response")
+    print(f"🔍 Query: '{query}'")
+    print(f"🔍 Retrieved {len(docs)} documents")
+    
+    # Debug: Show what documents were retrieved
+    for i, doc in enumerate(docs[:3]):  # Show first 3 docs
+        title = doc.get("title", "") or doc.get("metadata", {}).get("title", "")
+        gr = doc.get("gr_number", "") or doc.get("metadata", {}).get("gr_number", "")
+        score = doc.get("score", 0.0)
+        print(f"  Doc {i+1}: '{title[:50]}...' | G.R. {gr} | Score: {score:.3f}")
+    
+    # Search across multiple collections for case title queries
+    print("🔍 Searching across multiple collections for better content...")
+    
+    # Define collections to search (in priority order)
+    collections_to_search = [
+        "rulings",      # Ruling sections - highest priority for case summaries
+        "facts",        # Facts sections - good for case background
+        "issues",       # Issues sections - legal questions
+        "supreme_court_en_banc",    # En Banc decisions
+        "supreme_court_division",   # Division decisions
+        "landmark_cases",           # Landmark cases
+        "recent_cases"              # Recent cases
+    ]
+    
+    additional_docs = []
+    
+    # Extract G.R. number from query for more targeted searches
+    gr_number = None
+    for doc in docs:
+        gr = doc.get("gr_number", "") or doc.get("metadata", {}).get("gr_number", "")
+        if gr and "G.R. No." in gr:
+            gr_number = gr
+            break
+    
+    # Search queries for each collection
+    search_queries = [
+        query,  # Original query
+        f"{query} facts",
+        f"{query} issues", 
+        f"{query} ruling",
+        f"{query} decision"
+    ]
+    
+    # Add G.R. number specific queries if available
+    if gr_number:
+        search_queries.extend([
+            f"{gr_number} facts",
+            f"{gr_number} issues",
+            f"{gr_number} ruling",
+            f"{gr_number} decision"
+        ])
+    
+    # Search each collection
+    for collection in collections_to_search:
+        print(f"🔍 Searching collection '{collection}'...")
+        try:
+            # Create a new retriever instance for this collection
+            from .retriever import LegalRetriever
+            collection_retriever = LegalRetriever(collection=collection)
+            
+            # Check if collection exists and has content
+            try:
+                from .retriever import _get_cached_qdrant_client
+                client = _get_cached_qdrant_client()
+                collection_info = client.get_collection(collection)
+                print(f"  Collection '{collection}' exists with {collection_info.points_count} points")
+            except Exception as e:
+                print(f"  ⚠️ Collection '{collection}' does not exist or error: {e}")
+                continue
+            
+            # Search with multiple queries
+            for search_query in search_queries:
+                try:
+                    collection_docs = _advanced_retrieve(collection_retriever, search_query, k=2, history=history)
+                    if collection_docs:
+                        additional_docs.extend(collection_docs)
+                        print(f"  Found {len(collection_docs)} docs for '{search_query}' in {collection}")
+                        # Show content preview
+                        for i, doc in enumerate(collection_docs):
+                            content = doc.get("content", "") or doc.get("text", "")
+                            section = doc.get("section", "unknown")
+                            print(f"    Doc {i+1}: section='{section}', content_len={len(content)}")
+                            if len(content) > 50:
+                                print(f"      Preview: {content[:100]}...")
+                except Exception as e:
+                    print(f"  ⚠️ Error searching '{search_query}' in {collection}: {e}")
+                    
+        except Exception as e:
+            print(f"⚠️ Error accessing collection '{collection}': {e}")
+    
+    if additional_docs:
+        # Remove duplicates based on content and G.R. number
+        seen_content = set()
+        unique_docs = []
+        
+        # First, add original docs
+        for doc in docs:
+            content = doc.get("content", "") or doc.get("text", "")
+            if content not in seen_content:
+                seen_content.add(content)
+                unique_docs.append(doc)
+        
+        # Then add new docs from other collections
+        for doc in additional_docs:
+            content = doc.get("content", "") or doc.get("text", "")
+            if content not in seen_content:
+                seen_content.add(content)
+                unique_docs.append(doc)
+        
+        docs = unique_docs
+        print(f"🔍 Added {len(additional_docs)} additional documents from multiple collections, total: {len(docs)}")
+    else:
+        print("⚠️ No additional content found in other collections")
+    
+    # Filter documents to prioritize exact case title matches
+    print("🔍 Filtering documents for exact case title matches...")
+    exact_match_docs = []
+    partial_match_docs = []
+    
+    query_lower = query.lower().strip()
+    query_words = set(query_lower.split())
+    
+    for doc in docs:
+        title = (doc.get("title", "") or doc.get("metadata", {}).get("title", "")).lower().strip()
+        if not title:
+            continue
+            
+        # More sophisticated matching
+        title_words = set(title.split())
+        
+        # Check for exact phrase match
+        if query_lower in title or title in query_lower:
+            exact_match_docs.append(doc)
+            print(f"  ✅ Exact phrase match: '{title[:50]}...'")
+        # Check for significant word overlap (at least 3 words)
+        elif len(query_words.intersection(title_words)) >= 3:
+            exact_match_docs.append(doc)
+            print(f"  ✅ Word overlap match: '{title[:50]}...'")
+        else:
+            partial_match_docs.append(doc)
+    
+    # Use exact matches first, then partial matches
+    if exact_match_docs:
+        print(f"🔍 Using {len(exact_match_docs)} exact matches")
+        docs = exact_match_docs + partial_match_docs
+    else:
+        print(f"🔍 No exact matches found, using {len(partial_match_docs)} partial matches")
+        docs = partial_match_docs
+
+    # Generate case summary
+    summary = _generate_case_summary(docs, query, retriever, history)
+    
+    # Find relevant cases
+    relevant_cases = _find_relevant_cases(docs, retriever, history)
+    
+    # Build response
+    response_parts = [summary]
+    
+    if relevant_cases:
+        response_parts.append("\n**Related Cases:**")
+        for i, case in enumerate(relevant_cases, 1):
+            # Get title (should already be improved by _find_relevant_cases)
+            title = (case.get("metadata", {}).get("title", "") or 
+                    case.get("title", "") or 
+                    case.get("metadata", {}).get("case_title", "") or
+                    "Untitled Case")
+            
+            gr_number = (case.get("metadata", {}).get("gr_number", "") or 
+                        case.get("gr_number", "") or 
+                        case.get("metadata", {}).get("case_id", "") or
+                        "Unknown")
+            case_type = (case.get("metadata", {}).get("case_type", "") or 
+                        case.get("case_type", "") or 
+                        case.get("metadata", {}).get("type", "") or
+                        "Unknown")
+            response_parts.append(f"{i}. **{title}** (G.R. No. {gr_number}) - {case_type}")
+    
+    response_parts.append("\n**What would you like to know about this case?**")
+    response_parts.append("• **Case Digest** - Complete structured summary")
+    response_parts.append("• **Ruling** - Court's decision and reasoning")
+    response_parts.append("• **Facts** - Case background and events")
+    response_parts.append("• **Issues** - Legal questions raised")
+    response_parts.append("• **Arguments** - Legal reasoning and doctrines")
+    
+    return "\n".join(response_parts)
 
 # ---------- Enhanced context builder for Law LLM optimization ----------
 SECTION_PRIORITY = ["ruling", "issues", "facts", "header", "arguments", "body", "keywords"]
@@ -179,31 +1087,45 @@ def _dedupe_and_rank(docs: List[Dict], wants_ruling: bool, wants_facts: bool, wa
     ordered: List[Dict] = []
     seen_cases = set()
 
-    # First pass: take at most one section per *different case* to maximize case diversity
-    for sec in plan:
-        for d in buckets.get(sec, []):
-            cid = d["_case_id"]
-            if cid in seen_cases:
-                continue
-            ordered.append(d)
-            seen_cases.add(cid)
-            break  # only one per section initially
-
-    # Second pass: fill up to 5 with next best unique (case, section)
-    if len(ordered) < 5:
+    # For digests, allow multiple sections from same case for comprehensive coverage
+    if wants_digest:
+        # Take all available sections from top cases
         pool = [d for arr in buckets.values() for d in arr]
-        picked_keys = {(d["_case_id"], d["section"]) for d in ordered}
         pool.sort(key=lambda x: x.get("score", 0.0), reverse=True)
+        picked_keys = set()
         for d in pool:
             key = (d["_case_id"], d["section"])
-            if key in picked_keys:
-                continue
-            ordered.append(d)
-            picked_keys.add(key)
-            if len(ordered) >= 5:
-                break
+            if key not in picked_keys:
+                ordered.append(d)
+                picked_keys.add(key)
+                if len(ordered) >= 8:
+                    break
+    else:
+        # First pass: take at most one section per *different case* to maximize case diversity
+        for sec in plan:
+            for d in buckets.get(sec, []):
+                cid = d["_case_id"]
+                if cid in seen_cases:
+                    continue
+                ordered.append(d)
+                seen_cases.add(cid)
+                break  # only one per section initially
 
-    return ordered[:5]
+        # Second pass: fill up to 8 with next best unique (case, section)
+        if len(ordered) < 8:
+            pool = [d for arr in buckets.values() for d in arr]
+            picked_keys = {(d["_case_id"], d["section"]) for d in ordered}
+            pool.sort(key=lambda x: x.get("score", 0.0), reverse=True)
+            for d in pool:
+                key = (d["_case_id"], d["section"])
+                if key in picked_keys:
+                    continue
+                ordered.append(d)
+                picked_keys.add(key)
+                if len(ordered) >= 8:
+                    break
+
+    return ordered[:8]
 
 def _build_context(docs: List[Dict]) -> str:
     """
@@ -225,6 +1147,7 @@ def _build_context(docs: List[Dict]) -> str:
                 or d.get("gr_number")
                 or meta.get("gr_number")
                 or (d.get("url") or "").rsplit("/", 1)[-1]
+                or f"Document {item_index + 1}"
             )
         url   = _source(d)
         sec   = d.get("section", "body")
@@ -232,20 +1155,14 @@ def _build_context(docs: List[Dict]) -> str:
         
         # Clean up the text content using the same patterns as retriever
         if text:
-            # Remove metadata noise patterns
-            text = re.sub(r'\s*—\s*(?:body|header|facts|issues|ruling|arguments|keywords)\s*—\s*[^—\n]*', '', text)
-            # Remove specific "— N/A" patterns
-            text = re.sub(r'\s*—\s*N/A\s*', '', text)
-            # Remove any remaining "— [anything]" patterns at end of lines
-            text = re.sub(r'\s*—\s*[^—\n]*$', '', text, flags=re.MULTILINE)
-            # Remove other common noise patterns
-            text = re.sub(r'\s*—\s*[^—]*\s*—\s*[^—]*\s*$', '', text)
+            # Remove only specific metadata noise patterns, be more conservative
+            text = re.sub(r'\s*—\s*N/A\s*', '', text)  # Remove "— N/A" patterns
             # Remove "Supreme Court E-Library" boilerplate
             text = re.sub(r'Supreme Court E-Library[^—]*', '', text, flags=re.IGNORECASE)
-            # Clean up multiple spaces and newlines
+            # Clean up multiple spaces and newlines but preserve content
             text = re.sub(r'\s+', ' ', text).strip()
         
-        snippet = _normalize_ws(text) if text else ""
+        snippet = _normalize_ws(text, max_chars=8000) if text else ""
 
         # Force dispositive extraction for ruling sections, so generator can quote verbatim safely
         if sec == "ruling" and text:
@@ -253,8 +1170,8 @@ def _build_context(docs: List[Dict]) -> str:
             if extracted:
                 snippet = extracted
 
-        # Skip entries that still have no usable title or content
-        if not (title and title.strip()) or not (snippet and snippet.strip()):
+        # Skip entries that have neither title nor content
+        if not (title and title.strip()) and not (snippet and snippet.strip()):
             continue
         
         # Only show section if it's meaningful (not just "body")
@@ -292,64 +1209,7 @@ def _post_validate(ans: str, wants_facts: bool, wants_ruling: bool, wants_argume
     
     return ans
 
-# ---------- main entry ----------
-KEY_TERMS_NEED_JURIS = {
-    "g.r.", "gr no", "gr no.", "gr number", "sc gr",
-    "people v", "people vs", "vs.", "v.", "en banc", "supreme court",
-    "article ", "art. ", "section ", "sec. ", "rule ", "rule of court",
-    "civil code", "revised penal code", "rpc", "constitution",
-    "ruling", "decision", "wherefore", "so ordered", "facts", "issues",
-    "doctrine", "held", "ratio", "precedent", "jurisprudence", "cite",
-    "case", "cases", "court", "legal", "law", "supreme", "philippine", "philippines",
-    "2025", "2024", "2023", "2022", "2021", "2020", "2019", "2018", "2017", "2016",
-    "title", "parties", "ponente", "promulgation", "resolution", "petition", "respondent"
-}
-
-
-def _should_query_jurisprudence(query: str, history: List[Dict] = None) -> bool:
-    q = (query or "").lower()
-    if not q:
-        return False
-    
-    # Enhanced jurisprudence detection for Law LLM optimization
-    
-    # 1. Direct legal terms
-    for t in KEY_TERMS_NEED_JURIS:
-        if t in q:
-            return True
-    
-    # 2. Question patterns with legal context
-    if re.search(r"\b(what|when|whether|who|how|where|which)\b", q):
-        legal_context = any(term in q for term in ["case", "ruling", "decision", "court", "legal", "law", "supreme", "title", "parties"])
-        if legal_context:
-            return True
-    
-    # 3. Year patterns (likely asking about cases)
-    if re.search(r"\b(20\d{2})\b", q):
-        # Years are very likely case-related queries
-        return True
-    
-    # 4. Case citation patterns
-    if re.search(r"\b\w+\s+v\.?s?\.?\s+\w+", q):
-        return True
-    
-    # 5. Follow-up questions (likely about previous case context)
-    follow_up_indicators = ["that case", "the case", "this case", "the title", "the parties", "the ruling"]
-    if any(indicator in q for indicator in follow_up_indicators):
-        return True
-    
-    # 6. Very short follow-up questions (likely about previous context)
-    if len(q.strip()) <= 10 and q.strip() in ["where", "when", "who", "what", "how", "why"]:
-        return True
-    
-    # 6. Context-aware detection: if previous messages were about cases, this is likely a follow-up
-    if history:
-        recent_context = " ".join([msg.get("content", "") for msg in history[-3:] if msg.get("role") != "system"])
-        if any(term in recent_context.lower() for term in ["case", "ruling", "decision", "court", "legal", "law", "supreme"]):
-            # Previous context was legal, this is likely a follow-up
-            return True
-    
-    return False    
+# Removed intent heuristics; simplified flow uses only GR-number vs keyword path
 def _format_history(history: List[Dict]) -> str:
     if not history:
         return ""
@@ -368,78 +1228,133 @@ def _format_history(history: List[Dict]) -> str:
 def chat_with_law_bot(query: str, history: List[Dict] = None):
     global retriever
     
-    # LLM-based intent analysis
-    intent_analysis = intent_processor.analyze_intent(query, history)
-    print(f"🧠 Intent: {intent_analysis.intent.value} | Complexity: {intent_analysis.complexity.value} | Confidence: {intent_analysis.confidence:.2f}")
-    print(f"🎯 Routing: {intent_analysis.routing_decision}")
-    
-    # Enhanced jurisprudence detection for Law LLM optimization
-    use_juris = _should_query_jurisprudence(query, history)
-    print(f"🔍 Query: '{query}' | Jurisprudence: {use_juris}")
-    
-    # Derive intent flags early (used for retrieval and formatting)
-    wants_ruling, wants_facts, wants_issues, wants_arguments, wants_keywords, wants_digest = _intent(query)
+    # Simplified routing: always treat as jurisprudence; branch GR vs keywords
+    print(f"🔍 Query: '{query}'")
 
-    # Use intent-based routing with fallback to rule-based
-    if intent_analysis.routing_decision == "rule_based":
-        # Handle legal term definitions and simple queries
-        print("📚 Routing to rule-based responder")
-        return _handle_rule_based_query(query, history, intent_analysis)
-    elif intent_analysis.routing_decision == "jurisprudence" or use_juris:
-        if retriever is None:
+    if retriever is None:
             try:
                 from .retriever import LegalRetriever
-                retriever = LegalRetriever()
-                print("✅ Using Enhanced Legal Retriever")
+                base_retriever = LegalRetriever()
+                retriever = base_retriever
+                print("✅ Using Basic Legal Retriever")
             except ImportError as e:
                 print(f"❌ Failed to load Legal Retriever: {e}")
                 retriever = None
-        
-        try:
-            # Use reformulated queries if available, otherwise use original
-            search_queries = intent_analysis.reformulated_queries if intent_analysis.reformulated_queries else [query]
+
+    try:
+            # Simplified routing: GR-number exact search vs keyword top-3
+            gr_num = _extract_gr_number(query)
             docs = []
+            if gr_num:
+                # Exact GR search against title field
+                exact_queries = [
+                    f"G.R. No. {gr_num}",
+                    f"GR No. {gr_num}",
+                    gr_num,
+                ]
+                for qx in exact_queries:
+                    hits = _advanced_retrieve(retriever, qx, k=4, is_case_digest=True, history=history)
+                    docs.extend(hits)
+                    if len(docs) >= 4:
+                        break
+                wants_digest = True  # enforce digest format for GR path
+                # JSONL fallback if nothing useful found
+                if not docs:
+                    try:
+                        from .retriever import load_case_from_jsonl
+                        full_case = load_case_from_jsonl(gr_num)
+                        if full_case:
+                            return _generate_case_summary_from_jsonl(full_case, query, retriever, history)
+                    except Exception as e:
+                        print(f"⚠️ JSONL fallback failed for GR {gr_num}: {e}")
+            else:
+                # Keyword path: retrieve and return the top 3 unique cases
+                hits = _advanced_retrieve(retriever, query, k=12, is_case_digest=False, history=history)
+                # Pick top 3 unique cases by GR/title
+                picked = []
+                seen_keys = set()
+                for d in hits:
+                    key = (d.get("gr_number") or d.get("metadata", {}).get("gr_number") or d.get("title") or d.get("metadata", {}).get("title"))
+                    if key and key not in seen_keys:
+                        seen_keys.add(key)
+                        picked.append(d)
+                    if len(picked) >= 3:
+                        break
+                if picked:
+                    items = []
+                    for i, d in enumerate(picked, 1):
+                        title = _display_title(d)
+                        if title == "Untitled case":
+                            title = _title_from_query(query)
+                        gr_raw = d.get("gr_number") or d.get("metadata", {}).get("gr_number") or ""
+                        gr = _normalize_gr_display(str(gr_raw))
+                        case_type = (d.get("case_type") or d.get("metadata", {}).get("case_type") or "").strip()
+                        suffix = f" — {case_type}" if case_type else ""
+                        items.append(f"{i}. {title} ({gr}){suffix}")
+                    return "Here are the possible cases:\n" + "\n".join(items)
             
-            # Try each reformulated query
-            for search_query in search_queries[:2]:  # Limit to first 2 queries
-                search_docs = retriever.retrieve(search_query, k=8, is_case_digest=wants_digest)
-                docs.extend(search_docs)
-                if len(docs) >= 8:  # If we have enough results, break
-                    break
-            
-            # Remove duplicates based on source_url
-            seen_urls = set()
-            unique_docs = []
-            for doc in docs:
-                url = doc.get('source_url', '')
-                if url not in seen_urls:
-                    seen_urls.add(url)
-                    unique_docs.append(doc)
+            # Remove duplicates based on unique identifier (case_id + section)
+            print(f"🔍 Before deduplication: {len(docs)} documents")
+            # Debug: show what sections we have
+            sections = [doc.get('section', 'body') for doc in docs]
+            print(f"🔍 Available sections: {sections}")
+            print(f"🔍 Using digest deduplication: {wants_digest}")
+            if wants_digest:
+                # For digests, allow multiple sections from same case but remove exact duplicates
+                seen_content = set()
+                unique_docs = []
+                for doc in docs:
+                    content = doc.get('content', '') or doc.get('text', '')
+                    # Use a more specific fingerprint: first 200 chars + last 100 chars
+                    content_fingerprint = content[:200] + content[-100:] if len(content) > 300 else content
+                    content_hash = hash(content_fingerprint)
+                    if content_hash not in seen_content:
+                        seen_content.add(content_hash)
+                        unique_docs.append(doc)
+                        case_id = doc.get('metadata', {}).get('case_id', '') or doc.get('metadata', {}).get('gr_number', '')
+                        section = doc.get('section', 'body')
+                        print(f"  ✅ Added: {case_id}_{section}")
+                    else:
+                        case_id = doc.get('metadata', {}).get('case_id', '') or doc.get('metadata', {}).get('gr_number', '')
+                        section = doc.get('section', 'body')
+                        print(f"  ❌ Duplicate content: {case_id}_{section}")
+            else:
+                # For non-digests, use strict deduplication
+                seen_keys = set()
+                unique_docs = []
+                for doc in docs:
+                    case_id = doc.get('metadata', {}).get('case_id', '') or doc.get('metadata', {}).get('gr_number', '')
+                    section = doc.get('section', 'body')
+                    key = f"{case_id}_{section}"
+                    if key not in seen_keys:
+                        seen_keys.add(key)
+                        unique_docs.append(doc)
+                        print(f"  ✅ Added: {key}")
+                    else:
+                        print(f"  ❌ Duplicate: {key}")
             docs = unique_docs[:8]  # Limit to 8 results
+            print(f"🔍 After deduplication: {len(docs)} documents")
             if docs and len(docs) > 0:
                 print(f"🔍 Found {len(docs)} jurisprudence documents for query: '{query}'")
-                # We have jurisprudence results, proceed with enhanced processing
-                pass
+                # We have jurisprudence results, proceed to context building and generation
             else:
                 print(f"⚠️ No jurisprudence results for query: '{query}'")
                 # No jurisprudence results, provide helpful response
-                return "I couldn't find any 2025 cases in the current database. This could be because:\n• The cases haven't been processed yet\n• The database needs to be updated\n• There might be a configuration issue\n\nTry asking about a different year or a specific case topic."
-        except Exception as e:
+                return "I couldn't find matching cases in the current database. Try a different G.R. number or broader keywords."
+    except Exception as e:
             print(f"⚠️ Jurisprudence retrieval failed: {e}")
-            # Fall back to rule-based
-            msg = rb.answer(query)
-            if msg is not None:
-                return msg
-            return _chat_without_retrieval(query, history or [])
-    else:
-        # Non-jurisprudence query, try rule-based first
-        msg = rb.answer(query)
-        if msg is not None:
-            return msg
-        return _chat_without_retrieval(query, history or [])
+            return "I encountered a retrieval error. Please try again."
 
-    # intents already computed above
+    # Build context and generate answer (digest by default for GR path)
+    print(f"🔍 Processing {len(docs)} retrieved documents for context building")
+    wants_digest = True if gr_num else False
+    wants_ruling = False
+    wants_facts = False
+    wants_issues = False
+    wants_arguments = False
+    wants_keywords = False
     chosen = _dedupe_and_rank(docs, wants_ruling, wants_facts, wants_issues, wants_arguments, wants_keywords, wants_digest)
+    print(f"📋 Selected {len(chosen)} documents after deduplication and ranking")
 
     # Enhanced section prioritization for Law LLM optimization
     # Ensure at least one 'facts' chunk if user explicitly asked for facts
@@ -464,6 +1379,17 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
                 chosen[repl_idx] = best_arguments
             else:
                 chosen = [best_arguments]
+
+    # Ensure at least one 'ruling' chunk for digests (and generally helpful)
+    if (wants_digest or True) and not _has_section(chosen, "ruling"):
+        ruling_pool = [d for d in docs if (_ensure_section(d) == "ruling")]
+        if ruling_pool:
+            best_ruling = max(ruling_pool, key=lambda x: float(x.get("score") or 0.0))
+            if chosen:
+                repl_idx = min(range(len(chosen)), key=lambda i: float(chosen[i].get("score") or 0.0))
+                chosen[repl_idx] = best_ruling
+            else:
+                chosen = [best_ruling]
     
     # Ensure at least one 'keywords' chunk if user explicitly asked for keywords
     if wants_keywords and not _has_section(chosen, "keywords"):
@@ -477,6 +1403,12 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
                 chosen = [best_keywords]
 
     context = _build_context(chosen)
+    print(f"📝 Built context from {len(chosen)} documents: {len(context)} characters")
+    if context:
+        print(f"📄 Context preview: {context[:500]}...")
+        print(f"📄 Context sections: {[d.get('section', 'unknown') for d in chosen]}")
+    else:
+        print("⚠️ No context built from retrieved documents")
 
     # Enhanced missing-section flags to guide safe fallbacks
     must_note_absent_ruling = wants_ruling and (" — ruling — " not in context)
@@ -634,15 +1566,7 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
 
 
 
-def _handle_rule_based_query(query: str, history: List[Dict], intent_analysis: IntentAnalysis) -> str:
-    """Handle queries that should use rule-based responder"""
-    # Try rule-based responder first
-    msg = rb.answer(query)
-    if msg is not None:
-        return msg
-    
-    # Fallback to general response
-    return _chat_without_retrieval(query, history)
+# Removed rule-based path and intent types in simplified engine
 
 def _chat_without_retrieval(query: str, history: List[Dict]) -> str:
     from .generator import generate_response, generate_response_from_messages

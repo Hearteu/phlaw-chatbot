@@ -6,12 +6,24 @@ type Props = {
   className?: string;
 };
 
-// Minimal renderer for plain-text with basic structure:
+// Enhanced renderer for text with markdown-like formatting:
 // - Paragraphs split by blank lines
 // - Lines starting with "- " become bullet items
+// - **text** becomes bold text
 // - Single newlines preserved within paragraphs
 export function RichText({ content, className }: Props) {
   const paragraphs = (content || "").split(/\n\n+/);
+
+  // Function to render text with bold formatting
+  const renderTextWithBold = (text: string) => {
+    const parts = text.split(/(\*\*[^*]+\*\*)/g);
+    return parts.map((part, index) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={index}>{part.slice(2, -2)}</strong>;
+      }
+      return part;
+    });
+  };
 
   return (
     <div className={className}>
@@ -24,7 +36,7 @@ export function RichText({ content, className }: Props) {
           return (
             <ul key={idx} className="list-disc pl-5 space-y-1">
               {lines.map((line, i) => (
-                <li key={i}>{line.replace(/^\s*-\s+/, "")}</li>
+                <li key={i}>{renderTextWithBold(line.replace(/^\s*-\s+/, ""))}</li>
               ))}
             </ul>
           );
@@ -33,7 +45,7 @@ export function RichText({ content, className }: Props) {
         // Not a pure list: render as a paragraph preserving soft line breaks
         return (
           <p key={idx} className="whitespace-pre-line">
-            {para}
+            {renderTextWithBold(para)}
           </p>
         );
       })}

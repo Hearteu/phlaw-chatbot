@@ -1,53 +1,9 @@
-# generator.py — Enhanced Law LLM response generator with optimized performance
-import gc
-import os
+# generator.py — Enhanced Law LLM response generator with centralized model management
 import re
 from typing import Any, Dict, List, Optional
 
-import httpx
-import psutil
-from llama_cpp import Llama
-
-# =============================================================================
-# PERFORMANCE OPTIMIZATION CONFIGURATION
-# =============================================================================
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MODEL_PATH = os.path.join(BASE_DIR, "law-chat.Q4_K_M.gguf")
-
-# LLM configuration is now centralized in model_cache.py
-# This ensures consistent settings across the application
-
-# Rev21 Labs API configuration
-REV21_BASE_URL = os.getenv("REV21_BASE_URL", "https://ai-tools.rev21labs.com/api/v1")
-REV21_ENDPOINT_PATH = os.getenv("REV21_ENDPOINT_PATH", "/chat/completions")
-REV21_API_KEY = os.getenv("REV21_API_KEY", "")
-REV21_ENABLED = (os.getenv("REV21_ENABLED", "true").lower() not in {"0", "false", "no"}) and bool(REV21_API_KEY)
-
 # Import centralized model cache
-from .model_cache import clear_llm_cache, get_cached_llm
-
-
-def _monitor_memory() -> Dict[str, float]:
-    """Monitor system memory usage"""
-    try:
-        memory = psutil.virtual_memory()
-        return {
-            "total_gb": memory.total / (1024**3),
-            "available_gb": memory.available / (1024**3),
-            "used_percent": memory.percent,
-            "free_gb": memory.free / (1024**3)
-        }
-    except Exception:
-        return {"error": "Unable to monitor memory"}
-
-
-def _cleanup_memory():
-    """Force garbage collection and memory cleanup"""
-    try:
-        gc.collect()
-        print("🧹 Memory cleanup completed")
-    except Exception as e:
-        print(f"⚠️ Memory cleanup failed: {e}")
+from .model_cache import get_cached_llm
 
 
 def _clean_response_text(text: str) -> str:
@@ -67,166 +23,62 @@ def _clean_response_text(text: str) -> str:
     text = text.strip()
     
     # Remove multiple consecutive newlines
-    import re
     text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)
     
     return text
 
-def _ensure_llm() -> Llama:
+def _ensure_llm():
     """Get or create the LLM instance using centralized cache"""
-    llm = get_cached_llm()
-    if llm is None:
-        raise RuntimeError("Failed to load LLM model")
-    return llm
+    return get_cached_llm()
 
-def _call_rev21_prompt(prompt: str) -> Optional[str]:
-    """Call Rev21 Labs API with prompt"""
-    if not REV21_ENABLED:
-        return None
-    
-    url = f"{REV21_BASE_URL}{REV21_ENDPOINT_PATH}"
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "x-api-key": REV21_API_KEY,
-    }
-    payload = {
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 2000,
-        "temperature": 0.4,
-        "top_p": 0.9,
-    }
-
+def generate_response(prompt: str, _retry_count: int = 0) -> str:
+    """Generate response using local LLM with single retry guard"""
     try:
-        with httpx.Client(timeout=30.0) as client:
-            resp = client.post(url, headers=headers, json=payload)
-            if resp.status_code >= 400:
-                return None
-            data = resp.json()
-            text = _parse_rev21_response(data)
-            if isinstance(text, str) and text.strip():
-                text = re.sub(r"\s*\[/?INST\]\s*", " ", text)
-                print("LLM: REV21 (prompt)")
-                return text.strip()
-    except Exception:
-        return None
-    return None
-
-def _call_rev21_messages(messages: List[Dict[str, str]]) -> Optional[str]:
-    """Call Rev21 Labs API with message history"""
-    if not REV21_ENABLED:
-        return None
-    
-    url = f"{REV21_BASE_URL}{REV21_ENDPOINT_PATH}"
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "x-api-key": REV21_API_KEY,
-    }
-    payload = {
-        "messages": messages,
-        "max_tokens": 2000,
-        "temperature": 0.4,
-        "top_p": 0.9,
-    }
-
-    try:
-        with httpx.Client(timeout=30.0) as client:
-            resp = client.post(url, headers=headers, json=payload)
-            if resp.status_code >= 400:
-                return None
-            data = resp.json()
-            text = _parse_rev21_response(data)
-            if isinstance(text, str) and text.strip():
-                text = re.sub(r"\s*\[/?INST\]\s*", " ", text)
-                print("LLM: REV21 (messages)")
-                return text.strip()
-    except Exception:
-        return None
-    return None
-
-def _parse_rev21_response(data: Dict[str, Any]) -> Optional[str]:
-    """Parse Rev21 Labs API response"""
-    try:
-        if "choices" in data and len(data["choices"]) > 0:
-            choice = data["choices"][0]
-            if "message" in choice and "content" in choice["message"]:
-                return choice["message"]["content"]
-        return None
-    except Exception:
-        return None
-
-def generate_response(prompt: str) -> str:
-    """Generate response using Rev21 Labs API or local LLM fallback with enhanced memory management"""
-    # Check memory pressure before generation
-    from .model_cache import auto_cleanup_if_needed, memory_managed_operation
-
-    # Auto-cleanup if memory pressure is high
-    if auto_cleanup_if_needed():
-        print("🧹 Memory cleanup performed before generation")
-    
-    # Try Rev21 Labs API first
-    remote = _call_rev21_prompt(prompt)
-    if remote:
-        return remote
-    
-    # Fallback to local LLM with enhanced memory management
-    with memory_managed_operation():
-        try:
-            llm = _ensure_llm()
+        llm = _ensure_llm()
+        
+        # Use more conservative generation parameters to avoid CUDA tensor issues
+        response = llm(
+            prompt,
+            max_tokens=2048,  # Increased for better responses
+            temperature=0.3,
+            top_p=0.85,
+            repeat_penalty=1.1,
+            stop=["User:", "Human:", "Assistant:", "\n\n\n\n"],
+            top_k=20,
+            stream=False,  # Disable streaming to avoid memory issues
+            echo=False,    # Don't echo the prompt
+            tfs_z=1.0,     # Add tensor fusion parameter for stability
+        )
+        
+        if response and "choices" in response and len(response["choices"]) > 0:
+            print("LLM: law-chat (prompt)")
+            raw_text = response["choices"][0]["text"]
+            cleaned_text = _clean_response_text(raw_text)
+            return cleaned_text
+        else:
+            return "I apologize, but I was unable to generate a response."
             
-            # Use more conservative generation parameters to avoid CUDA tensor issues
-            response = llm(
-                prompt,
-                max_tokens=1024,  # Increased for better responses
-                temperature=0.3,
-                top_p=0.85,
-                repeat_penalty=1.1,
-                stop=["User:", "Human:", "Assistant:", "\n\n\n\n"],
-                top_k=20,
-                stream=False,  # Disable streaming to avoid memory issues
-                echo=False,    # Don't echo the prompt
-                tfs_z=1.0,     # Add tensor fusion parameter for stability
-            )
-            
-            if response and "choices" in response and len(response["choices"]) > 0:
-                print("LLM: law-chat (prompt)")
-                raw_text = response["choices"][0]["text"]
-                cleaned_text = _clean_response_text(raw_text)
-                return cleaned_text
-            else:
-                return "I apologize, but I was unable to generate a response."
-                
-        except MemoryError as e:
-            print(f"❌ Memory error in LLM generation: {e}")
-            _cleanup_memory()
-            return "I apologize, but I'm experiencing memory issues. Please try a simpler question."
-        except Exception as e:
-            print(f"❌ Local LLM generation failed: {e}")
-            # Check if this is a persistent error that shouldn't be retried
-            error_str = str(e).lower()
-            if any(keyword in error_str for keyword in ["access violation", "sampler", "ggml_assert", "tensor", "cuda"]):
-                print("🔄 Detected persistent CUDA/tensor error, clearing cache and using fallback...")
-                clear_llm_cache()
-                return "I apologize, but I'm experiencing technical difficulties. Please try a simpler question or try again later."
-            
-            # Try to clear the LLM instance and retry once for other errors
-            try:
-                clear_llm_cache()
-                print("🔄 Clearing LLM instance and retrying...")
-                return generate_response(prompt)
-            except Exception as e2:
-                print(f"❌ Retry also failed: {e2}")
-                return "I apologize, but I encountered a technical error. Please try again later."
+    except MemoryError as e:
+        print(f"❌ Memory error in LLM generation: {e}")
+        return "I apologize, but I'm experiencing memory issues. Please try a simpler question."
+    except Exception as e:
+        print(f"❌ Local LLM generation failed: {e}")
+        # Check if this is a persistent error that shouldn't be retried
+        error_str = str(e).lower()
+        if any(keyword in error_str for keyword in ["access violation", "sampler", "ggml_assert", "tensor", "cuda"]):
+            print("🔄 Detected persistent CUDA/tensor error, using fallback...")
+            return "I apologize, but I'm experiencing technical difficulties. Please try a simpler question or try again later."
+        
+        # Single retry with guard to prevent infinite recursion
+        if _retry_count < 1:
+            print("🔄 Retrying generation...")
+            return generate_response(prompt, _retry_count + 1)
+        else:
+            print("❌ Retry limit reached")
+            return "I apologize, but I encountered a technical error. Please try again later."
 
-def generate_response_from_messages(messages: List[Dict[str, str]]) -> str:
-    """Generate response from message history using Rev21 Labs API or local LLM fallback"""
-    # Try Rev21 Labs API first
-    remote = _call_rev21_messages(messages)
-    if remote:
-        return remote
-    
-    # Fallback to local LLM with improved error handling
+def generate_response_from_messages(messages: List[Dict[str, str]], _retry_count: int = 0) -> str:
+    """Generate response from message history using local LLM with single retry guard"""
     try:
         llm = _ensure_llm()
         
@@ -236,7 +88,7 @@ def generate_response_from_messages(messages: List[Dict[str, str]]) -> str:
         # Use more conservative generation parameters to avoid CUDA tensor issues
         response = llm(
             prompt,
-            max_tokens=1024,  # Increased for better responses
+            max_tokens=2048,  # Increased for better responses
             temperature=0.3,
             top_p=0.85,
             repeat_penalty=1.1,
@@ -257,31 +109,22 @@ def generate_response_from_messages(messages: List[Dict[str, str]]) -> str:
             
     except MemoryError as e:
         print(f"❌ Memory error in LLM generation: {e}")
-        memory_info = _monitor_memory()
-        print(f"📊 Memory status: {memory_info}")
-        _cleanup_memory()
         return "I apologize, but I'm experiencing memory issues. Please try a simpler question."
     except Exception as e:
         print(f"❌ Local LLM generation failed: {e}")
-        memory_info = _monitor_memory()
-        print(f"📊 Memory status: {memory_info}")
         
         # Check if this is a persistent error that shouldn't be retried
         error_str = str(e).lower()
         if any(keyword in error_str for keyword in ["access violation", "sampler", "ggml_assert", "tensor", "cuda"]):
-            print("🔄 Detected persistent CUDA/tensor error, clearing cache and using fallback...")
-            _cleanup_memory()
-            clear_llm_cache()
+            print("🔄 Detected persistent CUDA/tensor error, using fallback...")
             return "I apologize, but I'm experiencing technical difficulties. Please try a simpler question or try again later."
         
-        # Try to clear the LLM instance and retry once for other errors
-        try:
-            _cleanup_memory()
-            clear_llm_cache()
-            print("🔄 Clearing LLM instance and retrying...")
-            return generate_response_from_messages(messages)
-        except Exception as e2:
-            print(f"❌ Retry also failed: {e2}")
+        # Single retry with guard to prevent infinite recursion
+        if _retry_count < 1:
+            print("🔄 Retrying generation...")
+            return generate_response_from_messages(messages, _retry_count + 1)
+        else:
+            print("❌ Retry limit reached")
             return "I apologize, but I encountered a technical error. Please try again later."
 
 def _messages_to_prompt(messages: List[Dict[str, str]]) -> str:
@@ -302,7 +145,7 @@ def _messages_to_prompt(messages: List[Dict[str, str]]) -> str:
     return "\n\n".join(prompt_parts) + "\n\nAssistant:"
 
 def generate_legal_response(prompt: str, context: str = "", is_case_digest: bool = False) -> str:
-    """Generate legal response with optimized prompt construction"""
+    """Generate legal response with optimized prompt construction for simplified two-path logic"""
     # Enhanced legal system prompt with case digest support
     if is_case_digest:
         legal_system_prompt = """You are PHLaw-Chatbot's Case Digest Writer. Produce Philippine Supreme Court case digests that are strictly grounded in the retrieved documents. Match the user's requested scope (full digest or specific section only). Never invent facts. If something isn't in the sources, write: "Not stated in sources."
@@ -358,7 +201,18 @@ G. STYLE & SAFETY
 - No speculation. No "as an AI" disclaimers. If information is missing, write "Not stated in sources."
 - If sources conflict, prefer Supreme Court final holding; briefly note the conflict."""
     else:
-        legal_system_prompt = """You are a Philippine legal assistant. Analyze the provided sources and answer questions based on that information. Provide complete, accurate responses with proper citations. If the sources contain relevant information, use it to answer the question. If the sources don't contain relevant information, say 'The sources don't contain information about this topic.'"""
+        legal_system_prompt = """You are a Philippine legal assistant. Analyze the provided sources and answer questions based on that information. 
+
+For keyword queries, present the top 3 most relevant cases in this format and include the case type when available:
+"Here are the possible cases:
+
+1. [Case Title] (G.R. No. [number]) — [Case type]
+2. [Case Title] (G.R. No. [number]) — [Case type]
+3. [Case Title] (G.R. No. [number]) — [Case type]"
+
+If a case type is not available for a case, omit the "— [Case type]" part for that line.
+
+Provide complete, accurate responses with proper citations. If the sources contain relevant information, use it to answer the question. If the sources don't contain relevant information, say 'The sources don't contain information about this topic.'"""
     
     if context:
         # Include context in the prompt
@@ -366,12 +220,7 @@ G. STYLE & SAFETY
     else:
         enhanced_prompt = f"System: {legal_system_prompt}\n\nUser: {prompt}\n\nAssistant:"
     
-    # Try Rev21 Labs API first
-    remote = _call_rev21_prompt(enhanced_prompt)
-    if remote:
-        return remote
-    
-    # Fallback to local LLM
+    # Use local LLM
     try:
         llm = _ensure_llm()
         response = llm(
@@ -401,8 +250,11 @@ def get_llm_info() -> Dict[str, Any]:
     """Get LLM model information"""
     try:
         llm = _ensure_llm()
+        if llm is None:
+            return {"error": "LLM not available"}
+        
         return {
-            "model_path": MODEL_PATH,
+            "model_path": getattr(llm, "model_path", "Unknown"),
             "context_length": getattr(llm, "n_ctx", "Unknown"),
             "gpu_layers": getattr(llm, "n_gpu_layers", "Unknown"),
             "threads": getattr(llm, "n_threads", "Unknown"),

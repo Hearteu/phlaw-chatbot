@@ -1,3 +1,5 @@
+import os
+
 from django.apps import AppConfig
 
 
@@ -6,22 +8,19 @@ class ChatbotConfig(AppConfig):
     name = 'chatbot'
     
     def ready(self):
-        """Initialize the LLM model when Django starts"""
-        # Only load the model once when Django starts
+        """Full model load at Django startup (runs once under autoreloader)."""
+        if os.environ.get("RUN_MAIN") != "true":
+            return
         try:
-            from .generator import _ensure_llm
-            print("[LOADING] Pre-loading LLM model for Django...")
-            llm = _ensure_llm()
-            
-            # Test the model with a simple query
-            print("[TESTING] Testing model functionality...")
-            test_output = llm("Test", max_tokens=5, temperature=0.1)
-            if test_output and "choices" in test_output:
-                print("[SUCCESS] LLM model pre-loaded and tested successfully for Django")
-            else:
-                print("[WARNING] LLM model loaded but test failed")
-                
+            from .model_cache import (get_cached_bm25,
+                                      get_cached_cross_encoder,
+                                      get_cached_embedding_model,
+                                      get_cached_llm)
+            print("[LOADING] Loading models at startup...")
+            get_cached_llm()
+            get_cached_embedding_model()
+            get_cached_cross_encoder()
+            get_cached_bm25()
+            print("[SUCCESS] Models loaded at startup")
         except Exception as e:
-            print(f"[WARNING] Could not pre-load LLM model: {e}")
-            print("   Model will be loaded on first request")
-            print("   This is normal for the first startup")
+            print(f"[WARNING] Startup model load failed: {e}")

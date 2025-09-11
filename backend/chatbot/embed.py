@@ -1,16 +1,13 @@
-# embed.py — Optimized batched, section-aware embedding + Qdrant upsert for 21k cases
-# Optimizations:
-# - Increased chunk size from 1200 to 2000 chars for better context
-# - Optimized overlap from 150 to 200 chars (10% ratio)
-# - Increased batch sizes for better throughput (32 embed, 1024 upsert)
-# - Legal document boundary-aware chunking (respects WHEREFORE, ISSUES, FACTS, etc.)
-# - Improved header chunk size from 1200 to 2000 chars
+# embed.py — Minimal embedding pipeline for simplified GR-number vs keyword logic
+# Keep only essential JSONL pipeline, simple overlapping chunking, and concise metadata
 import gzip
 import json
 import os
 import re
+import time
 import unicodedata
 import uuid
+from collections import defaultdict
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import torch
@@ -29,22 +26,18 @@ QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "jurisprudence")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "Stern5497/sbert-legal-xlm-roberta-base")
 VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", 768))
 
-# Source data
-DATA_FORMAT = os.getenv("DATA_FORMAT", "jsonl").lower()   # "txt" | "jsonl"
-DATA_DIR    = os.getenv("DATA_DIR", "backend/jurisprudence")       # for txt mode
-DATA_FILE   = os.getenv("DATA_FILE", "backend/data/cases.jsonl.gz")         # for jsonl mode
+# Source data (JSONL only)
+DATA_FILE   = os.getenv("DATA_FILE", "backend/data/cases.jsonl.gz")
 # Optional year range filter when processing JSONL
 YEAR_START  = int(os.getenv("YEAR_START", 2005))
-YEAR_END    = int(os.getenv("YEAR_END", 2006))
+YEAR_END    = int(os.getenv("YEAR_END", 2005))
 
-# Cache (for txt mode; list of processed filepaths)
-CACHE_PATH = os.getenv("EMBED_CACHE_PATH", "backend/backend/chatbot/embedded_cache.json")
 
-# Chunking/throughput - Optimized for 21k cases
-CHUNK_CHARS   = int(os.getenv("CHUNK_CHARS", 2000))      # Increased from 1200 for better context
-OVERLAP_CHARS = int(os.getenv("OVERLAP_CHARS", 200))     # Optimized overlap ratio (10%)
-BATCH_SIZE    = int(os.getenv("EMBED_BATCH_SIZE", 32))   # Increased from 16 for better throughput
-UPSERT_BATCH  = int(os.getenv("UPSERT_BATCH", 1024))     # Increased from 512 for efficiency
+# Chunking/throughput
+CHUNK_CHARS   = int(os.getenv("CHUNK_CHARS", 2000))
+OVERLAP_CHARS = int(os.getenv("OVERLAP_CHARS", 200))
+BATCH_SIZE    = int(os.getenv("EMBED_BATCH_SIZE", 32))
+UPSERT_BATCH  = int(os.getenv("UPSERT_BATCH", 1024))
 
 # -----------------------------
 # JSONL retrieval helper
@@ -76,19 +69,7 @@ if not client.collection_exists(QDRANT_COLLECTION):
     )
 print(f"✅ Qdrant collection ready: {QDRANT_COLLECTION}")
 
-# -----------------------------
-# Cache (txt mode: list of processed filepaths)
-# -----------------------------
-os.makedirs(os.path.dirname(CACHE_PATH), exist_ok=True)
-if os.path.exists(CACHE_PATH):
-    with open(CACHE_PATH, "r", encoding="utf-8") as f:
-        embedded_cache = set(json.load(f) or [])
-else:
-    embedded_cache = set()
-
-def save_cache():
-    with open(CACHE_PATH, "w", encoding="utf-8") as f:
-        json.dump(sorted(embedded_cache), f, indent=2)
+# (TXT mode removed)
 
 # -----------------------------
 # Helpers
@@ -114,9 +95,70 @@ ADDRESS_NOISE_TERMS = (
     "philippines",
 )
 GR_BLOCK_RE = re.compile(
-    r"G\.R\.\s+No(?:s)?\.?\s*([0-9][0-9\-*,\s]+)",
+    r"G\.R\.\s+No(?:s)?\.\?\s*([0-9][0-9\-*,\s]+)",
     re.IGNORECASE,
 )
+
+# -----------------------------
+# Lightweight case-type detection
+# -----------------------------
+CASE_TYPE_PATTERNS: Dict[str, re.Pattern] = {
+    "annulment": re.compile(r"\bannulment\b|\bnullity of marriage\b|\bvoid marriage\b", re.IGNORECASE),
+    "habeas_corpus": re.compile(r"\bhabeas\s+corpus\b", re.IGNORECASE),
+    "mandamus": re.compile(r"\bmandamus\b", re.IGNORECASE),
+    "prohibition": re.compile(r"\bprohibition\b", re.IGNORECASE),
+    "certiorari": re.compile(r"\bcertiorari\b", re.IGNORECASE),
+    "election": re.compile(r"\belection\b|\bcomelec\b|\belectoral\b", re.IGNORECASE),
+    "labor": re.compile(r"\blabor\b|\bill?egal\s+dismissal\b|\bnlrc\b", re.IGNORECASE),
+    "criminal": re.compile(r"\bpeople of the philippines\b|\bcriminal\b|\binformation\b", re.IGNORECASE),
+    "estafa": re.compile(r"\bestafa\b", re.IGNORECASE),
+    "murder": re.compile(r"\bmurder\b", re.IGNORECASE),
+    "homicide": re.compile(r"\bhomicide\b", re.IGNORECASE),
+    "rape": re.compile(r"\brape\b", re.IGNORECASE),
+    "robbery": re.compile(r"\brobbery\b", re.IGNORECASE),
+    "theft": re.compile(r"\btheft\b", re.IGNORECASE),
+    "tax": re.compile(r"\btax\b|\bbir\b|\btc\b(?![a-z])", re.IGNORECASE),
+    "administrative": re.compile(r"\badministrative\b|\bombudsman\b|\bcsc\b", re.IGNORECASE),
+    "agrarian": re.compile(r"\bagrarian\b|\bdar\b|\bcarp\b", re.IGNORECASE),
+    "ip": re.compile(r"\bintellectual\s+property\b|\btrademark\b|\bpatent\b|\bcopyright\b", re.IGNORECASE),
+    "family": re.compile(r"\bfamily\b|\bchild custody\b|\badoption\b|\bsupport\b", re.IGNORECASE),
+    "contract": re.compile(r"\bcontract\b|\bspecific\s+performance\b|\brescission\b", re.IGNORECASE),
+    "torts": re.compile(r"\btort\b|\bdamages\b|\bnegligence\b", re.IGNORECASE),
+}
+
+def derive_case_type(rec: Dict[str, Any]) -> Tuple[Optional[str], List[str]]:
+    """Infer a lightweight case_type and tags from header/body keywords.
+    Returns (primary_type, tags).
+    """
+    sections = rec.get("sections") or {}
+    header = sections.get("header") or ""
+    body = sections.get("body") or rec.get("clean_text") or ""
+    # Limit scanned text for performance
+    text = f"{header}\n{body[:4000]}"
+
+    tags: List[str] = []
+    for label, pattern in CASE_TYPE_PATTERNS.items():
+        try:
+            if pattern.search(text):
+                tags.append(label)
+        except Exception:
+            continue
+
+    primary: Optional[str] = None
+    if tags:
+        # Prefer specific over generic when multiple match
+        specificity_order = [
+            "annulment", "habeas_corpus", "mandamus", "prohibition", "certiorari",
+            "election", "labor", "estafa", "murder", "homicide", "rape", "robbery",
+            "theft", "tax", "administrative", "agrarian", "ip", "family", "contract",
+            "torts", "criminal",
+        ]
+        for label in specificity_order:
+            if label in tags:
+                primary = label
+                break
+
+    return primary, tags
 
 def find_ruling(text: str) -> Tuple[int, int]:
     """Return (start, end) of the ruling section, or (-1, -1) if not found."""
@@ -142,9 +184,14 @@ def _clean_library_noise(s: str) -> str:
     )
 
 def derive_case_title(rec: Dict[str, Any]) -> str:
-    """Derive a clean case title from record fields.
-    Preference order: explicit case_title -> parsed header -> provided title -> filename.
-    Removes common library boilerplate and trims around G.R. markers.
+    """Derive a full case title (complete parties), preferring explicit captions.
+    Preference order:
+      1) explicit case_title/case_name
+      2) strongest caption line in header containing v./vs./versus (choose longest reasonable)
+      3) strongest caption line in early body
+      4) regex-parsed title line from header
+      5) provided title
+      6) filename/id/source_url
     """
     # 1) Explicit field
     title = (rec.get("case_title") or rec.get("case_name") or "").strip()
@@ -155,19 +202,30 @@ def derive_case_title(rec: Dict[str, Any]) -> str:
         l = line.lower()
         return any(term in l for term in ADDRESS_NOISE_TERMS)
 
+    def pick_strongest_caption(lines: List[str]) -> Optional[str]:
+        candidates: List[str] = []
+        for line in lines:
+            s = line.strip()
+            if not s:
+                continue
+            if is_address_noise(s):
+                continue
+            if CASE_CAPTION_STRONG_RE.match(s) or CASE_VS_RE.search(s):
+                candidates.append(s)
+        if not candidates:
+            return None
+        # Return the longest up to a soft cap (avoid absurd lines)
+        candidates.sort(key=lambda x: len(x), reverse=True)
+        best = candidates[0]
+        return best if len(best) <= 240 else best[:240].rstrip()
+
     # 2) Parse from header section
     sections = rec.get("sections") or {}
     header = _clean_library_noise(sections.get("header") or "")
     if header:
-        # 2a) Prefer explicit case caption patterns with v./vs.
-        for line in header.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            if is_address_noise(line):
-                continue
-            if CASE_CAPTION_STRONG_RE.match(line) or CASE_VS_RE.search(line):
-                return line
+        strongest = pick_strongest_caption(header.splitlines())
+        if strongest:
+            return strongest
         m = CASE_TITLE_LINE_RE.search(header)
         if m and m.group("title"):
             return m.group("title").strip()
@@ -176,28 +234,22 @@ def derive_case_title(rec: Dict[str, Any]) -> str:
             line = line.strip()
             if not line:
                 continue
-            if "G.R." in line or line.lower().startswith(("promulgated", "decided")):
-                break
             if len(line) > 3 and not is_address_noise(line):
                 return line
 
-    # 2b) As a last resort, scan the beginning of body for a case caption
+    # 3) Scan the beginning of body for a case caption
     body = _clean_library_noise(sections.get("body") or rec.get("clean_text") or "")
     if body:
-        start = body[:1200]
-        for line in start.splitlines():
-            line = line.strip()
-            if is_address_noise(line):
-                continue
-            if CASE_CAPTION_STRONG_RE.match(line) or CASE_VS_RE.search(line):
-                return line
+        strongest_body = pick_strongest_caption(body[:2000].splitlines())
+        if strongest_body:
+            return strongest_body
 
-    # 3) Provided title, cleaned
+    # 4) Provided title, cleaned
     raw_title = _clean_library_noise(rec.get("title") or "").strip()
     if raw_title and not raw_title.lower().startswith("supreme court e-library"):
         return raw_title
 
-    # 4) Filename fallback
+    # 5) Filename fallback
     filename = (rec.get("filename") or rec.get("id") or rec.get("source_url") or "").strip()
     return filename or "Untitled case"
 
@@ -231,60 +283,8 @@ def derive_gr_numbers(rec: Dict[str, Any]) -> Tuple[Optional[str], List[str]]:
     primary = existing or (found[0] if found else None)
     return primary, found
 
-def chunkify(s: str, size: int, overlap: int) -> Iterable[str]:
-    """Optimized chunker with legal document boundary awareness."""
-    if not s:
-        return
-    n = len(s)
-    start = 0
-    step = max(1, size - overlap)
-    
-    while start < n:
-        end = min(n, start + size)
-        
-        if end >= n:
-            yield s[start:end]
-            break
-        
-        # Try to break at legal document boundaries
-        chunk = s[start:end]
-        
-        # Priority 1: Legal section boundaries (WHEREFORE, ISSUES, FACTS, etc.)
-        legal_boundaries = ['WHEREFORE', 'ISSUES', 'FACTS', 'RULING', 'DECISION', 'ARGUMENTS']
-        best_boundary = -1
-        for boundary in legal_boundaries:
-            boundary_pos = chunk.rfind(boundary)
-            if boundary_pos > size * 0.6:  # If boundary is in last 40% of chunk
-                best_boundary = max(best_boundary, boundary_pos)
-        
-        # Priority 2: Sentence boundary
-        if best_boundary == -1:
-            last_period = chunk.rfind('.')
-            if last_period > size * 0.7:  # If period is in last 30% of chunk
-                best_boundary = last_period + 1
-        
-        # Priority 3: Paragraph boundary
-        if best_boundary == -1:
-            last_newline = chunk.rfind('\n\n')
-            if last_newline > size * 0.8:  # If double newline is in last 20% of chunk
-                best_boundary = last_newline + 2
-        
-        # Priority 4: Single newline
-        if best_boundary == -1:
-            last_newline = chunk.rfind('\n')
-            if last_newline > size * 0.8:  # If newline is in last 20% of chunk
-                best_boundary = last_newline + 1
-        
-        # Apply the best boundary found
-        if best_boundary > 0:
-            end = start + best_boundary
-        
-        yield s[start:end]
-        start = end - overlap
 
-def read_text(path: str) -> str:
-    with open(path, "r", encoding="utf-8") as f:
-        return f.read()
+# (TXT readers removed)
 
 # -----------------------------
 # JSONL readers (jsonl mode)
@@ -340,80 +340,38 @@ def text_from_record(rec: Dict[str, Any]) -> str:
     return " ".join(p for p in parts if p).strip()
 
 def record_meta(rec):
-    # Enhanced year extraction with multiple fallbacks
-    y = None
-    
-    # 1) Try top-level year field first (for enhanced dataset)
-    if 'year' in rec and rec['year']:
-        y = int(rec['year']) if isinstance(rec['year'], (int, str)) and str(rec['year']).isdigit() else None
-    
-    # 2) Try promulgation_year
-    if y is None:
-        yh = rec.get("promulgation_year")
-        if isinstance(yh, int) and yh > 0:
-            y = yh
-        elif isinstance(yh, str) and yh.isdigit():
-            y = int(yh)
-    
-    # 3) Try promulgation_date
-    if y is None:
+    """Minimal metadata for retrieval and display.
+    Ensures normalized gr_number and a clean title for both GR and keyword paths.
+    """
+    # Year extraction with fallbacks
+    y = rec.get("promulgation_year")
+    if not isinstance(y, int):
         d = rec.get("promulgation_date")
         if isinstance(d, str) and len(d) >= 4 and d[:4].isdigit():
-            y = int(d[:4])
-    
-    # 4) Try to extract from source_url or other fields
-    if y is None:
-        # Look for year patterns in various fields
-        for field in ['source_url', 'title', 'case_title']:
-            if field in rec and rec[field]:
-                year_match = re.search(r'\b(19|20)\d{2}\b', str(rec[field]))
-                if year_match:
-                    y = int(year_match.group())
-                    break
-    
-    # 5) Final fallback
-    if y is None:
-        y = 0
+            try:
+                y = int(d[:4])
+            except Exception:
+                y = None
 
-    # Enhanced metadata extraction
-    ponente = rec.get("ponente") or rec.get("author") or rec.get("justice")
-    
-    # Division handling with better fallbacks
-    division = rec.get("division") or rec.get("court_division")
-    if not division and isinstance(rec.get("en_banc"), (bool, int)):
-        division = "En Banc" if bool(rec.get("en_banc")) else None
-    
-    # G.R. number handling
     primary_gr, all_grs = derive_gr_numbers(rec)
-    
-    # Enhanced title extraction
     title = derive_case_title(rec)
-    
-    # Quality metrics
-    quality_metrics = rec.get("quality_metrics", {})
+    case_type, case_tags = derive_case_type(rec)
     
     return {
         "gr_number": primary_gr,
         "gr_numbers": all_grs or None,
         "title": title,
-        "year": y,  # Keep for backward compatibility
-        "promulgation_year": y,  # Add the field that Qdrant expects
+        "case_type": case_type,
+        "case_type_tags": case_tags or None,
+        "promulgation_year": y if isinstance(y, int) else None,
         "promulgation_date": rec.get("promulgation_date"),
         "source_url": rec.get("source_url"),
-        "ponente": ponente,
-        "division": division,
-        "en_banc": bool(rec.get("en_banc")) if rec.get("en_banc") is not None else None,
+        # Optional commonly present fields (kept if available)
+        "ponente": rec.get("ponente"),
+        "division": rec.get("division"),
         "sectioned": True,
-        # Case classification
-        "case_type": rec.get("case_type", "regular"),
-        "case_subtype": rec.get("case_subtype"),
-        "is_administrative": rec.get("is_administrative", False),
-        "is_regular_case": rec.get("is_regular_case", True),
-        # Quality metrics
-        "quality_score": quality_metrics.get("sections_count", 0),
-        "has_ruling": quality_metrics.get("has_ruling", False),
-        "has_facts": quality_metrics.get("has_facts", False),
-        "has_issues": quality_metrics.get("has_issues", False),
+        "metadata_version": "minimal-1",
+        "extraction_timestamp": int(time.time()),
     }
 
 
@@ -421,7 +379,6 @@ def record_meta(rec):
 # Model (load once) - Use centralized cached model
 # -----------------------------
 print(f"📥 Loading model: {EMBED_MODEL}")
-# Import the centralized cached model function
 import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -480,14 +437,24 @@ def make_points(
         payloads.append({**meta, "section": "header"})
         ids.append(str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc_id}#header")))
 
-    # BODY (everything except ruling), normalized
-    # OPTION: Skip body chunks to reduce storage and use JSONL for full text
-    # Uncomment the next 4 lines to enable body chunking:
-    # body_text = (text[:max(0, rs - 1)] + " " + text[re_:]).strip() if rs != -1 else text
-    # for idx, chunk in enumerate(chunkify(body_text, CHUNK_CHARS, OVERLAP_CHARS), 1):
-    #     texts.append(chunk)
-    #     payloads.append({**meta, "section": "body", "chunk_index": idx})
-    #     ids.append(str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc_id}#body-{idx:03d}")))
+    # BODY: straightforward overlapping chunks sized for the embed model
+    body_text = (text[:max(0, rs - 1)] + " " + text[re_:]).strip() if rs != -1 else text
+    if body_text:
+        n = len(body_text)
+        start = 0
+        step = max(1, CHUNK_CHARS - OVERLAP_CHARS)
+        chunk_index = 0
+        while start < n:
+            end = min(n, start + CHUNK_CHARS)
+            chunk = body_text[start:end].strip()
+            if chunk:
+                chunk_index += 1
+                texts.append(chunk)
+                payloads.append({**meta, "section": "body", "chunk_index": chunk_index})
+                ids.append(str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc_id}#body-{chunk_index:03d}")))
+            if end >= n:
+                break
+            start = end - OVERLAP_CHARS
     
     # Store full text reference for JSONL retrieval
     if rs != -1:
@@ -531,63 +498,13 @@ def upsert_points(points: List[PointStruct]):
         batch = points[i : i + UPSERT_BATCH]
         client.upsert(collection_name=QDRANT_COLLECTION, points=batch)
 
-# -----------------------------
-# Main ingestion
-# -----------------------------
-def process_dir():
-    """
-    Legacy TXT folder layout:
-      DATA_DIR/
-        2005/
-          jan2005_1.txt
-          ...
-        2006/
-          ...
-    Uses embedded_cache (filepaths) to avoid re-embedding the same files.
-    """
-    total_new = 0
-    for year in sorted(os.listdir(DATA_DIR)):
-        year_path = os.path.join(DATA_DIR, year)
-        if not os.path.isdir(year_path) or not year.isdigit():
-            continue
+# Multiple collection routing removed for simplicity
 
-        print(f"\n📂 Year {year} — scanning {year_path}")
-        files = [f for f in os.listdir(year_path) if f.endswith(".txt")]
-        print(f"🔍 Found {len(files)} .txt files")
+# Hierarchical/multi-collection upsert removed. Using single collection via upsert_points.
 
-        pending_points: List[PointStruct] = []
-        added_this_year = 0
+# Advanced legal chunking path removed
 
-        for filename in files:
-            filepath = os.path.join(year_path, filename)
-            if filepath in embedded_cache:
-                continue
-
-            try:
-                text = read_text(filepath)
-                meta = {"filename": filename, "year": int(year), "sectioned": False}
-                doc_id = str(uuid.uuid5(uuid.NAMESPACE_URL, filepath))
-                pts = make_points(doc_id, text, meta)
-                pending_points.extend(pts)
-                embedded_cache.add(filepath)
-                added_this_year += 1
-            except Exception as e:
-                print(f"⚠️  Skipping (read/encode error): {filepath} — {e}")
-
-            if len(pending_points) >= UPSERT_BATCH:
-                upsert_points(pending_points)
-                pending_points.clear()
-                save_cache()
-
-        if pending_points:
-            upsert_points(pending_points)
-            pending_points.clear()
-            save_cache()
-
-        print(f"🚀 Uploaded {added_this_year} new docs from {year}")
-        total_new += added_this_year
-
-    print(f"\n🎉 Done. New docs embedded: {total_new}")
+# (TXT process_dir removed)
 
 def process_jsonl():
     """
@@ -602,6 +519,7 @@ def process_jsonl():
 
     pending_points: List[PointStruct] = []
     added = 0
+    year_stats = defaultdict(int)  # Track cases per year
 
     for rec in iter_cases(DATA_FILE):
         try:
@@ -623,6 +541,10 @@ def process_jsonl():
                         y = None
             if isinstance(y, int) and (y < YEAR_START or y > YEAR_END):
                 continue
+
+            # Track year statistics
+            if isinstance(y, int):
+                year_stats[y] += 1
 
             meta = record_meta(rec)
 
@@ -659,7 +581,7 @@ def process_jsonl():
             }
 
             for key, value in s.items():
-                if not value:
+                if not value or not isinstance(key, str):
                     continue
                 canonical = alias_to_canonical.get(key.lower())
                 if not canonical:
@@ -667,6 +589,7 @@ def process_jsonl():
                 # Prefer first-found content per canonical name
                 extra.setdefault(canonical, value)
 
+            # Create points using straightforward chunking
             pts = make_points(doc_id, full_text, meta, extra_sections=extra)
             pending_points.extend(pts)
             added += 1
@@ -682,12 +605,13 @@ def process_jsonl():
     if pending_points:
         upsert_points(pending_points)
 
-    print(f"🚀 Uploaded {added} JSONL records")
+    # Print year statistics
+    print(f"\n📊 Year Statistics:")
+    for year in sorted(year_stats.keys()):
+        print(f"   {year}: {year_stats[year]} cases embedded")
+    
+    print(f"\n🚀 Total uploaded: {added} JSONL records")
 
 if __name__ == "__main__":
-    if DATA_FORMAT == "jsonl":
         print(f"📦 Mode: JSONL — {DATA_FILE}")
         process_jsonl()
-    else:
-        print(f"📦 Mode: TXT — {DATA_DIR}")
-        process_dir()

@@ -7,38 +7,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .chat_engine import chat_with_law_bot
+from .debug_logger import debug_capture
+from .model_cache import get_cached_llm, get_memory_stats, reload_llm
 from .serializers import ChatRequestSerializer
 
 logger = logging.getLogger(__name__)
-
-# Process-level LLM cache (persists within the same Django process)
-_LLM_INSTANCE = None
-_LLM_LOADED = False
-
-def get_cached_llm():
-    """Get cached LLM instance using process-level caching"""
-    global _LLM_INSTANCE, _LLM_LOADED
-    
-    if _LLM_INSTANCE is None and not _LLM_LOADED:
-        try:
-            from .generator import _ensure_llm
-            _LLM_INSTANCE = _ensure_llm()
-            _LLM_LOADED = True
-            logger.info("✅ LLM model cached successfully in process memory")
-        except Exception as e:
-            logger.error(f"❌ Failed to cache LLM model: {e}")
-            _LLM_INSTANCE = None
-    else:
-        logger.info("🔄 LLM model loaded from process memory cache")
-    
-    return _LLM_INSTANCE
-
-def clear_llm_cache():
-    """Clear the process-level LLM cache."""
-    global _LLM_INSTANCE, _LLM_LOADED
-    _LLM_INSTANCE = None
-    _LLM_LOADED = False
-    logger.info("🧹 Cleared LLM cache.")
 
 
 class ChatView(APIView):
@@ -55,25 +28,97 @@ class ChatView(APIView):
         query = serializer.validated_data["query"]
         history = serializer.validated_data.get("history") or []
         
-        # Clear LLM cache to ensure new model is loaded
-        clear_llm_cache()
-        
-        # Pre-load LLM model to cache it
+        # Use centralized LLM model cache
         try:
             get_cached_llm()
         except Exception as e:
-            logger.warning(f"LLM pre-loading failed: {e}")
+            logger.warning(f"LLM loading failed: {e}")
         
         try:
-            # Call chat_with_law_bot directly without timeout
-            answer = chat_with_law_bot(query, history=history)
-            
-            # Ensure string response
-            if not isinstance(answer, str):
-                answer = str(answer)
-            return Response({"response": answer}, status=status.HTTP_200_OK)
+            # Use proper logging-based debug capture
+            with debug_capture(max_messages=50) as debug_logger:
+                # Call chat_with_law_bot directly without timeout
+                answer = chat_with_law_bot(query, history=history)
+                
+                # Ensure string response
+                if not isinstance(answer, str):
+                    answer = str(answer)
+                
+                # Get captured debug messages
+                debug_messages = debug_logger.get_debug_messages()
+                
+                # Include debug output in response
+                response_data = {"response": answer}
+                if debug_messages:
+                    response_data["debug_info"] = {
+                        "debug_output": debug_messages,
+                        "debug_count": len(debug_messages)
+                    }
+                
+                # Check response size to prevent broken pipes
+                response_size = len(str(response_data))
+                if response_size > 100000:  # 100KB limit
+                    logger.warning(f"Large response size: {response_size} bytes")
+                    # Truncate debug output if too large
+                    if debug_messages and len(debug_messages) > 20:
+                        response_data["debug_info"]["debug_output"] = debug_messages[:20]
+                        response_data["debug_info"]["debug_count"] = len(debug_messages)
+                        response_data["debug_info"]["truncated"] = True
+                
+                return Response(response_data, status=status.HTTP_200_OK)
+                
         except Exception as e:
             logger.exception("chat failed: %s", e)
             # Match your existing contract: generic 500 with error field
             return Response({"error": "Internal server error."},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class AdminReloadLLMView(APIView):
+    """Admin endpoint to reload LLM model using centralized cache"""
+    # Disable auth/CSRF for simple local testing. Remove these in prod.
+    authentication_classes: list = []
+    permission_classes: list = []
+
+    def post(self, request):
+        """Reload the LLM model using centralized cache management"""
+        try:
+            # Use centralized reload function
+            llm_instance = reload_llm()
+            
+            if llm_instance is not None:
+                return Response({
+                    "message": "LLM model reloaded successfully",
+                    "status": "success"
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    "message": "LLM model reload failed - no instance available",
+                    "status": "error"
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
+        except Exception as e:
+            logger.exception("LLM reload failed: %s", e)
+            return Response({
+                "message": f"LLM reload failed: {str(e)}",
+                "status": "error"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class AdminMemoryStatsView(APIView):
+    """Admin endpoint to get memory and model statistics"""
+    # Disable auth/CSRF for simple local testing. Remove these in prod.
+    authentication_classes: list = []
+    permission_classes: list = []
+
+    def get(self, request):
+        """Get comprehensive memory and model statistics"""
+        try:
+            stats = get_memory_stats()
+            return Response(stats, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.exception("Failed to get memory stats: %s", e)
+            return Response({
+                "message": f"Failed to get memory stats: {str(e)}",
+                "status": "error"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

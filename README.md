@@ -1,12 +1,12 @@
 ## PHLaw Chatbot
 
-Backend + frontend chatbot focused on Philippine Supreme Court jurisprudence. The bot can ground answers on retrieved cases or reply conversationally from its pretrained knowledge, integrating the Rev21 Labs AI API with a local llama.cpp fallback.
+Backend + frontend chatbot focused on Philippine Supreme Court jurisprudence. The bot can ground answers on retrieved cases or reply conversationally from its pretrained knowledge using a local llama.cpp model.
 
 ### Features
 - Conversational memory via `history` in requests
 - Intent detection to decide when to retrieve jurisprudence vs. answer directly
 - Retrieval-augmented generation with section-aware context (facts, issues, ruling)
-- Rev21 Labs API integration (primary) with local `llama_cpp` fallback
+- Local `llama_cpp` inference
 
 ### Requirements
 - Python 3.10+
@@ -19,19 +19,9 @@ Backend + frontend chatbot focused on Philippine Supreme Court jurisprudence. Th
 pip install -r requirements.txt
 ```
 
-2) Configure environment (Rev21 optional; defaults provided):
+2) Configure environment: (no external API required)
 ```bash
-# Windows (cmd)
-set REV21_BASE_URL=https://ai-tools.rev21labs.com/api/v1
-set REV21_ENDPOINT_PATH=/chat/completions
-set REV21_API_KEY=YOUR_KEY
-set REV21_ENABLED=true
-
-# Linux/macOS (bash)
-export REV21_BASE_URL=https://ai-tools.rev21labs.com/api/v1
-export REV21_ENDPOINT_PATH=/chat/completions
-export REV21_API_KEY=YOUR_KEY
-export REV21_ENABLED=true
+# No additional environment variables needed for local inference
 ```
 
 3) Run Django:
@@ -62,12 +52,11 @@ Response:
 
 Behavior:
 - The engine detects if the query needs jurisprudence (e.g., mentions of G.R. numbers, articles/sections, “ruling/facts/issues”, case name patterns). If yes, it retrieves case snippets and grounds the answer with citations.
-- Otherwise, it answers conversationally (still using Rev21 when available). You can adjust triggers in `backend/chatbot/chat_engine.py` (`_should_query_jurisprudence`).
+- Otherwise, it answers conversationally using the local model. You can adjust triggers in `backend/chatbot/chat_engine.py` (`_should_query_jurisprudence`).
 
-### Rev21 Integration Details
+### Inference Details
 - Configured in `backend/chatbot/generator.py`.
-- Uses `REV21_BASE_URL`, `REV21_ENDPOINT_PATH`, `REV21_API_KEY`, `REV21_ENABLED`.
-- Attempts OpenAI-like chat completion first; falls back to local llama.cpp model if API is disabled, missing, or errors.
+- Uses local `llama_cpp` model via `backend/chatbot/model_cache.py`.
 
 ### Frontend (Next.js)
 ```bash
@@ -82,12 +71,12 @@ Build and run with docker-compose:
 ```bash
 docker compose up --build
 ```
-Set environment variables via `.env` or compose overrides to configure Rev21.
+No external API configuration is required.
 
 ### Development Notes
 - Main flow: `ChatView` → `chat_engine.chat_with_law_bot` → `generator.generate_response(_from_messages)`.
 - Retrieval logic and prompt construction live in `backend/chatbot/chat_engine.py`.
-- If you see latency or rate limits on Rev21, set `REV21_ENABLED=false` to use local llama.
+-- All responses are generated locally by default.
 
 ### Security
 - Do not hardcode API keys in code or commit history. Use environment variables.

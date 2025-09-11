@@ -4,11 +4,13 @@ import os
 import threading
 import time
 from contextlib import contextmanager
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import psutil
 from llama_cpp import Llama
 from sentence_transformers import SentenceTransformer
+
+# Optional heavy deps imported lazily in functions
 
 # =============================================================================
 # GLOBAL MODEL CACHES WITH MEMORY MANAGEMENT
@@ -17,15 +19,26 @@ _LLM_INSTANCE = None
 _LLM_LOADED = False
 _EMBEDDING_MODEL = None
 _EMBEDDING_MODEL_LOADED = False
+_CROSS_ENCODER_INSTANCE = None
+_CROSS_ENCODER_LOADED = False
+_BM25_MODEL = None
+_BM25_CORPUS: Optional[List[List[str]]] = None
+_BM25_DOC_METADATA: Optional[List[Dict[str, Any]]] = None
+_BM25_LOADED = False
 _MEMORY_MONITOR = None
 _MEMORY_THRESHOLD = 0.85  # 85% memory usage threshold
 _CACHE_LOCK = threading.Lock()
 _MEMORY_STATS = {
     "llm_loads": 0,
     "embedding_loads": 0,
+    "cross_encoder_loads": 0,
+    "bm25_loads": 0,
     "memory_cleanups": 0,
     "last_cleanup": 0
 }
+
+# Base directory for data files
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # =============================================================================
 # LLM CACHING
@@ -111,8 +124,8 @@ def get_cached_llm() -> Optional[Llama]:
                     "model_path": MODEL_PATH,
                     "n_ctx": 4096,
                     "n_gpu_layers": -1,  # Use all GPU layers
-                    "n_threads": 6,  # Reduced threads to prevent resource conflicts
-                    "n_batch": 32,   # Further reduced batch size for stability
+                    "n_threads": 8,  # Threads per your config
+                    "n_batch": 512,  # Batch size per your config
                     "n_ubatch": 16,  # Reduced ubatch for better memory management
                     "use_mmap": True,
                     "use_mlock": False,
@@ -209,6 +222,97 @@ def clear_llm_cache():
         print(f"📊 Memory after LLM cache clear: {memory_after.get('used_percent', 0):.1f}%")
         print("[CLEARED] LLM cache cleared with memory management")
 
+def reload_llm():
+    """Reload LLM by clearing cache and loading a fresh instance."""
+    clear_llm_cache()
+    return get_cached_llm()
+
+# =============================================================================
+# CROSS-ENCODER CACHING
+# =============================================================================
+def get_cached_cross_encoder():
+    """Get cached CrossEncoder with lazy loading."""
+    global _CROSS_ENCODER_INSTANCE, _CROSS_ENCODER_LOADED, _MEMORY_STATS
+    if _CROSS_ENCODER_INSTANCE is None and not _CROSS_ENCODER_LOADED:
+        print("🔄 Loading cross-encoder model...")
+        start_time = time.time()
+        try:
+            from sentence_transformers import CrossEncoder
+            device = "cuda" if os.getenv("USE_CUDA", "true").lower() == "true" else "cpu"
+            _CROSS_ENCODER_INSTANCE = CrossEncoder(
+                "cross-encoder/ms-marco-MiniLM-L-6-v2",
+                device=device
+            )
+            _MEMORY_STATS["cross_encoder_loads"] += 1
+            print(f"[SUCCESS] Cross-encoder loaded in {time.time()-start_time:.2f}s")
+        finally:
+            _CROSS_ENCODER_LOADED = True
+    return _CROSS_ENCODER_INSTANCE
+
+def clear_cross_encoder_cache():
+    """Clear the CrossEncoder cache."""
+    global _CROSS_ENCODER_INSTANCE, _CROSS_ENCODER_LOADED
+    if _CROSS_ENCODER_INSTANCE is not None:
+        try:
+            del _CROSS_ENCODER_INSTANCE
+        except Exception:
+            pass
+    _CROSS_ENCODER_INSTANCE = None
+    _CROSS_ENCODER_LOADED = False
+    print("[CLEARED] Cross-encoder cache cleared")
+
+# =============================================================================
+# BM25 CACHING
+# =============================================================================
+def get_cached_bm25() -> Tuple[Optional[Any], Optional[List[List[str]]], Optional[List[Dict[str, Any]]]]:
+    """Get cached BM25 with loaded corpus and metadata."""
+    global _BM25_MODEL, _BM25_CORPUS, _BM25_DOC_METADATA, _BM25_LOADED, _MEMORY_STATS
+    if _BM25_MODEL is None and not _BM25_LOADED:
+        print("🔄 Loading BM25 model and corpus...")
+        start_time = time.time()
+        try:
+            import gzip
+            import json
+
+            from rank_bm25 import BM25Okapi
+
+            corpus: List[List[str]] = []
+            doc_metadata: List[Dict[str, Any]] = []
+            jsonl_path = os.path.join(BASE_DIR, "data", "cases.jsonl.gz")
+            if os.path.exists(jsonl_path):
+                with gzip.open(jsonl_path, 'rt', encoding='utf-8') as f:
+                    for line in f:
+                        if not line.strip():
+                            continue
+                        case = json.loads(line)
+                        text = f"{case.get('title', '')} {case.get('body', '')}"
+                        corpus.append(text.split())
+                        doc_metadata.append({
+                            'id': case.get('id', ''),
+                            'gr_number': case.get('gr_number', ''),
+                            'title': case.get('title', ''),
+                            'date': case.get('date', ''),
+                            'ponente': case.get('ponente', ''),
+                            'case_type': case.get('case_type', '')
+                        })
+            _BM25_MODEL = BM25Okapi(corpus)
+            _BM25_CORPUS = corpus
+            _BM25_DOC_METADATA = doc_metadata
+            _MEMORY_STATS["bm25_loads"] += 1
+            print(f"[SUCCESS] BM25 loaded in {time.time()-start_time:.2f}s")
+        finally:
+            _BM25_LOADED = True
+    return _BM25_MODEL, _BM25_CORPUS, _BM25_DOC_METADATA
+
+def clear_bm25_cache():
+    """Clear BM25 and its data from cache."""
+    global _BM25_MODEL, _BM25_CORPUS, _BM25_DOC_METADATA, _BM25_LOADED
+    _BM25_MODEL = None
+    _BM25_CORPUS = None
+    _BM25_DOC_METADATA = None
+    _BM25_LOADED = False
+    print("[CLEARED] BM25 cache cleared")
+
 # =============================================================================
 # SENTENCE TRANSFORMER CACHING
 # =============================================================================
@@ -245,6 +349,11 @@ def clear_embedding_model_cache():
     _EMBEDDING_MODEL = None
     _EMBEDDING_MODEL_LOADED = False
     print("[CLEARED] SentenceTransformer model cache cleared")
+
+# Backward-compatible alias used by older modules
+def clear_embedding_cache():
+    """Alias for backward compatibility."""
+    return clear_embedding_model_cache()
 
 # =============================================================================
 # COMBINED CACHE MANAGEMENT
