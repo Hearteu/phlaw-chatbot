@@ -2,6 +2,9 @@
 import re
 from typing import Any, Dict, List, Optional
 
+# Import Docker model client with fallback
+from .docker_model_client import (generate_messages_with_fallback,
+                                  generate_with_fallback)
 # Import centralized model cache
 from .model_cache import get_cached_llm
 
@@ -32,100 +35,46 @@ def _ensure_llm():
     return get_cached_llm()
 
 def generate_response(prompt: str, _retry_count: int = 0) -> str:
-    """Generate response using local LLM with single retry guard"""
+    """Generate response using Docker model runner with local LLM fallback"""
     try:
-        llm = _ensure_llm()
-        
-        # Use more conservative generation parameters to avoid CUDA tensor issues
-        response = llm(
+        # Use Docker model runner with local LLM fallback
+        response = generate_with_fallback(
             prompt,
-            max_tokens=2048,  # Increased for better responses
+            max_tokens=2048,
             temperature=0.3,
             top_p=0.85,
             repeat_penalty=1.1,
-            stop=["User:", "Human:", "Assistant:", "\n\n\n\n"],
-            top_k=20,
-            stream=False,  # Disable streaming to avoid memory issues
-            echo=False,    # Don't echo the prompt
-            tfs_z=1.0,     # Add tensor fusion parameter for stability
+            stop=["User:", "Human:", "Assistant:", "\n\n\n\n"]
         )
         
-        if response and "choices" in response and len(response["choices"]) > 0:
-            print("LLM: law-chat (prompt)")
-            raw_text = response["choices"][0]["text"]
-            cleaned_text = _clean_response_text(raw_text)
-            return cleaned_text
-        else:
-            return "I apologize, but I was unable to generate a response."
-            
-    except MemoryError as e:
-        print(f"❌ Memory error in LLM generation: {e}")
-        return "I apologize, but I'm experiencing memory issues. Please try a simpler question."
-    except Exception as e:
-        print(f"❌ Local LLM generation failed: {e}")
-        # Check if this is a persistent error that shouldn't be retried
-        error_str = str(e).lower()
-        if any(keyword in error_str for keyword in ["access violation", "sampler", "ggml_assert", "tensor", "cuda"]):
-            print("🔄 Detected persistent CUDA/tensor error, using fallback...")
-            return "I apologize, but I'm experiencing technical difficulties. Please try a simpler question or try again later."
+        # Clean the response text
+        cleaned_text = _clean_response_text(response)
+        return cleaned_text
         
-        # Single retry with guard to prevent infinite recursion
-        if _retry_count < 1:
-            print("🔄 Retrying generation...")
-            return generate_response(prompt, _retry_count + 1)
-        else:
-            print("❌ Retry limit reached")
-            return "I apologize, but I encountered a technical error. Please try again later."
+    except Exception as e:
+        print(f"❌ Error in LLM generation: {e}")
+        return "I apologize, but I encountered a technical error. Please try again later."
 
 def generate_response_from_messages(messages: List[Dict[str, str]], _retry_count: int = 0) -> str:
-    """Generate response from message history using local LLM with single retry guard"""
+    """Generate response from message history using Docker model runner with local LLM fallback"""
     try:
-        llm = _ensure_llm()
-        
-        # Convert messages to prompt format
-        prompt = _messages_to_prompt(messages)
-        
-        # Use more conservative generation parameters to avoid CUDA tensor issues
-        response = llm(
-            prompt,
-            max_tokens=2048,  # Increased for better responses
+        # Use Docker model runner with local LLM fallback
+        response = generate_messages_with_fallback(
+            messages,
+            max_tokens=2048,
             temperature=0.3,
             top_p=0.85,
             repeat_penalty=1.1,
-            stop=["User:", "Human:", "Assistant:", "\n\n\n\n"],
-            top_k=20,
-            stream=False,  # Disable streaming to avoid memory issues
-            echo=False,    # Don't echo the prompt
-            tfs_z=1.0,     # Add tensor fusion parameter for stability
+            stop=["User:", "Human:", "Assistant:", "\n\n\n\n"]
         )
         
-        if response and "choices" in response and len(response["choices"]) > 0:
-            print("LLM: law-chat (messages)")
-            raw_text = response["choices"][0]["text"]
-            cleaned_text = _clean_response_text(raw_text)
-            return cleaned_text
-        else:
-            return "I apologize, but I was unable to generate a response."
-            
-    except MemoryError as e:
-        print(f"❌ Memory error in LLM generation: {e}")
-        return "I apologize, but I'm experiencing memory issues. Please try a simpler question."
+        # Clean the response text
+        cleaned_text = _clean_response_text(response)
+        return cleaned_text
+        
     except Exception as e:
-        print(f"❌ Local LLM generation failed: {e}")
-        
-        # Check if this is a persistent error that shouldn't be retried
-        error_str = str(e).lower()
-        if any(keyword in error_str for keyword in ["access violation", "sampler", "ggml_assert", "tensor", "cuda"]):
-            print("🔄 Detected persistent CUDA/tensor error, using fallback...")
-            return "I apologize, but I'm experiencing technical difficulties. Please try a simpler question or try again later."
-        
-        # Single retry with guard to prevent infinite recursion
-        if _retry_count < 1:
-            print("🔄 Retrying generation...")
-            return generate_response_from_messages(messages, _retry_count + 1)
-        else:
-            print("❌ Retry limit reached")
-            return "I apologize, but I encountered a technical error. Please try again later."
+        print(f"❌ Error in LLM generation: {e}")
+        return "I apologize, but I encountered a technical error. Please try again later."
 
 def _messages_to_prompt(messages: List[Dict[str, str]]) -> str:
     """Convert message history to prompt format"""

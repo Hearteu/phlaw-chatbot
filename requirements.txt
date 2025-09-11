@@ -3,6 +3,7 @@ Django==5.2.4
 djangorestframework==3.16.0
 django-cors-headers==4.7.0
 python-dotenv==1.1.1
+openai==1.100.1
 
 # Vector Database
 qdrant-client==1.15.0
