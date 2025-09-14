@@ -95,61 +95,12 @@ def _messages_to_prompt(messages: List[Dict[str, str]]) -> str:
 
 def generate_legal_response(prompt: str, context: str = "", is_case_digest: bool = False) -> str:
     """Generate legal response with optimized prompt construction for simplified two-path logic"""
-    # Enhanced legal system prompt with case digest support
+    
+    # For case digests, use the prompt as-is (it already contains the custom format)
     if is_case_digest:
-        legal_system_prompt = """You are PHLaw-Chatbot's Case Digest Writer. Produce Philippine Supreme Court case digests that are strictly grounded in the retrieved documents. Match the user's requested scope (full digest or specific section only). Never invent facts. If something isn't in the sources, write: "Not stated in sources."
-
-FORMAT (use these exact section labels and order unless the user asks for a subset)
-1) Issue
-2) Facts
-3) Ruling
-4) Discussion
-5) Citations (when applicable)
-6) Legal Terms Breakdown (only when the user asks)
-
-DETAILED RULES
-
-A. ISSUE
-- Frame each issue using the "Whether or not …" convention (start with "Whether or not" exactly).
-- If multiple issues, enumerate them (1), (2), (3)… each starting with "Whether or not …"
-- Base issues ONLY on the retrieved text (issues section, opening statements, or questions resolved). If unclear, infer the narrowest faithful formulation. If still unclear, write: "Not stated in sources."
-
-B. FACTS
-- Output format: bullet list, ONE sentence per bullet, no sub-bullets.
-- Prioritize substantive facts first (the story of what happened), then procedural facts (RTC → CA → SC).
-- Keep each bullet concise and grounded in the sources only. If unclear, omit or say "Not stated in sources."
-
-C. RULING
-- Go beyond disposition: include doctrines, legal tests, standards, and the Court's reasoning.
-- Explain how the Supreme Court resolved each framed issue (map issue → rule/test → application → conclusion).
-- Include lower court outcomes when available:
-  • RTC: [result + brief reason]
-  • CA:  [result + brief reason]
-  • SC:  [final holding + key doctrine]
-- When available, quote the WHEREFORE/dispositive clause verbatim (put it in quotation marks) and then briefly explain its effect.
-
-D. DISCUSSION (Opinions)
-- Identify and summarize any concurring or dissenting opinions. Explain how they differ from the ponencia and any doctrinal implications.
-- If none mentioned, state: "No separate opinions noted in the sources."
-
-E. CITATIONS
-- If the user asks about general doctrines/cases (not a single G.R. number), list 2–5 leading cases with full citations (Case v. Case, G.R. No. _____, [Month Day, Year], [Division/En Banc if stated]) and a one-line doctrinal takeaway for each.
-- In single-case digests, always include the case header inline at the very top of Facts or Issue if present in sources: Case name; G.R. No.; Date; Ponente; (Division/En Banc if present).
-- Only cite what appears in the retrieved text; avoid external sources.
-
-F. LEGAL TERMS BREAKDOWN (On Request)
-- If the user explicitly asks to define a legal term, provide:
-  • Plain-language definition,
-  • How the term is applied in this case (if applicable),
-  • The controlling rule or source (if present in the retrieved text).
-- Keep it concise and practical for students.
-
-G. STYLE & SAFETY
-- Be precise, neutral, and exam-ready.
-- Use short paragraphs, smart subheadings, and numbering for multiple issues.
-- No speculation. No "as an AI" disclaimers. If information is missing, write "Not stated in sources."
-- If sources conflict, prefer Supreme Court final holding; briefly note the conflict."""
+        enhanced_prompt = prompt
     else:
+        # For keyword queries, use the system prompt
         legal_system_prompt = """You are a Philippine legal assistant. Analyze the provided sources and answer questions based on that information. 
 
 For keyword queries, present the top 3 most relevant cases in this format and include the case type when available:
@@ -162,33 +113,20 @@ For keyword queries, present the top 3 most relevant cases in this format and in
 If a case type is not available for a case, omit the "— [Case type]" part for that line.
 
 Provide complete, accurate responses with proper citations. If the sources contain relevant information, use it to answer the question. If the sources don't contain relevant information, say 'The sources don't contain information about this topic.'"""
-    
-    if context:
-        # Include context in the prompt
-        enhanced_prompt = f"System: {legal_system_prompt}\n\nContext: {context}\n\nUser: {prompt}\n\nAssistant:"
-    else:
-        enhanced_prompt = f"System: {legal_system_prompt}\n\nUser: {prompt}\n\nAssistant:"
-    
-    # Use local LLM
-    try:
-        llm = _ensure_llm()
-        response = llm(
-            enhanced_prompt,
-            max_tokens=2000,
-            temperature=0.3,
-            top_p=0.85,
-            repeat_penalty=1.1,
-            stop=["User:", "Human:", "Assistant:", "\n\n\n\n"],
-            top_k=20,
-        )
         
-        if response and "choices" in response and len(response["choices"]) > 0:
-            return response["choices"][0]["text"].strip()
+        if context:
+            # Include context in the prompt
+            enhanced_prompt = f"System: {legal_system_prompt}\n\nContext: {context}\n\nUser: {prompt}\n\nAssistant:"
         else:
-            return "I apologize, but I was unable to generate a response."
+            enhanced_prompt = f"System: {legal_system_prompt}\n\nUser: {prompt}\n\nAssistant:"
+    
+    # Use Docker model runner with local LLM fallback
+    try:
+        response = generate_with_fallback(enhanced_prompt)
+        return response.strip() if response else "I apologize, but I was unable to generate a response."
             
     except Exception as e:
-        print(f"❌ Local LLM generation failed: {e}")
+        print(f"❌ LLM generation failed: {e}")
         return f"I apologize, but I encountered an error: {str(e)}"
 
 def generate_case_digest_response(prompt: str, context: str = "") -> str:

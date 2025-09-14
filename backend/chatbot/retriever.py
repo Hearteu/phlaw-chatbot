@@ -102,16 +102,38 @@ def _get_collection_info(collection_name: str) -> Dict[str, Any]:
 
 def load_case_from_jsonl(case_id: str, jsonl_path: str = DATA_FILE) -> Optional[Dict[str, Any]]:
     """Load full case text from JSONL file by case ID or GR number"""
+    print(f"🔍 Looking for case {case_id} in {jsonl_path}")
+    
+    # Check if file exists
+    if not os.path.exists(jsonl_path):
+        print(f"❌ JSONL file not found: {jsonl_path}")
+        return None
+    
     try:
         with gzip.open(jsonl_path, 'rt', encoding='utf-8') as f:
-            for line in f:
+            for line_num, line in enumerate(f, 1):
                 if not line.strip():
                     continue
                 case = json.loads(line)
-                if case.get('id') == case_id or case.get('gr_number') == case_id:
+                
+                # Try multiple matching strategies
+                case_gr = case.get('gr_number', '')
+                case_id_field = case.get('id', '')
+                
+                # Check if this is the case we're looking for
+                if (case_gr == case_id or 
+                    case_id_field == case_id or 
+                    case_gr == f"G.R. No. {case_id}" or
+                    case_gr == f"GR No. {case_id}"):
+                    print(f"✅ Found case {case_id} at line {line_num}")
                     return case
+                    
+                # Debug: Show first few cases for troubleshooting
+                if line_num <= 3:
+                    print(f"🔍 Line {line_num}: GR={case_gr}, ID={case_id_field}")
+                    
     except Exception as e:
-        print(f"Error loading case {case_id}: {e}")
+        print(f"❌ Error loading case {case_id}: {e}")
     return None
 
 def load_cases_from_jsonl(case_ids: List[str], jsonl_path: str = DATA_FILE) -> Dict[str, Dict[str, Any]]:
@@ -396,7 +418,7 @@ class LegalRetriever:
         return None
     
     def _retrieve_by_gr_number(self, gr_number: str, k: int) -> List[Dict[str, Any]]:
-        """Exact GR number search in metadata"""
+        """Exact GR number search in metadata (returns metadata only, not full content)"""
         try:
             # Try multiple GR number formats
             gr_formats = [
@@ -429,7 +451,24 @@ class LegalRetriever:
                         doc = self._convert_hit_to_doc(hit, 'gr_number_exact')
                         results.append(doc)
                     
-                    print(f"✅ Found {len(results)} results for GR {gr_number}")
+                    print(f"✅ Found {len(results)} metadata records for GR {gr_number}")
+                    
+                    # Debug: Check what's in the payload
+                    if results:
+                        first_hit = search_results[0]
+                        print(f"🔍 Qdrant payload keys: {list(first_hit.payload.keys()) if first_hit.payload else 'None'}")
+                        print(f"🔍 Content in payload: '{first_hit.payload.get('content', '')[:100] if first_hit.payload else 'None'}...'")
+                        print(f"🔍 Text in payload: '{first_hit.payload.get('text', '')[:100] if first_hit.payload else 'None'}...'")
+                        
+                        # Check if there are any content-like fields
+                        content_fields = [k for k in first_hit.payload.keys() if 'content' in k.lower() or 'text' in k.lower() or 'body' in k.lower()]
+                        print(f"🔍 Content-like fields: {content_fields}")
+                        
+                        # Check for any field that might contain case text
+                        for field in ['body', 'case_text', 'full_text', 'document', 'case_content', 'clean_text', 'text']:
+                            if field in first_hit.payload:
+                                print(f"🔍 {field} field: '{first_hit.payload[field][:100]}...'")
+                    
                     return results
             
             print(f"⚠️ No results found for GR {gr_number}")
@@ -1203,9 +1242,16 @@ class LegalRetriever:
         payload = hit.payload or {}
         
         # Extract all available fields from payload
+        # Try multiple possible content fields
+        content = (payload.get('content', '') or 
+                  payload.get('text', '') or 
+                  payload.get('clean_text', '') or 
+                  payload.get('body', '') or 
+                  payload.get('case_text', '') or '')
+        
         doc = {
             'title': payload.get('title', ''),
-            'content': payload.get('content', ''),
+            'content': content,
             'gr_number': payload.get('gr_number', ''),
             'year': payload.get('year', ''),
             'section': payload.get('section', ''),

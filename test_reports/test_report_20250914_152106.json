@@ -1,0 +1,280 @@
+{
+  "test_run_info": {
+    "timestamp": "2025-09-14T15:20:49.301108",
+    "test_suite": "PHLaw-Chatbot Comprehensive Tests",
+    "version": "1.0.0",
+    "environment": {
+      "python_version": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
+      "platform": "nt",
+      "working_directory": "d:\\AdDU\\5th Year\\1st Sem\\thesis\\phlaw-chatbot"
+    }
+  },
+  "test_categories": {
+    "Comprehensive Chatbot Tests (2005-2006 Cases)": {
+      "description": "Testing chatbot with real queries and responses using 2005-2006 period cases",
+      "tests": [
+        {
+          "test_name": "chatbot_test_1",
+          "status": "passed",
+          "message": "Query 1 completed successfully",
+          "execution_time": 1.0,
+          "timestamp": "2025-09-14T15:21:04.717843",
+          "details": {
+            "query": "case digest for G.R. No. 162230",
+            "expected_type": "digest",
+            "description": "Case digest generation test for Vinuya v. Romulo (2010 case - representative of 2005-2006 period)",
+            "chatbot_response": "I couldn't find matching cases in the current database. Try a different G.R. number or broader keywords.",
+            "response_length": 104,
+            "status_code": 200,
+            "response_analysis": {
+              "length": 104,
+              "has_content": true,
+              "contains_noise": false,
+              "contains_inst_tokens": false,
+              "word_count": 17,
+              "line_count": 1,
+              "digest_sections_found": [],
+              "has_digest_format": false
+            }
+          }
+        },
+        {
+          "test_name": "chatbot_test_2",
+          "status": "passed",
+          "message": "Query 2 completed successfully",
+          "execution_time": 1.0,
+          "timestamp": "2025-09-14T15:21:05.388730",
+          "details": {
+            "query": "facts of Vinuya vs Romulo",
+            "expected_type": "facts",
+            "description": "Facts extraction test",
+            "chatbot_response": "Here are the possible cases:\n1. PETITIONER, VS. ANATALIA ACTUB TIU ESTONILO AND ANDREA ACTUB TIU PO (IN SUBSTITUTION OF NAZARIA BOMBEO), RESPONDENTS. (G.R. No. 157306)\n2. Facts Of Vinuya v. Romulo (G.R. No. 139018) — annulment\n3. Facts Of Vinuya v. Romulo (G.R. No. 130106) — annulment",
+            "response_length": 285,
+            "status_code": 200,
+            "response_analysis": {
+              "length": 285,
+              "has_content": true,
+              "contains_noise": false,
+              "contains_inst_tokens": false,
+              "word_count": 48,
+              "line_count": 4,
+              "contains_facts_indicators": true
+            }
+          }
+        },
+        {
+          "test_name": "chatbot_test_3",
+          "status": "passed",
+          "message": "Query 3 completed successfully",
+          "execution_time": 1.0,
+          "timestamp": "2025-09-14T15:21:06.133744",
+          "details": {
+            "query": "ruling in G.R. No. 162230",
+            "expected_type": "ruling",
+            "description": "Ruling extraction test",
+            "chatbot_response": "I couldn't find matching cases in the current database. Try a different G.R. number or broader keywords.",
+            "response_length": 104,
+            "status_code": 200,
+            "response_analysis": {
+              "length": 104,
+              "has_content": true,
+              "contains_noise": false,
+              "contains_inst_tokens": false,
+              "word_count": 17,
+              "line_count": 1,
+              "contains_ruling_indicators": false
+            }
+          }
+        },
+        {
+          "test_name": "chatbot_test_4",
+          "status": "passed",
+          "message": "Query 4 completed successfully",
+          "execution_time": 1.0,
+          "timestamp": "2025-09-14T15:21:06.193649",
+          "details": {
+            "query": "issues in constitutional case 2005",
+            "expected_type": "issues",
+            "description": "Issues extraction test",
+            "chatbot_response": "Here are the possible cases:\n1. Issues In Constitutional Case 2005 (G.R. No. 167499) — certiorari\n2. GRACE A. BASMAYOR, PETITIONER, VS. LOIDA B. ATENCIO, RESPONDENT. (G.R. No. 160573) — certiorari\n3. RAMON PABLO Y BACUNGAN, PETITIONER, VS. PEOPLE OF THE PHILIPPINES, RESPONDENT. (G.R. No. 152481) — certiorari",
+            "response_length": 309,
+            "status_code": 200,
+            "response_analysis": {
+              "length": 309,
+              "has_content": true,
+              "contains_noise": false,
+              "contains_inst_tokens": false,
+              "word_count": 48,
+              "line_count": 4
+            }
+          }
+        },
+        {
+          "test_name": "chatbot_test_5",
+          "status": "passed",
+          "message": "Query 5 completed successfully",
+          "execution_time": 1.0,
+          "timestamp": "2025-09-14T15:21:06.249682",
+          "details": {
+            "query": "What cases are about due process in 2005-2006?",
+            "expected_type": "general",
+            "description": "General case information test",
+            "chatbot_response": "Here are the possible cases:\n1. [ G.R. NO. 142030, April 21, 2005 ] (G.R. No. 142030) — certiorari\n2. CAYETANO A. TEJANO, JR., PETITIONER, VS. THE HON. OMBUDSMAN AND THE HON. SANDIGANBAYAN, RESPONDENTS. (G.R. No. 159190) — certiorari\n3. What Cases Are About Due Process In 2005-2006? (G.R. No. 149539) — administrative",
+            "response_length": 318,
+            "status_code": 200,
+            "response_analysis": {
+              "length": 318,
+              "has_content": true,
+              "contains_noise": false,
+              "contains_inst_tokens": false,
+              "word_count": 53,
+              "line_count": 4
+            }
+          }
+        }
+      ],
+      "summary": {
+        "total": 5,
+        "passed": 5,
+        "failed": 0,
+        "error": 0
+      }
+    }
+  },
+  "summary": {
+    "total_tests": 10,
+    "passed": 10,
+    "failed": 0,
+    "errors": 0,
+    "success_rate": 100.0,
+    "execution_time": 16.867257595062256
+  },
+  "detailed_results": [
+    {
+      "category": "Comprehensive Chatbot Tests (2005-2006 Cases)",
+      "test_name": "chatbot_test_1",
+      "status": "passed",
+      "message": "Query 1 completed successfully",
+      "execution_time": 1.0,
+      "timestamp": "2025-09-14T15:21:04.717843",
+      "details": {
+        "query": "case digest for G.R. No. 162230",
+        "expected_type": "digest",
+        "description": "Case digest generation test for Vinuya v. Romulo (2010 case - representative of 2005-2006 period)",
+        "chatbot_response": "I couldn't find matching cases in the current database. Try a different G.R. number or broader keywords.",
+        "response_length": 104,
+        "status_code": 200,
+        "response_analysis": {
+          "length": 104,
+          "has_content": true,
+          "contains_noise": false,
+          "contains_inst_tokens": false,
+          "word_count": 17,
+          "line_count": 1,
+          "digest_sections_found": [],
+          "has_digest_format": false
+        }
+      }
+    },
+    {
+      "category": "Comprehensive Chatbot Tests (2005-2006 Cases)",
+      "test_name": "chatbot_test_2",
+      "status": "passed",
+      "message": "Query 2 completed successfully",
+      "execution_time": 1.0,
+      "timestamp": "2025-09-14T15:21:05.388730",
+      "details": {
+        "query": "facts of Vinuya vs Romulo",
+        "expected_type": "facts",
+        "description": "Facts extraction test",
+        "chatbot_response": "Here are the possible cases:\n1. PETITIONER, VS. ANATALIA ACTUB TIU ESTONILO AND ANDREA ACTUB TIU PO (IN SUBSTITUTION OF NAZARIA BOMBEO), RESPONDENTS. (G.R. No. 157306)\n2. Facts Of Vinuya v. Romulo (G.R. No. 139018) — annulment\n3. Facts Of Vinuya v. Romulo (G.R. No. 130106) — annulment",
+        "response_length": 285,
+        "status_code": 200,
+        "response_analysis": {
+          "length": 285,
+          "has_content": true,
+          "contains_noise": false,
+          "contains_inst_tokens": false,
+          "word_count": 48,
+          "line_count": 4,
+          "contains_facts_indicators": true
+        }
+      }
+    },
+    {
+      "category": "Comprehensive Chatbot Tests (2005-2006 Cases)",
+      "test_name": "chatbot_test_3",
+      "status": "passed",
+      "message": "Query 3 completed successfully",
+      "execution_time": 1.0,
+      "timestamp": "2025-09-14T15:21:06.133744",
+      "details": {
+        "query": "ruling in G.R. No. 162230",
+        "expected_type": "ruling",
+        "description": "Ruling extraction test",
+        "chatbot_response": "I couldn't find matching cases in the current database. Try a different G.R. number or broader keywords.",
+        "response_length": 104,
+        "status_code": 200,
+        "response_analysis": {
+          "length": 104,
+          "has_content": true,
+          "contains_noise": false,
+          "contains_inst_tokens": false,
+          "word_count": 17,
+          "line_count": 1,
+          "contains_ruling_indicators": false
+        }
+      }
+    },
+    {
+      "category": "Comprehensive Chatbot Tests (2005-2006 Cases)",
+      "test_name": "chatbot_test_4",
+      "status": "passed",
+      "message": "Query 4 completed successfully",
+      "execution_time": 1.0,
+      "timestamp": "2025-09-14T15:21:06.193649",
+      "details": {
+        "query": "issues in constitutional case 2005",
+        "expected_type": "issues",
+        "description": "Issues extraction test",
+        "chatbot_response": "Here are the possible cases:\n1. Issues In Constitutional Case 2005 (G.R. No. 167499) — certiorari\n2. GRACE A. BASMAYOR, PETITIONER, VS. LOIDA B. ATENCIO, RESPONDENT. (G.R. No. 160573) — certiorari\n3. RAMON PABLO Y BACUNGAN, PETITIONER, VS. PEOPLE OF THE PHILIPPINES, RESPONDENT. (G.R. No. 152481) — certiorari",
+        "response_length": 309,
+        "status_code": 200,
+        "response_analysis": {
+          "length": 309,
+          "has_content": true,
+          "contains_noise": false,
+          "contains_inst_tokens": false,
+          "word_count": 48,
+          "line_count": 4
+        }
+      }
+    },
+    {
+      "category": "Comprehensive Chatbot Tests (2005-2006 Cases)",
+      "test_name": "chatbot_test_5",
+      "status": "passed",
+      "message": "Query 5 completed successfully",
+      "execution_time": 1.0,
+      "timestamp": "2025-09-14T15:21:06.249682",
+      "details": {
+        "query": "What cases are about due process in 2005-2006?",
+        "expected_type": "general",
+        "description": "General case information test",
+        "chatbot_response": "Here are the possible cases:\n1. [ G.R. NO. 142030, April 21, 2005 ] (G.R. No. 142030) — certiorari\n2. CAYETANO A. TEJANO, JR., PETITIONER, VS. THE HON. OMBUDSMAN AND THE HON. SANDIGANBAYAN, RESPONDENTS. (G.R. No. 159190) — certiorari\n3. What Cases Are About Due Process In 2005-2006? (G.R. No. 149539) — administrative",
+        "response_length": 318,
+        "status_code": 200,
+        "response_analysis": {
+          "length": 318,
+          "has_content": true,
+          "contains_noise": false,
+          "contains_inst_tokens": false,
+          "word_count": 53,
+          "line_count": 4
+        }
+      }
+    }
+  ],
+  "performance_metrics": {},
+  "recommendations": []
+}
