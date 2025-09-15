@@ -41,8 +41,8 @@ from selectolax.parser import HTMLParser
 BASE_URL     = os.getenv("ELIBRARY_BASE", "https://elibrary.judiciary.gov.ph/")
 OUT_PATH     = os.getenv("CASES_JSONL", "backend/data/cases.jsonl.gz")
 UA           = os.getenv("CRAWLER_UA", "Mozilla/5.0 (compatible; PHLawBot/1.0)")
-YEAR_START   = int(os.getenv("YEAR_START", 2005))
-YEAR_END     = int(os.getenv("YEAR_END", 2005))
+YEAR_START   = int(os.getenv("YEAR_START", 2006))
+YEAR_END     = int(os.getenv("YEAR_END", 2006))
 CONCURRENCY  = int(os.getenv("CONCURRENCY", 12))  # Higher for HTTP-first approach
 SLOWDOWN_MS  = int(os.getenv("SLOWDOWN_MS", 250))
 TIMEOUT_S    = int(os.getenv("TIMEOUT_S", 45))

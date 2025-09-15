@@ -581,13 +581,13 @@ You MUST format your response EXACTLY as follows (use these exact headers and st
 3) [Continue with numbered contention]
 
 **RTC:** [RTC decision, e.g., IN FAVOR OF PETITIONER/RESPONDENT]
-- [RTC's statement or reasoning]
+- [RTC's statement or reasoning; explain the RTC's reasoning]
 
 **CA:** [CA decision, e.g., REVERSED THE RTC'S RULING]
-- [CA's statement or reasoning]
+- [CA's statement or reasoning; explain the CA's reasoning]
 
-**ISSUE:** [Legal issue, e.g., WHETHER OR NOT...]
-- [YES OR NO]
+**ISSUE/S:** [Legal issue/s, the formar should start with "WHETHER OR NOT", e.g., WHETHER OR NOT...]
+- [Answer to the issue, YES OR NO]
 
 **SC RULING:**
 [Supreme Court's decision and reasoning; explain the Court's reasoning]
