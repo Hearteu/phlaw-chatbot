@@ -53,7 +53,7 @@ class DockerModelClient:
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,
-                max_tokens=kwargs.get('max_tokens', 2048),
+                max_tokens=kwargs.get('max_tokens', 4096),
                 temperature=kwargs.get('temperature', 0.3),
                 top_p=kwargs.get('top_p', 0.85),
                 stop=kwargs.get('stop', ["User:", "Human:", "Assistant:", "\n\n\n\n"])
@@ -74,7 +74,7 @@ class DockerModelClient:
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,
-                max_tokens=kwargs.get('max_tokens', 2048),
+                max_tokens=kwargs.get('max_tokens', 4096),
                 temperature=kwargs.get('temperature', 0.3),
                 top_p=kwargs.get('top_p', 0.85),
                 stop=kwargs.get('stop', ["User:", "Human:", "Assistant:", "\n\n\n\n"])
