@@ -407,233 +407,6 @@ Write exactly 5 complete sentences that tell the story of this case. Start with 
     
     return f"**{case_title}**\n\n**G.R. No.:** {gr_number}\n**Ponente:** {ponente}\n**Date:** {date}\n**Case Type:** {case_type}\n\n**Brief Summary:**\n{summary_text}"
 
-def _extract_summary_from_chunks(docs: List[Dict], case_title: str) -> str:
-    """Extract summary from document chunks (original method)"""
-    # Get the main case document (highest score)
-    main_doc = max(docs, key=lambda x: x.get("score", 0.0))
-    
-    # Try to find better content by searching for more specific sections
-    # Look for documents with substantial content (not just captions)
-    best_content = ""
-    best_section = ""
-    current_gr = main_doc.get("gr_number", "") or main_doc.get("metadata", {}).get("gr_number", "")
-    
-    # First, try to find content from the same case with substantial length
-    print(f"🔍 Looking for content for G.R. {current_gr}")
-    print(f"🔍 Available documents: {len(docs)}")
-    
-    for i, doc in enumerate(docs):
-        doc_gr = doc.get("gr_number", "") or doc.get("metadata", {}).get("gr_number", "")
-        doc_content = doc.get("content", "") or doc.get("text", "")
-        doc_section = doc.get("section", "unknown")
-        
-        print(f"  Doc {i+1}: section='{doc_section}', gr='{doc_gr}', content_len={len(doc_content)}")
-        if len(doc_content) > 50:
-            content_preview = doc_content[:100]
-            print(f"    Preview: {content_preview}...")
-        
-        # Only consider content from the same case
-        if doc_gr == current_gr and doc_content and len(doc_content.strip()) > len(best_content):
-            # Be more aggressive in selecting content - prefer any substantial content
-            if (doc_section.lower() in ['facts', 'issues', 'ruling', 'header', 'body', 'full_text_ref'] or 
-                len(doc_content.strip()) > 100):  # Reduced from 200 to 100 chars
-                best_content = doc_content
-                best_section = doc_section
-                print(f"🔍 Selected content from section '{doc_section}', length={len(doc_content)}")
-    
-    # If no good content found from same case, try any content
-    if not best_content:
-        print("🔍 No same-case content found, trying any available content...")
-        for doc in docs:
-            doc_content = doc.get("content", "") or doc.get("text", "")
-            doc_section = doc.get("section", "unknown")
-            
-            if doc_content and len(doc_content.strip()) > len(best_content):
-                best_content = doc_content
-                best_section = doc_section
-                print(f"🔍 Selected fallback content from section '{doc_section}', length={len(doc_content)}")
-    
-    # Use the best content found
-    content = best_content if best_content else (main_doc.get("content", "") or main_doc.get("text", ""))
-    
-    # Try to extract a better summary from the content
-    if content and len(content.strip()) > 20:  # Reduced from 100 to 20
-        # Clean up the content first
-        clean_content = re.sub(r'\s*—\s*[^—]*\s*—\s*', ' ', content)
-        clean_content = re.sub(r'\s+', ' ', clean_content).strip()
-        
-        # Different strategies based on section type
-        if best_section == 'facts':
-            # For facts section, look for the main factual narrative
-            summary_text = _extract_facts_summary(clean_content, case_title)
-        elif best_section == 'issues':
-            # For issues section, extract the legal questions
-            summary_text = _extract_issues_summary(clean_content, case_title)
-        elif best_section == 'ruling':
-            # For ruling section, extract the court's decision
-            summary_text = _extract_ruling_summary(clean_content, case_title)
-        else:
-            # For other sections, use general extraction
-            summary_text = _extract_general_summary(clean_content, case_title)
-    else:
-        # If still no good content, try to combine content from multiple sections
-        combined_content = ""
-        for doc in docs:
-            doc_content = doc.get("content", "") or doc.get("text", "")
-            if doc_content and len(doc_content.strip()) > 10:  # Reduced from 50 to 10
-                combined_content += " " + doc_content
-                if len(combined_content) > 500:
-                    break
-        
-        if combined_content and len(combined_content.strip()) > 20:  # Reduced from 100 to 20
-            # Clean and extract meaningful content
-            clean_content = re.sub(r'\s*—\s*[^—]*\s*—\s*', ' ', combined_content)
-            clean_content = re.sub(r'\s+', ' ', clean_content).strip()
-            summary_text = _extract_general_summary(clean_content, case_title)
-        else:
-            # Last resort: try to extract any meaningful content from the case title itself
-            if case_title and len(case_title) > 50:
-                summary_text = f"This case involves {case_title}. The case was decided by the Supreme Court of the Philippines."
-            else:
-                summary_text = f"Case involving {case_title}. Details not available in the retrieved documents."
-    
-    return summary_text
-
-def _extract_meaningful_sentences(content: str, max_sentences: int, keywords: List[str]) -> List[str]:
-    """Extract meaningful sentences with specific keywords"""
-    if not content or not content.strip():
-        return []
-    
-    # Clean the content first
-    content = re.sub(r'\s+', ' ', content).strip()
-    
-    # Split by sentences more intelligently
-    sentences = re.split(r'[.!?]+', content)
-    meaningful_sentences = []
-    
-    # First pass: look for sentences with keywords
-    for sentence in sentences:
-        sentence = sentence.strip()
-        if (len(sentence) > 30 and  # Increased minimum length
-            not sentence.startswith(('G.R. No.', 'Supreme Court', 'E-Library', '—', 'The relevant', 'On 02 August', '[', 'PANGANIBAN')) and
-            not sentence.endswith(('for short', 'as follows', 'Decision, as follows')) and
-            not sentence.isupper() and  # Skip all-caps sentences
-            any(word in sentence.lower() for word in keywords)):
-            meaningful_sentences.append(sentence)
-            if len(meaningful_sentences) >= max_sentences:
-                break
-    
-    # Second pass: if we don't have enough, be more lenient
-    if len(meaningful_sentences) < max_sentences:
-        for sentence in sentences:
-            sentence = sentence.strip()
-            if (len(sentence) > 40 and  # Longer sentences for better context
-                not sentence.startswith(('G.R. No.', 'Supreme Court', 'E-Library', '—', 'The relevant', 'On 02 August', '[', 'PANGANIBAN')) and
-                not sentence.endswith(('for short', 'as follows', 'Decision, as follows')) and
-                sentence not in meaningful_sentences and
-                not any(bad_word in sentence.lower() for bad_word in ['summarized in', 'challenged decision', 'procedural and factual']) and
-                not sentence.isupper() and  # Skip all-caps sentences
-                not sentence.startswith(('The Case', 'This case', 'The general'))):  # Skip generic starts
-                meaningful_sentences.append(sentence)
-                if len(meaningful_sentences) >= max_sentences:
-                    break
-    
-    # Third pass: if still not enough, take any decent sentences
-    if len(meaningful_sentences) < max_sentences:
-        for sentence in sentences:
-            sentence = sentence.strip()
-            if (len(sentence) > 50 and  # Even longer sentences
-                not sentence.startswith(('G.R. No.', 'Supreme Court', 'E-Library', '—', 'The relevant', 'On 02 August', '[', 'PANGANIBAN')) and
-                not sentence.endswith(('for short', 'as follows', 'Decision, as follows')) and
-                sentence not in meaningful_sentences and
-                not sentence.isupper() and
-                not any(bad_word in sentence.lower() for bad_word in ['summarized in', 'challenged decision', 'procedural and factual', 'the case', 'this case', 'the general']) and
-                not sentence.startswith(('The Case', 'This case', 'The general'))):
-                meaningful_sentences.append(sentence)
-                if len(meaningful_sentences) >= max_sentences:
-                    break
-    
-    return meaningful_sentences
-
-def _extract_facts_summary(content: str, case_title: str) -> str:
-    """Extract summary from facts section"""
-    sentences = content.split('.')
-    meaningful_sentences = []
-    
-    for sentence in sentences:
-        sentence = sentence.strip()
-        if (len(sentence) > 20 and 
-            not sentence.startswith(tuple(case_title.split()[:3])) and
-            not sentence.startswith(('G.R. No.', 'Supreme Court', 'E-Library', '—')) and
-            any(word in sentence.lower() for word in ['petitioner', 'respondent', 'alleged', 'claimed', 'contended', 'filed', 'sought', 'requested', 'dispute', 'agreement', 'contract', 'breach', 'damages', 'injury', 'loss'])):
-            meaningful_sentences.append(sentence)
-            if len(' '.join(meaningful_sentences)) > 400:
-                break
-    
-    if meaningful_sentences:
-        return '. '.join(meaningful_sentences) + '.'
-    else:
-        return content[:300] + "..." if len(content) > 300 else content
-
-def _extract_issues_summary(content: str, case_title: str) -> str:
-    """Extract summary from issues section"""
-    sentences = content.split('.')
-    meaningful_sentences = []
-    
-    for sentence in sentences:
-        sentence = sentence.strip()
-        if (len(sentence) > 20 and
-            not sentence.startswith(tuple(case_title.split()[:3])) and
-            not sentence.startswith(('G.R. No.', 'Supreme Court', 'E-Library', '—')) and
-            any(word in sentence.lower() for word in ['whether', 'issue', 'question', 'problem', 'dispute', 'controversy', 'matter', 'case', 'court', 'decision', 'ruling'])):
-            meaningful_sentences.append(sentence)
-            if len(' '.join(meaningful_sentences)) > 400:
-                break
-    
-    if meaningful_sentences:
-        return '. '.join(meaningful_sentences) + '.'
-    else:
-        return content[:300] + "..." if len(content) > 300 else content
-
-def _extract_ruling_summary(content: str, case_title: str) -> str:
-    """Extract summary from ruling section"""
-    sentences = content.split('.')
-    meaningful_sentences = []
-    
-    for sentence in sentences:
-        sentence = sentence.strip()
-        if (len(sentence) > 20 and
-            not sentence.startswith(tuple(case_title.split()[:3])) and
-            not sentence.startswith(('G.R. No.', 'Supreme Court', 'E-Library', '—')) and
-            any(word in sentence.lower() for word in ['court', 'held', 'found', 'determined', 'concluded', 'ruled', 'decided', 'therefore', 'accordingly', 'wherefore', 'so ordered'])):
-            meaningful_sentences.append(sentence)
-            if len(' '.join(meaningful_sentences)) > 400:
-                break
-    
-    if meaningful_sentences:
-        return '. '.join(meaningful_sentences) + '.'
-    else:
-        return content[:300] + "..." if len(content) > 300 else content
-
-def _extract_general_summary(content: str, case_title: str) -> str:
-    """Extract summary from general content"""
-    sentences = content.split('.')
-    meaningful_sentences = []
-    
-    for sentence in sentences:
-        sentence = sentence.strip()
-        if (len(sentence) > 20 and
-            not sentence.startswith(tuple(case_title.split()[:3])) and
-            not sentence.startswith(('G.R. No.', 'Supreme Court', 'E-Library', '—')) and
-            any(word in sentence.lower() for word in ['case', 'court', 'decision', 'ruling', 'facts', 'issues', 'petitioner', 'respondent', 'contract', 'agreement', 'dispute', 'claim', 'alleged', 'held', 'found', 'determined', 'whether', 'problem', 'matter'])):
-            meaningful_sentences.append(sentence)
-            if len(' '.join(meaningful_sentences)) > 400:
-                break
-    
-    if meaningful_sentences:
-        return '. '.join(meaningful_sentences) + '.'
-    else:
-        return content[:300] + "..." if len(content) > 300 else content
 
 def _find_relevant_cases(docs: List[Dict], retriever, history: List[Dict] = None) -> List[Dict]:
     """Find relevant cases with similar case type"""
@@ -771,6 +544,31 @@ def _generate_case_summary_from_jsonl(full_case_content: Dict, query: str, retri
     ruling_content = (full_case_content.get("ruling", "") or 
                      full_case_content.get("sections", {}).get("ruling", "") if isinstance(full_case_content.get("sections"), dict) else "")
     
+    # Fallback: extract dispositive from body/clean_text/sections when explicit 'ruling' is absent
+    if not ruling_content or not ruling_content.strip():
+        candidate_texts = []
+        # Primary long-form fields
+        for key in ("body", "clean_text"):
+            val = full_case_content.get(key, "")
+            if isinstance(val, str) and val.strip():
+                candidate_texts.append(val)
+        # Sectioned variants
+        sections_obj = full_case_content.get("sections")
+        if isinstance(sections_obj, dict):
+            for key in ("dispositive", "wherefore", "decision", "body", "ruling"):
+                val = sections_obj.get(key, "")
+                if isinstance(val, str) and val.strip():
+                    candidate_texts.append(val)
+        # Try regex extraction on candidates
+        extracted = ""
+        for txt in candidate_texts:
+            extracted = _extract_dispositive(txt)
+            if extracted:
+                break
+        if extracted:
+            ruling_content = extracted
+            print("✅ Extracted dispositive from body/sections as ruling content")
+
     # Debug: Check what content we found
     print(f"🔍 Facts content length: {len(facts_content)}")
     print(f"🔍 Ruling content length: {len(ruling_content)}")
@@ -788,11 +586,6 @@ def _generate_case_summary_from_jsonl(full_case_content: Dict, query: str, retri
     
     # Create a prompt for case digest format matching the image structure
     case_digest_prompt = f"""Create a case digest for this Philippine Supreme Court case in the EXACT format shown below:
-
-Case: {case_title}
-G.R. No.: {gr_number}
-Ponente: {ponente}
-Date: {date}
 
 Context:
 {context}
@@ -823,10 +616,12 @@ You MUST format your response EXACTLY as follows (use these exact headers and st
 **Petitioner's Contention:**
 1) [First contention]
 2) [Second contention]
+3) [Continue with numbered contention]
 
 **Respondent's Contention:**
 1) [First contention]
 2) [Second contention]
+3) [Continue with numbered contention]
 
 **RTC:** [RTC decision, e.g., IN FAVOR OF PETITIONER/RESPONDENT]
 - [RTC's statement or reasoning]
@@ -881,7 +676,7 @@ Use only information from the provided context. If information is not available,
             print(f"⚠️ Error finding related cases: {e}")
     
     # Build response with case digest format
-    response_parts = [f"**{case_title}**\n\n**G.R. No.:** {gr_number}\n**Ponente:** {ponente}\n**Date:** {date}\n**Case Type:** {case_type}\n\n{digest_text}"]
+    response_parts = [digest_text]
     
     if relevant_cases:
         response_parts.append("\n**Related Cases:**")
@@ -895,14 +690,14 @@ Use only information from the provided context. If information is not available,
             case_type = (case.get("case_type", "") or 
                         case.get("metadata", {}).get("case_type", "") or 
                         "regular")
-            response_parts.append(f"{i}. {case_title} (G.R. No. {case_gr}) - {case_type}")
+            response_parts.append(f"{i}. {case_title} ({case_gr}) - {case_type}")
     
-    response_parts.append("\nWhat would you like to know about this case?")
-    response_parts.append("• Case Digest - Complete structured summary")
-    response_parts.append("• Ruling - Court's decision and reasoning") 
-    response_parts.append("• Facts - Case background and events")
-    response_parts.append("• Issues - Legal questions raised")
-    response_parts.append("• Arguments - Legal reasoning and doctrines")
+    # response_parts.append("\nWhat would you like to know about this case?")
+    # response_parts.append("• Case Digest - Complete structured summary")
+    # response_parts.append("• Ruling - Court's decision and reasoning") 
+    # response_parts.append("• Facts - Case background and events")
+    # response_parts.append("• Issues - Legal questions raised")
+    # response_parts.append("• Arguments - Legal reasoning and doctrines")
     
     return "\n".join(response_parts)
 
