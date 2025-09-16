@@ -41,8 +41,8 @@ from selectolax.parser import HTMLParser
 BASE_URL     = os.getenv("ELIBRARY_BASE", "https://elibrary.judiciary.gov.ph/")
 OUT_PATH     = os.getenv("CASES_JSONL", "backend/data/cases.jsonl.gz")
 UA           = os.getenv("CRAWLER_UA", "Mozilla/5.0 (compatible; PHLawBot/1.0)")
-YEAR_START   = int(os.getenv("YEAR_START", 2006))
-YEAR_END     = int(os.getenv("YEAR_END", 2006))
+YEAR_START   = int(os.getenv("YEAR_START", 2005))
+YEAR_END     = int(os.getenv("YEAR_END", 2005))
 CONCURRENCY  = int(os.getenv("CONCURRENCY", 12))  # Higher for HTTP-first approach
 SLOWDOWN_MS  = int(os.getenv("SLOWDOWN_MS", 250))
 TIMEOUT_S    = int(os.getenv("TIMEOUT_S", 45))
@@ -135,6 +135,8 @@ def clean_website_headers(text: str) -> str:
         r"Malaysia",
         r"Singapore",
         r"United States of America",
+        # Footer copyright lines
+        r"©\s*\d{4}.*E-?Library.*",
     ]
     
     for pattern in website_patterns:
@@ -172,11 +174,11 @@ def clean_website_headers(text: str) -> str:
             ]):
                 continue
             
-            # Skip lines that are just caps or navigation
-            if (re.match(r'^[A-Z\s]+$', line) or 
-                re.match(r'^[A-Z]\+$', line) or 
-                re.match(r'^\d+\s+Phil\.\s+\d+$', line) or
-                line in ['A', 'A+', 'A++', 'HOME', 'ABOUT US', 'SITE MAP', 'NEWS & ADVISORIES']):
+            # Skip known navigation tokens and reporter citation lines only
+            if (
+                re.match(r'^\d+\s+Phil\.\s+\d+$', line) or  # e.g., 123 Phil. 456
+                line in ['A', 'A+', 'A++', 'HOME', 'ABOUT US', 'SITE MAP', 'NEWS & ADVISORIES']
+            ):
                 continue
             
             cleaned_lines.append(line)
@@ -190,11 +192,23 @@ def normalize_text(s: str) -> str:
     # Clean website headers first
     s = clean_website_headers(s)
     
+    # Convert literal "\n" sequences to real newlines
+    s = s.replace("\\n", "\n")
+
     # Normalize whitespace
     s = re.sub(r"\r\n", "\n", s)
     s = re.sub(r"\r", "\n", s)
-    s = re.sub(r"[ \t]{2,}", " ", s)
+    # Preserve paragraph breaks first
     s = re.sub(r"\n{3,}", "\n\n", s)
+    # Join inline broken lines inside sentences
+    s = re.sub(r",[ \t]*\n", ", ", s)       # comma + newline -> comma space
+    s = re.sub(r";[ \t]*\n", "; ", s)       # semicolon + newline -> semicolon space
+    s = re.sub(r"(?<=\w)[ \t]*\n[ \t]*(?=\w)", " ", s)  # word\nword -> word word
+    # Fix Id. variants
+    s = re.sub(r"\bId\s*\n\s*\.", "Id.", s)
+    s = re.sub(r"\bId\s*\n\s*at\b", "Id. at", s, flags=re.IGNORECASE)
+    # Collapse excessive spaces
+    s = re.sub(r"[ \t]{2,}", " ", s)
     s = re.sub(r"\s+\n", "\n", s)
     s = re.sub(r"^\s+", "", s, flags=re.MULTILINE)
     s = re.sub(r"\s+$", "", s, flags=re.MULTILINE)
@@ -452,158 +466,36 @@ def extract_promulgation_date(text: str) -> str | None:
 def extract_ponente(text: str) -> str | None:
     if not text:
         return None
-    for pat in [
-        r"\b([A-Z][A-Za-z\-']+(?:\s+[A-Z][A-Za-z\-']+)*)\s*,\s*J\.?\b",
-        r"\b([A-Z][A-Za-z\-']+(?:\s+[A-Z][A-Za-z\-']+)*)\s*,\s*SAJ\b",
-        r"\b([A-Z][A-Za-z\-']+(?:\s+[A-Z][A-Za-z\-']+)*)\s*,\s*Chairperson\b",
-    ]:
-        m = re.search(pat, text[:4000])
+    window = text[:5000]
+    
+    def _clean_justice_name(raw: str) -> str:
+        name = raw.strip()
+        # Remove leading DECISION/RESOLUTION tokens, including spaced variants (D E C I S I O N)
+        name = re.sub(r"^(?:DECISION\s+|RESOLUTION\s+)", "", name, flags=re.IGNORECASE)
+        name = re.sub(r"^(?:D\s*E\s*C\s*I\s*S\s*I\s*O\s*N\s+)", "", name, flags=re.IGNORECASE)
+        name = re.sub(r"^(?:R\s*E\s*S\s*O\s*L\s*U\s*T\s*I\s*O\s*N\s+)", "", name, flags=re.IGNORECASE)
+        return name.strip()
+    # Prefer explicit justice suffixes: J., JJ., CJ, SAJ (optionally followed by ':' or '.')
+    patterns = [
+        r"\b([A-Z][A-Za-z\-']+(?:\s+[A-Z][A-Za-z\-']+)*)\s*,\s*(J\.|JJ\.|CJ|SAJ)\s*[:\.]?\b",
+        # Some pages omit dot after J
+        r"\b([A-Z][A-Za-z\-']+(?:\s+[A-Z][A-Za-z\-']+)*)\s*,\s*(J|JJ|CJ|SAJ)\s*[:\.]?\b",
+    ]
+    for pat in patterns:
+        m = re.search(pat, window)
         if m:
-            return m.group(1)
+            name = _clean_justice_name(m.group(1))
+            suffix = m.group(2).strip()
+            if suffix and not suffix.endswith('.') and suffix in ("J", "JJ"):
+                suffix = suffix + "."
+            return f"{name}, {suffix}"
+    # As a fallback, keep prior behavior (name only before J.)
+    m = re.search(r"\b([A-Z][A-Za-z\-']+(?:\s+[A-Z][A-Za-z\-']+)*)\s*,\s*J\.?\b", window)
+    if m:
+        return f"{_clean_justice_name(m.group(1))}, J."
     return None
 
-def extract_facts_section(text: str) -> str:
-    """Extract facts section with improved detection"""
-    if not text:
-        return ""
-    
-    # Enhanced facts patterns
-    facts_patterns = [
-        re.compile(r"^(?:FACTS|FACTUAL\s+ANTECEDENTS|ANTECEDENT\s+FACTS|STATEMENT\s+OF\s+FACTS|THE\s+FACTS)\s*[:\-–]?\s*$", re.IGNORECASE | re.MULTILINE),
-        re.compile(r"^(?:FACTS\s+OF\s+THE\s+CASE|BACKGROUND\s+FACTS|CASE\s+FACTS)\s*[:\-–]?\s*$", re.IGNORECASE | re.MULTILINE),
-        re.compile(r"^(?:CASE\s+BACKGROUND|FACTUAL\s+BACKGROUND|NARRATIVE\s+OF\s+FACTS)\s*[:\-–]?\s*$", re.IGNORECASE | re.MULTILINE),
-    ]
-    
-    for pattern in facts_patterns:
-        match = pattern.search(text)
-        if match:
-            start = match.end()
-            # Find the end of facts section
-            end_patterns = [
-                re.compile(r"^(?:ISSUES?|QUESTIONS?|RULING|DECISION|WHEREFORE)", re.IGNORECASE | re.MULTILINE),
-                re.compile(r"^(?:ARGUMENTS?|DISCUSSION|ANALYSIS)", re.IGNORECASE | re.MULTILINE),
-            ]
-            
-            end_pos = len(text)
-            for end_pattern in end_patterns:
-                end_match = end_pattern.search(text[start:])
-                if end_match:
-                    end_pos = min(end_pos, start + end_match.start())
-            
-            facts_text = text[start:end_pos].strip()
-            if len(facts_text) > 50:  # Ensure meaningful content
-                return facts_text
-    
-    return ""
-
-def extract_issues_section(text: str) -> str:
-    """Extract issues section with improved detection"""
-    if not text:
-        return ""
-    
-    # Enhanced issues patterns
-    issues_patterns = [
-        re.compile(r"^(?:ISSUES?|QUESTIONS?\s+PRESENTED|LEGAL\s+ISSUES?|ISSUES?\s+FOR\s+RESOLUTION)\s*[:\-–]?\s*$", re.IGNORECASE | re.MULTILINE),
-        re.compile(r"^(?:[IVX]+\.)?\s*WHETHER\b", re.IGNORECASE | re.MULTILINE),
-        re.compile(r"^(?:THE\s+ISSUES?|PRINCIPAL\s+ISSUES?|MAIN\s+ISSUES?)\s*[:\-–]?\s*$", re.IGNORECASE | re.MULTILINE),
-    ]
-    
-    for pattern in issues_patterns:
-        match = pattern.search(text)
-        if match:
-            start = match.end()
-            # Find the end of issues section
-            end_patterns = [
-                re.compile(r"^(?:FACTS?|RULING|DECISION|WHEREFORE|ARGUMENTS?)", re.IGNORECASE | re.MULTILINE),
-                re.compile(r"^(?:DISCUSSION|ANALYSIS|REASONING)", re.IGNORECASE | re.MULTILINE),
-            ]
-            
-            end_pos = len(text)
-            for end_pattern in end_patterns:
-                end_match = end_pattern.search(text[start:])
-                if end_match:
-                    end_pos = min(end_pos, start + end_match.start())
-            
-            issues_text = text[start:end_pos].strip()
-            if len(issues_text) > 30:  # Ensure meaningful content
-                return issues_text
-    
-    return ""
-
-def extract_arguments_section(text: str) -> str:
-    """Extract arguments/discussion section with improved detection"""
-    if not text:
-        return ""
-    
-    # Enhanced arguments patterns
-    arguments_patterns = [
-        re.compile(r"^(?:ARGUMENTS?|DISCUSSION|REASONING|ANALYSIS|LEGAL\s+REASONING)\s*[:\-–]?\s*$", re.IGNORECASE | re.MULTILINE),
-        re.compile(r"^(?:COURT\s+ANALYSIS|LEGAL\s+ANALYSIS|DISCUSSION\s+AND\s+ANALYSIS)\s*[:\-–]?\s*$", re.IGNORECASE | re.MULTILINE),
-    ]
-    
-    for pattern in arguments_patterns:
-        match = pattern.search(text)
-        if match:
-            start = match.end()
-            # Find the end of arguments section
-            end_patterns = [
-                re.compile(r"^(?:RULING|DECISION|WHEREFORE|DISPOSITION)", re.IGNORECASE | re.MULTILINE),
-                re.compile(r"^(?:FACTS?|ISSUES?)", re.IGNORECASE | re.MULTILINE),
-            ]
-            
-            end_pos = len(text)
-            for end_pattern in end_patterns:
-                end_match = end_pattern.search(text[start:])
-                if end_match:
-                    end_pos = min(end_pos, start + end_match.start())
-            
-            arguments_text = text[start:end_pos].strip()
-            if len(arguments_text) > 100:  # Ensure meaningful content
-                return arguments_text
-    
-    return ""
-
-def split_sections(text: str):
-    """Enhanced section splitting with better extraction"""
-    if not text:
-        return {"header": "", "body": "", "ruling": "", "facts": "", "issues": "", "arguments": ""}
-    
-    # Extract specific sections
-    facts = extract_facts_section(text)
-    issues = extract_issues_section(text)
-    arguments = extract_arguments_section(text)
-    
-    # Extract ruling using existing logic
-    m = RULING_REGEX.search(text)
-    ruling = ""
-    if m:
-        ruling = text[m.start():m.end()].strip()
-    
-    # Extract header (first 1000 characters, cleaned)
-    header = text[:1000].strip() if text else ""
-    
-    # Body is the remaining content after removing extracted sections
-    body = text
-    if facts:
-        body = body.replace(facts, "")
-    if issues:
-        body = body.replace(issues, "")
-    if ruling:
-        body = body.replace(ruling, "")
-    if arguments:
-        body = body.replace(arguments, "")
-    
-    # Clean up body
-    body = re.sub(r"\n\s*\n\s*\n+", "\n\n", body).strip()
-    
-    return {
-        "header": header,
-        "body": body,
-        "ruling": ruling,
-        "facts": facts,
-        "issues": issues,
-        "arguments": arguments
-    }
+# Removed unused section extractors and splitter; pipeline relies on clean_text only
 
 def load_existing_ids(path: str) -> set[str]:
     ids: set[str] = set()
@@ -886,7 +778,8 @@ def classify_case_type(title: str, gr_number: str | None = None) -> dict[str, An
 
 def parse_case(text_base: str, url: str, year_hint: int | None = None, month_hint: str | None = None,
                title_guess: str | None = None, page_title: str | None = None):
-    text = normalize_text(text_base)
+    # Clean site boilerplate then normalize whitespace
+    text = normalize_text(clean_website_headers(text_base or ""))
 
     # Case title (prefer derived caption over generic page guess)
     derived_title = derive_case_title_from_text(text)
@@ -897,15 +790,16 @@ def parse_case(text_base: str, url: str, year_hint: int | None = None, month_hin
 
     # Date (prioritize header dates over body dates)
     date_iso = extract_promulgation_date(text)
-
-    secs = split_sections(text)
-    # Ensure body is not empty; always preserve full body content
-    if not secs.get("body"):
-        secs["body"] = (text or "").strip()
+    
+    # Simple ruling presence flag from full text
+    has_ruling_flag = bool(RULING_REGEX.search(text or ""))
 
     # Division / En Banc and Ponente
     division, en_banc = extract_division_enbanc(text)
     ponente = extract_ponente(text)
+    # If en banc or PER CURIAM indicated and no individual justice found, set ponente accordingly
+    if (en_banc is True or "PER CURIAM" in text[:3000].upper()) and not ponente:
+        ponente = "PER CURIAM"
     
     # Classify case type
     classification = classify_case_type(case_title or title_guess or "", gr_primary)
@@ -934,21 +828,16 @@ def parse_case(text_base: str, url: str, year_hint: int | None = None, month_hin
         url_fragment = url.rsplit('/', 1)[-1] if url else None
         fallback_title = url_fragment if is_valid_title_candidate(url_fragment or "") else "Untitled Case"
 
-    # Add quality metrics
+    # Add quality metrics (drop per-section booleans)
     quality_metrics = {
-        "has_facts": bool(secs.get("facts")),
-        "has_issues": bool(secs.get("issues")),
-        "has_ruling": bool(secs.get("ruling")),
-        "has_arguments": bool(secs.get("arguments")),
+        "has_ruling": has_ruling_flag,
         "text_length": len(text),
-        "sections_count": len([k for k, v in secs.items() if v and k != "header"]),
     }
 
     record = {
         "id": sha256(url),
         "gr_number": gr_primary,
         "gr_numbers": gr_all or None,
-        "title": fallback_title,
         "case_title": case_title,
         "page_title": page_title,              # debug/optional
         "promulgation_date": date_iso,         # may be None
@@ -962,8 +851,7 @@ def parse_case(text_base: str, url: str, year_hint: int | None = None, month_hin
         "ponente": ponente,
         "division": division,
         "en_banc": en_banc,
-        "sections": secs,
-        # Always include cleaned full body text for hybrid retrieval
+        # Always include cleaned full text for hybrid retrieval
         "clean_text": text,
         # Helpful flags
         "has_gr_number": bool(gr_primary),

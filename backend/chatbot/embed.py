@@ -29,8 +29,8 @@ VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", 768))
 # Source data (JSONL only)
 DATA_FILE   = os.getenv("DATA_FILE", "backend/data/cases.jsonl.gz")
 # Optional year range filter when processing JSONL
-YEAR_START  = int(os.getenv("YEAR_START", 2005))
-YEAR_END    = int(os.getenv("YEAR_END", 2005))
+YEAR_START  = int(os.getenv("YEAR_START", 2006))
+YEAR_END    = int(os.getenv("YEAR_END", 2006))
 
 
 # Chunking/throughput

@@ -475,7 +475,7 @@ def _generate_case_summary_from_jsonl(full_case_content: Dict, query: str, retri
     print("🔍 Generating case summary from JSONL content using LLM...")
     
     # Extract metadata
-    case_title = full_case_content.get("title", "") or full_case_content.get("case_title", "")
+    case_title = full_case_content.get("case_title", "")
     gr_number = full_case_content.get("gr_number", "")
     
     # Clean up G.R. number to avoid duplication
@@ -500,6 +500,39 @@ def _generate_case_summary_from_jsonl(full_case_content: Dict, query: str, retri
     
     ruling_content = (full_case_content.get("ruling", "") or 
                      full_case_content.get("sections", {}).get("ruling", "") if isinstance(full_case_content.get("sections"), dict) else "")
+
+    # Derive dispositive text and concise SC ruling summary from ruling content
+    try:
+        dispositive_text = _extract_dispositive(ruling_content) or _extract_dispositive(full_case_content.get("body", ""))
+    except Exception:
+        dispositive_text = ""
+
+    def _extract_sc_ruling_summary(text: str) -> str:
+        if not text:
+            return ""
+        cues = [
+            "certiorari", "grave abuse", "res judicata", "People of the Philippines",
+            "special civil action", "not the proper remedy", "final and executory",
+            "identity of parties", "does not bar criminal", "failure to implead"
+        ]
+        cleaned = re.sub(r"\s+", " ", text).strip()
+        parts = re.split(r"(?<=[.!?])\s+", cleaned)
+        picked: List[str] = []
+        for s in parts:
+            ls = s.lower()
+            if any(k in ls for k in cues) and 20 <= len(s) <= 400:
+                picked.append(s)
+            if len(picked) >= 3:
+                break
+        if not picked:
+            for s in parts:
+                if 40 <= len(s) <= 300:
+                    picked.append(s)
+                if len(picked) >= 2:
+                    break
+        return " ".join(picked[:3])
+
+    sc_ruling_summary = _extract_sc_ruling_summary(ruling_content)
     
     # Fallback: extract dispositive from body/clean_text/sections when explicit 'ruling' is absent
     if not ruling_content or not ruling_content.strip():
@@ -537,6 +570,10 @@ def _generate_case_summary_from_jsonl(full_case_content: Dict, query: str, retri
         context_parts.append(f"FACTS: {facts_content[:2000]}...")
     if ruling_content and len(ruling_content.strip()) > 100:
         context_parts.append(f"RULING: {ruling_content[:2000]}...")
+    if sc_ruling_summary:
+        context_parts.append(f"RULING SUMMARY: {sc_ruling_summary[:600]}")
+    if dispositive_text:
+        context_parts.append(f"DISPOSITIVE (verbatim): \"{dispositive_text}\"")
     
     context = "\n\n".join(context_parts) if context_parts else "No detailed content available."
     print(f"🔍 Final context length: {len(context)}")
@@ -558,7 +595,7 @@ You MUST format your response EXACTLY as follows (use these exact headers and st
 **Topic:** [Legal topic, e.g., Original Document Rule]
 
 **Doctrine:**
-[Key legal doctrine or principle]
+[Extract ONE controlling rule from the RULING/RULING SUMMARY in Context. If none is present in the sources, write "Not stated in sources."]
 
 **Ticker/Summary:**
 [Brief case summary]
@@ -590,9 +627,9 @@ You MUST format your response EXACTLY as follows (use these exact headers and st
 - [Answer to the issue, YES OR NO]
 
 **SC RULING:**
-[Supreme Court's decision and reasoning; explain the Court's reasoning]
+[Summarize the Court's reasoning in 2–3 sentences based ONLY on the RULING and RULING SUMMARY in Context. Do not invent content.]
 
-**DISPOSITIVE:** [Final disposition, e.g., PETITION is GRANTED]
+**DISPOSITIVE:** [Quote the WHEREFORE/So Ordered clause VERBATIM from Context. If none in sources, write "Not stated in sources."]
 
 Use only information from the provided context. If information is not available, write "Not stated in sources."""
 
