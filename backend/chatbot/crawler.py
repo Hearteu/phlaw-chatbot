@@ -51,7 +51,7 @@ WRITE_CHUNK  = int(os.getenv("WRITE_CHUNK", 1000))  # tasks per gather batch
 HEADERS = {"User-Agent": UA}
 
 RULING_REGEX = re.compile(
-    r"(WHEREFORE.*?SO ORDERED\.?|ACCORDINGLY.*?SO ORDERED\.?)",
+    r"(WHEREFORE.*?SO ORDERED\.?|ACCORDINGLY.*?SO ORDERED\.?|IN VIEW WHEREOF.*?SO ORDERED\.?)",
     re.IGNORECASE | re.DOTALL,
 )
 
@@ -422,6 +422,34 @@ def parse_gr_numbers_from_text(text: str) -> tuple[str | None, list[str]]:
     primary = formatted_found[0] if formatted_found else None
     return primary, formatted_found
 
+def parse_special_numbers_from_text(text: str) -> tuple[str | None, list[str]]:
+    """Extract special case numbers (A.M., OCA, etc.) for non-GR cases"""
+    if not text:
+        return None, []
+    
+    # Patterns for different special case types
+    special_patterns = [
+        (r"A\.M\.\s+No\.?\s*([0-9\-]+[A-Z]?)", "A.M. No. {}"),
+        (r"OCA\s+No\.?\s*([0-9\-]+[A-Z]?)", "OCA No. {}"),
+        (r"U\.C\.\s+No\.?\s*([0-9\-]+[A-Z]?)", "U.C. No. {}"),
+        (r"ADM\s+No\.?\s*([0-9\-]+[A-Z]?)", "ADM No. {}"),
+        (r"AC\s+No\.?\s*([0-9\-]+[A-Z]?)", "AC No. {}"),
+        (r"B\.M\.\s+No\.?\s*([0-9\-]+[A-Z]?)", "B.M. No. {}"),
+        (r"LRC\s+No\.?\s*([0-9\-]+[A-Z]?)", "LRC No. {}"),
+        (r"SP\s+No\.?\s*([0-9\-]+[A-Z]?)", "SP No. {}"),
+    ]
+    
+    found: list[str] = []
+    for pattern, format_str in special_patterns:
+        for m in re.finditer(pattern, text[:4000], re.IGNORECASE):
+            number = m.group(1).strip()
+            formatted = format_str.format(number)
+            if formatted not in found:
+                found.append(formatted)
+    
+    primary = found[0] if found else None
+    return primary, found
+
 def extract_division_enbanc(text: str) -> tuple[str | None, bool | None]:
     if not text:
         return None, None
@@ -476,10 +504,11 @@ def extract_ponente(text: str) -> str | None:
         name = re.sub(r"^(?:R\s*E\s*S\s*O\s*L\s*U\s*T\s*I\s*O\s*N\s+)", "", name, flags=re.IGNORECASE)
         return name.strip()
     # Prefer explicit justice suffixes: J., JJ., CJ, SAJ (optionally followed by ':' or '.')
+    # Handle titles like SR., JR., III, etc. before the justice suffix
     patterns = [
-        r"\b([A-Z][A-Za-z\-']+(?:\s+[A-Z][A-Za-z\-']+)*)\s*,\s*(J\.|JJ\.|CJ|SAJ)\s*[:\.]?\b",
+        r"\b([A-Z][A-Za-z\-']+(?:\s+(?:SR\.|JR\.|III|IV|V|VI|VII|VIII|IX|X))*)\s*,\s*(J\.|JJ\.|CJ|SAJ)\s*[:\.]?\b",
         # Some pages omit dot after J
-        r"\b([A-Z][A-Za-z\-']+(?:\s+[A-Z][A-Za-z\-']+)*)\s*,\s*(J|JJ|CJ|SAJ)\s*[:\.]?\b",
+        r"\b([A-Z][A-Za-z\-']+(?:\s+(?:SR\.|JR\.|III|IV|V|VI|VII|VIII|IX|X))*)\s*,\s*(J|JJ|CJ|SAJ)\s*[:\.]?\b",
     ]
     for pat in patterns:
         m = re.search(pat, window)
@@ -874,6 +903,9 @@ def parse_case(text_base: str, url: str, year_hint: int | None = None, month_hin
 
     # GR numbers (primary + list)
     gr_primary, gr_all = parse_gr_numbers_from_text(text)
+    
+    # Special numbers for non-GR cases (A.M., OCA, etc.)
+    special_primary, special_all = parse_special_numbers_from_text(text)
 
     # Date (prioritize header dates over body dates)
     date_iso = extract_promulgation_date(text)
@@ -925,6 +957,8 @@ def parse_case(text_base: str, url: str, year_hint: int | None = None, month_hin
         "id": sha256(url),
         "gr_number": gr_primary,
         "gr_numbers": gr_all or None,
+        "special_number": special_primary,
+        "special_numbers": special_all or None,
         "case_title": case_title,
         "page_title": page_title,              # debug/optional
         "promulgation_date": date_iso,         # may be None
@@ -932,7 +966,7 @@ def parse_case(text_base: str, url: str, year_hint: int | None = None, month_hin
         "promulgation_month": month_hint,      # optional
         "court": "Supreme Court",
         "source_url": url,
-        "clean_version": "v2.0",  # Updated version for improved data
+        "clean_version": "v2.1",  # Updated version for special numbers
         "checksum": sha256(text),
         "crawl_ts": datetime.utcnow().isoformat() + "Z",
         "ponente": ponente,
@@ -942,6 +976,7 @@ def parse_case(text_base: str, url: str, year_hint: int | None = None, month_hin
         "clean_text": text,
         # Helpful flags
         "has_gr_number": bool(gr_primary),
+        "has_special_number": bool(special_primary),
         # Case classification
         "case_type": classification.get("case_type"),
         "case_subtypes": classification.get("case_subtypes"),

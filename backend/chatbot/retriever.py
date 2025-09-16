@@ -118,10 +118,12 @@ def load_case_from_jsonl(case_id: str, jsonl_path: str = DATA_FILE) -> Optional[
                 
                 # Try multiple matching strategies
                 case_gr = case.get('gr_number', '')
+                case_special = case.get('special_number', '')
                 case_id_field = case.get('id', '')
                 
                 # Check if this is the case we're looking for
                 if (case_gr == case_id or 
+                    case_special == case_id or
                     case_id_field == case_id or 
                     case_gr == f"G.R. No. {case_id}" or
                     case_gr == f"GR No. {case_id}"):
@@ -394,7 +396,13 @@ class LegalRetriever:
             print(f"📋 GR-number path: {gr_number}")
             return self._retrieve_by_gr_number(gr_number, k)
         
-        # Path 2: Keyword search with ensemble retrieval
+        # Path 2: Check if query contains special number (A.M., OCA, etc.)
+        special_number = self._extract_special_number(query)
+        if special_number:
+            print(f"📋 Special-number path: {special_number}")
+            return self._retrieve_by_special_number(special_number, k)
+        
+        # Path 3: Keyword search with ensemble retrieval
         print(f"📋 Keyword path: {query}")
         return self._retrieve_by_keywords(query, k, is_case_digest)
     
@@ -414,6 +422,47 @@ class LegalRetriever:
             match = re.search(pattern, query, re.IGNORECASE)
             if match:
                 return match.group(1).strip()
+        
+        return None
+    
+    def _extract_special_number(self, query: str) -> Optional[str]:
+        """Extract special number from query (A.M., OCA, etc.), returns formatted number or None"""
+        if not query:
+            return None
+        
+        # Patterns for different special case types
+        special_patterns = [
+            r"A\.M\.\s+No\.?\s*([0-9\-]+[A-Z]?)",
+            r"OCA\s+No\.?\s*([0-9\-]+[A-Z]?)",
+            r"U\.C\.\s+No\.?\s*([0-9\-]+[A-Z]?)",
+            r"ADM\s+No\.?\s*([0-9\-]+[A-Z]?)",
+            r"AC\s+No\.?\s*([0-9\-]+[A-Z]?)",
+            r"B\.M\.\s+No\.?\s*([0-9\-]+[A-Z]?)",
+            r"LRC\s+No\.?\s*([0-9\-]+[A-Z]?)",
+            r"SP\s+No\.?\s*([0-9\-]+[A-Z]?)",
+        ]
+        
+        for pattern in special_patterns:
+            match = re.search(pattern, query, re.IGNORECASE)
+            if match:
+                number = match.group(1).strip()
+                # Determine the type from the pattern
+                if "A\.M\." in pattern:
+                    return f"A.M. No. {number}"
+                elif "OCA" in pattern:
+                    return f"OCA No. {number}"
+                elif "U\.C\." in pattern:
+                    return f"U.C. No. {number}"
+                elif "ADM" in pattern:
+                    return f"ADM No. {number}"
+                elif "AC" in pattern:
+                    return f"AC No. {number}"
+                elif "B\.M\." in pattern:
+                    return f"B.M. No. {number}"
+                elif "LRC" in pattern:
+                    return f"LRC No. {number}"
+                elif "SP" in pattern:
+                    return f"SP No. {number}"
         
         return None
     
@@ -476,6 +525,50 @@ class LegalRetriever:
             
         except Exception as e:
             print(f"❌ Error searching GR {gr_number}: {e}")
+            return []
+
+    def _retrieve_by_special_number(self, special_number: str, k: int) -> List[Dict[str, Any]]:
+        """Exact special number search in metadata (A.M., OCA, etc.)"""
+        try:
+            # Try multiple special number formats
+            special_formats = [
+                special_number,  # Raw number
+                special_number.upper(),  # Uppercase
+                special_number.lower(),  # Lowercase
+            ]
+            
+            for special_format in special_formats:
+                dummy_vector = [0.0] * 768
+                
+                search_results = self.qdrant.search(
+                    collection_name=self.collection,
+                    query_vector=dummy_vector,
+                    query_filter=Filter(
+                        must=[
+                            FieldCondition(
+                                key="special_number",
+                                match=MatchValue(value=special_format)
+                            )
+                        ]
+                    ),
+                    limit=k,
+                    with_payload=True
+                )
+                
+                if search_results:
+                    results = []
+                    for hit in search_results:
+                        doc = self._convert_hit_to_doc(hit, 'special_number_exact')
+                        results.append(doc)
+                    
+                    print(f"✅ Found {len(results)} metadata records for Special {special_number}")
+                    return results
+            
+            print(f"⚠️ No results found for Special {special_number}")
+            return []
+            
+        except Exception as e:
+            print(f"❌ Error searching Special {special_number}: {e}")
             return []
     
     def _retrieve_by_keywords(self, query: str, k: int, is_case_digest: bool = False) -> List[Dict[str, Any]]:

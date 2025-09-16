@@ -29,8 +29,8 @@ VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", 768))
 # Source data (JSONL only)
 DATA_FILE   = os.getenv("DATA_FILE", "backend/data/cases.jsonl.gz")
 # Optional year range filter when processing JSONL
-YEAR_START  = int(os.getenv("YEAR_START", 2006))
-YEAR_END    = int(os.getenv("YEAR_END", 2006))
+YEAR_START  = int(os.getenv("YEAR_START", 2005))
+YEAR_END    = int(os.getenv("YEAR_END", 2005))
 
 
 # Chunking/throughput
@@ -283,6 +283,44 @@ def derive_gr_numbers(rec: Dict[str, Any]) -> Tuple[Optional[str], List[str]]:
     primary = existing or (found[0] if found else None)
     return primary, found
 
+def derive_special_numbers(rec: Dict[str, Any]) -> Tuple[Optional[str], List[str]]:
+    """Parse special case numbers (A.M., OCA, etc.) from record.
+    Returns (primary_special_number, all_special_numbers_list).
+    """
+    existing = (rec.get("special_number") or "").strip()
+    existing_list = rec.get("special_numbers") or []
+    
+    if existing:
+        return existing, existing_list if isinstance(existing_list, list) else [existing]
+    
+    # If no existing special numbers, try to parse from text
+    text = rec.get("clean_text") or ""
+    if not text:
+        return None, []
+    
+    # Use the same patterns as crawler
+    special_patterns = [
+        (r"A\.M\.\s+No\.?\s*([0-9\-]+[A-Z]?)", "A.M. No. {}"),
+        (r"OCA\s+No\.?\s*([0-9\-]+[A-Z]?)", "OCA No. {}"),
+        (r"U\.C\.\s+No\.?\s*([0-9\-]+[A-Z]?)", "U.C. No. {}"),
+        (r"ADM\s+No\.?\s*([0-9\-]+[A-Z]?)", "ADM No. {}"),
+        (r"AC\s+No\.?\s*([0-9\-]+[A-Z]?)", "AC No. {}"),
+        (r"B\.M\.\s+No\.?\s*([0-9\-]+[A-Z]?)", "B.M. No. {}"),
+        (r"LRC\s+No\.?\s*([0-9\-]+[A-Z]?)", "LRC No. {}"),
+        (r"SP\s+No\.?\s*([0-9\-]+[A-Z]?)", "SP No. {}"),
+    ]
+    
+    found: List[str] = []
+    for pattern, format_str in special_patterns:
+        for m in re.finditer(pattern, text[:4000], re.IGNORECASE):
+            number = m.group(1).strip()
+            formatted = format_str.format(number)
+            if formatted not in found:
+                found.append(formatted)
+    
+    primary = found[0] if found else None
+    return primary, found
+
 
 # (TXT readers removed)
 
@@ -334,6 +372,7 @@ def record_meta(rec):
                 y = None
 
     primary_gr, all_grs = derive_gr_numbers(rec)
+    primary_special, all_special = derive_special_numbers(rec)
     title = derive_case_title(rec)
     # Prefer crawler-provided case_type/subtypes if present; else derive lightweight type/tags
     crawler_case_type = rec.get("case_type")
@@ -349,6 +388,8 @@ def record_meta(rec):
     return {
         "gr_number": primary_gr,
         "gr_numbers": all_grs or None,
+        "special_number": primary_special,
+        "special_numbers": all_special or None,
         "title": title,
         "case_type": case_type,
         "case_type_tags": case_tags or None,
@@ -361,7 +402,7 @@ def record_meta(rec):
         # Optional commonly present fields (kept if available)
         "ponente": rec.get("ponente"),
         "division": rec.get("division"),
-        "metadata_version": "minimal-2",
+        "metadata_version": "minimal-3",
         "extraction_timestamp": int(time.time()),
     }
 
@@ -392,12 +433,14 @@ def make_points(
     payloads: List[Dict[str, Any]] = []
     ids: List[str] = []
 
-    # CAPTION: lightweight metadata line to anchor title/GR/date/division for retrieval
+    # CAPTION: lightweight metadata line to anchor title/GR/special/date/division for retrieval
     caption_bits = []
     if meta.get("title"):
         caption_bits.append(str(meta["title"]))
     if meta.get("gr_number"):
         caption_bits.append(f"G.R.: {meta['gr_number']}")
+    if meta.get("special_number"):
+        caption_bits.append(f"Special: {meta['special_number']}")
     if meta.get("promulgation_date"):
         caption_bits.append(str(meta["promulgation_date"]))
     if meta.get("division"):

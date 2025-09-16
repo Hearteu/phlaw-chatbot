@@ -21,6 +21,32 @@ def _extract_gr_number(query: str) -> str:
     m = re.search(r"\b(\d{5,})\b", q)
     return m.group(1) if m else ""
 
+def _extract_special_number(query: str) -> str:
+    """Extract special number from query (A.M., OCA, etc.), returns formatted number or empty string."""
+    if not query:
+        return ""
+    q = query.strip()
+    
+    # Patterns for different special case types
+    special_patterns = [
+        (r"A\.M\.\s+No\.?\s*([0-9\-]+[A-Z]?)", "A.M. No. {}"),
+        (r"OCA\s+No\.?\s*([0-9\-]+[A-Z]?)", "OCA No. {}"),
+        (r"U\.C\.\s+No\.?\s*([0-9\-]+[A-Z]?)", "U.C. No. {}"),
+        (r"ADM\s+No\.?\s*([0-9\-]+[A-Z]?)", "ADM No. {}"),
+        (r"AC\s+No\.?\s*([0-9\-]+[A-Z]?)", "AC No. {}"),
+        (r"B\.M\.\s+No\.?\s*([0-9\-]+[A-Z]?)", "B.M. No. {}"),
+        (r"LRC\s+No\.?\s*([0-9\-]+[A-Z]?)", "LRC No. {}"),
+        (r"SP\s+No\.?\s*([0-9\-]+[A-Z]?)", "SP No. {}"),
+    ]
+    
+    for pattern, format_str in special_patterns:
+        m = re.search(pattern, q, re.IGNORECASE)
+        if m:
+            number = m.group(1).strip()
+            return format_str.format(number)
+    
+    return ""
+
 def _normalize_gr_display(value: str) -> str:
     """Return a clean 'G.R. No. <num>' or 'Unknown' if not parseable."""
     if not value:
@@ -81,7 +107,7 @@ def _advanced_retrieve(retriever, query: str, k: int = 8, is_case_digest: bool =
     return retriever.retrieve(query, k=k, is_case_digest=is_case_digest)
 
 # --- Stronger dispositive detection & extraction ---
-DISPOSITIVE_HDR = r"(?:WHEREFORE|ACCORDINGLY|IN VIEW OF THE FOREGOING|THUS|HENCE|PREMISES CONSIDERED)"
+DISPOSITIVE_HDR = r"(?:WHEREFORE|ACCORDINGLY|IN VIEW OF THE FOREGOING|IN VIEW WHEREOF|THUS|HENCE|PREMISES CONSIDERED)"
 SO_ORDERED = r"SO\s+ORDERED\.?"
 RULING_REGEX = re.compile(
     rf"{DISPOSITIVE_HDR}[\s\S]{{0,4000}}?{SO_ORDERED}",
@@ -580,7 +606,7 @@ def _generate_case_summary_from_jsonl(full_case_content: Dict, query: str, retri
     context_parts = [meta_line]
     # Put concise summary first to prime the model
     if sc_ruling_summary:
-        context_parts.append(f"RULING SUMMARY: {_trim_to_sentences(sc_ruling_summary, 900)}")
+        context_parts.append(f"RULING SUMMARY: {_trim_to_sentences(sc_ruling_summary, 1000)}")
     # Ruling excerpt (longer budget)
     if ruling_content and len(ruling_content.strip()) > 60:
         context_parts.append(f"RULING: {_trim_to_sentences(ruling_content, 3000)}")
@@ -591,7 +617,7 @@ def _generate_case_summary_from_jsonl(full_case_content: Dict, query: str, retri
         context_parts.append(f"DISPOSITIVE (verbatim{label}): \"{dispo_excerpt}\"")
     # Facts excerpt (smaller budget)
     if facts_content and len(facts_content.strip()) > 60:
-        context_parts.append(f"FACTS: {_trim_to_sentences(facts_content, 2000)}")
+        context_parts.append(f"FACTS: {_trim_to_sentences(facts_content, 6000)}")
 
     context = "\n\n".join([p for p in context_parts if p]) if any(p.strip() for p in context_parts) else "No detailed content available."
     print(f"🔍 Final context length: {len(context)}")
@@ -746,14 +772,20 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
                 retriever = None
 
     try:
-            # Simplified routing: GR-number exact search vs keyword top-3
+            # Simplified routing: GR-number exact search vs special number vs keyword top-3
             gr_num = _extract_gr_number(query)
+            special_num = _extract_special_number(query)
             docs = []
             if gr_num:
                 # Direct exact GR number metadata search
                 print(f"🎯 GR-number path: {gr_num}")
                 docs = retriever._retrieve_by_gr_number(gr_num, k=8)
                 wants_digest = True  # enforce digest format for GR path
+            elif special_num:
+                # Direct exact special number metadata search
+                print(f"🎯 Special-number path: {special_num}")
+                docs = retriever._retrieve_by_special_number(special_num, k=8)
+                wants_digest = True  # enforce digest format for special number path
                 
                 # Debug: Show metadata found
                 if docs:
@@ -779,6 +811,24 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
                         print(f"⚠️ JSONL loading failed for GR {gr_num}: {e}")
                 else:
                     print(f"❌ No metadata found for GR {gr_num} in vector DB")
+            elif special_num:
+                # For special number path, try to load from JSONL using special number
+                if docs:
+                    print(f"🔄 Found metadata for Special {special_num}, fetching full content from JSONL")
+                    try:
+                        from .retriever import load_case_from_jsonl
+
+                        # Try loading by special number (may need to implement this in retriever)
+                        full_case = load_case_from_jsonl(special_num)
+                        if full_case:
+                            print(f"✅ JSONL content loaded for Special {special_num}")
+                            return _generate_case_summary_from_jsonl(full_case, query, retriever, history)
+                        else:
+                            print(f"❌ No JSONL data found for Special {special_num}")
+                    except Exception as e:
+                        print(f"⚠️ JSONL loading failed for Special {special_num}: {e}")
+                else:
+                    print(f"❌ No metadata found for Special {special_num} in vector DB")
             else:
                 # Keyword path: retrieve and return the top 3 unique cases
                 hits = _advanced_retrieve(retriever, query, k=12, is_case_digest=False, history=history)
