@@ -307,36 +307,16 @@ def iter_cases(path: str):
 
 def text_from_record(rec: Dict[str, Any]) -> str:
     """
-    Re-create a single text stream preserving your section-aware emphasis:
-    ruling → header → body, with whitespace normalized.
-    Enhanced to work with both current and legacy dataset formats.
+    Build a single text stream from record relying on clean_text and optional ruling.
+    Order: ruling (if present) → clean_text. Whitespace-normalized.
     """
-    s = rec.get("sections") or {}
+    ruling = rec.get("ruling", "")
+    body = rec.get("clean_text", "") or rec.get("body", "")
     parts: List[str] = []
-    
-    # Priority 1: Ruling section (most important for legal decisions)
-    ruling = s.get("ruling") or rec.get("ruling", "")
-    if ruling:
+    if isinstance(ruling, str) and ruling.strip():
         parts.append(normalize_text(ruling))
-    
-    # Priority 2: Header section (case title and basic info)
-    header = s.get("header") or rec.get("header", "")
-    if header:
-        parts.append(normalize_text(header))
-    
-    # Priority 3: Body section (main content)
-    body = s.get("body") or rec.get("body", "") or rec.get("clean_text", "")
-    if body:
+    if isinstance(body, str) and body.strip():
         parts.append(normalize_text(body))
-    
-    # Priority 4: Additional sections for comprehensive coverage
-    additional_sections = ["facts", "issues", "arguments"]
-    for section in additional_sections:
-        content = s.get(section, "")
-        if content and content.strip():
-            parts.append(normalize_text(content))
-    
-    # Join with a single space (we already normalized internals)
     return " ".join(p for p in parts if p).strip()
 
 def record_meta(rec):
@@ -355,7 +335,16 @@ def record_meta(rec):
 
     primary_gr, all_grs = derive_gr_numbers(rec)
     title = derive_case_title(rec)
-    case_type, case_tags = derive_case_type(rec)
+    # Prefer crawler-provided case_type/subtypes if present; else derive lightweight type/tags
+    crawler_case_type = rec.get("case_type")
+    crawler_subtypes = rec.get("case_subtypes") or (
+        [rec.get("case_subtype")] if rec.get("case_subtype") else None
+    )
+    if crawler_case_type:
+        case_type = crawler_case_type
+        case_tags = list(crawler_subtypes) if isinstance(crawler_subtypes, list) else None
+    else:
+        case_type, case_tags = derive_case_type(rec)
     
     return {
         "gr_number": primary_gr,
@@ -363,14 +352,16 @@ def record_meta(rec):
         "title": title,
         "case_type": case_type,
         "case_type_tags": case_tags or None,
+        # Maintain explicit subtypes if provided by crawler
+        "case_subtypes": list(case_tags) if case_tags else (list(crawler_subtypes) if isinstance(crawler_subtypes, list) else None),
+        "case_subtype": (list(crawler_subtypes)[0] if isinstance(crawler_subtypes, list) and crawler_subtypes else rec.get("case_subtype")),
         "promulgation_year": y if isinstance(y, int) else None,
         "promulgation_date": rec.get("promulgation_date"),
         "source_url": rec.get("source_url"),
         # Optional commonly present fields (kept if available)
         "ponente": rec.get("ponente"),
         "division": rec.get("division"),
-        "sectioned": True,
-        "metadata_version": "minimal-1",
+        "metadata_version": "minimal-2",
         "extraction_timestamp": int(time.time()),
     }
 

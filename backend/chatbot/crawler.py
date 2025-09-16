@@ -696,84 +696,171 @@ def extract_title(md: str | None, html: str | None) -> tuple[str | None, str | N
 # -----------------------------
 # Parse case (from text) + build record
 # -----------------------------
-def classify_case_type(title: str, gr_number: str | None = None) -> dict[str, Any]:
-    """Classify case type and extract relevant metadata"""
-    title_upper = title.upper()
-    
-    # Disciplinary complaints (can have A.M. numbers) - check this first
-    if 'COMPLAINANT' in title_upper and 'RESPONDENT' in title_upper:
-        return {
-            "case_type": "administrative", 
-            "case_subtype": "disciplinary_complaint",
-            "is_administrative": True,
-            "is_regular_case": False
-        }
-    
-    # Other administrative cases (A.M. numbers without complaint structure)
-    if 'A.M.' in title_upper or 'ADMINISTRATIVE' in title_upper:
-        return {
-            "case_type": "administrative",
-            "case_subtype": "administrative_matter",
-            "is_administrative": True,
-            "is_regular_case": False
-        }
-    
-    # Regular cases with G.R. numbers
-    if gr_number and (str(gr_number).isdigit() or 'G.R.' in str(gr_number)):
-        # Determine subtype based on title patterns
-        if 'PETITIONER' in title_upper and 'RESPONDENT' in title_upper:
-            if 'CERTIORARI' in title_upper:
-                subtype = "certiorari"
-            elif 'MANDAMUS' in title_upper:
-                subtype = "mandamus"
-            elif 'PROHIBITION' in title_upper:
-                subtype = "prohibition"
-            elif 'HABEAS CORPUS' in title_upper:
-                subtype = "habeas_corpus"
-            elif 'QUO WARRANTO' in title_upper:
-                subtype = "quo_warranto"
-            elif 'APPEAL' in title_upper:
-                subtype = "appeal"
-            else:
-                subtype = "petition"
-        elif 'PEOPLE OF THE PHILIPPINES' in title_upper:
-            subtype = "criminal"
-        else:
-            subtype = "civil"
-            
-        return {
-            "case_type": "regular",
-            "case_subtype": subtype,
-            "is_administrative": False,
-            "is_regular_case": True
-        }
-    
-    # Consolidated cases (GR ranges)
-    if gr_number and '-' in str(gr_number) and any(char.isdigit() for char in str(gr_number)):
-        return {
-            "case_type": "regular",
-            "case_subtype": "consolidated",
-            "is_administrative": False,
-            "is_regular_case": True
-        }
-    
-    # Other cases
-    if 'MOTION' in title_upper:
-        subtype = "motion"
-    elif 'RESOLUTION' in title_upper:
-        subtype = "resolution"
-    elif 'ORDER' in title_upper:
-        subtype = "order"
-    elif 'RE:' in title_upper:
-        subtype = "administrative_matter"
-    else:
-        subtype = "other"
-    
+def classify_case_type(title: str, gr_number: str | None = None, full_text: str | None = None) -> dict[str, Any]:
+    """Classify primary case_type as 'civil' or 'criminal' and list subtypes.
+
+    Heuristics:
+    - Primary type = 'criminal' if title or early body mentions 'People of the Philippines' or common criminal terms; else 'civil'.
+    - Subtypes include: certiorari, mandamus, prohibition, habeas_corpus, quo_warranto, appeal, petition,
+      administrative_matter, disciplinary_complaint, motion, resolution, order, consolidated, election, labor, tax, etc.
+    """
+    title_upper = (title or "").upper()
+    text_scan = (full_text or "")[:4000].upper()
+
+    subtypes: list[str] = []
+
+    # Helper to add subtype if any keyword appears
+    def add_if_any(keywords: list[str], label: str):
+        if any(k in title_upper or k in text_scan for k in keywords):
+            if label not in subtypes:
+                subtypes.append(label)
+
+    # Special Civil Actions / Writs
+    add_if_any(["CERTIORARI"], "certiorari")
+    add_if_any(["MANDAMUS"], "mandamus")
+    add_if_any(["PROHIBITION"], "prohibition")
+    add_if_any(["HABEAS CORPUS"], "habeas_corpus")
+    add_if_any(["QUO WARRANTO"], "quo_warranto")
+    add_if_any(["DECLARATORY RELIEF"], "declaratory_relief")
+    add_if_any(["INTERPLEADER"], "interpleader")
+    add_if_any(["INJUNCTION", "PRELIMINARY INJUNCTION"], "injunction")
+
+    # Civil: Family and Persons
+    add_if_any(["ANNULMENT OF MARRIAGE"], "annulment_of_marriage")
+    add_if_any(["DECLARATION OF NULLITY"], "declaration_of_nullity")
+    add_if_any(["LEGAL SEPARATION"], "legal_separation")
+    add_if_any(["ADOPTION"], "adoption")
+    add_if_any(["GUARDIANSHIP"], "guardianship")
+    add_if_any(["SUPPORT"], "support")
+    add_if_any(["PATERNITY", "FILIATION"], "paternity_filiation")
+    add_if_any(["CHANGE OF NAME", "CORRECTION OF NAME", "CORRECTION OF ENTRY", "CIVIL STATUS"], "change_or_correction_of_name_or_status")
+
+    # Civil: Property and Ownership
+    add_if_any(["EJECTMENT", "FORCIBLE ENTRY", "UNLAWFUL DETAINER"], "ejectment")
+    add_if_any(["QUIETING OF TITLE"], "quieting_of_title")
+    add_if_any(["PARTITION"], "partition")
+    add_if_any(["RECONVEYANCE"], "reconveyance")
+    add_if_any(["ACCION REIVINDICATORIA", "ACCION PUBLICIANA", "RECOVERY OF POSSESSION"], "recovery_of_possession")
+    add_if_any(["FORECLOSURE OF MORTGAGE", "FORECLOSURE OF REAL ESTATE MORTGAGE"], "foreclosure_of_mortgage")
+    add_if_any(["REFORMATION OF INSTRUMENTS"], "reformation_of_instruments")
+
+    # Civil: Obligations and Contracts
+    add_if_any(["COLLECTION OF SUM", "SUM OF MONEY"], "collection_of_sum_of_money")
+    add_if_any(["BREACH OF CONTRACT"], "breach_of_contract")
+    add_if_any(["SPECIFIC PERFORMANCE"], "specific_performance")
+    add_if_any(["RESCISSION"], "rescission_of_contract")
+    add_if_any(["DAMAGES", "NEGLIGENCE", "QUASI-DELICT", "TORT"], "damages")
+
+    # Civil: Succession and Estates
+    add_if_any(["SETTLEMENT OF ESTATE", "SPECIAL PROCEEDINGS"], "settlement_of_estate")
+    add_if_any(["PROBATE OF WILL", "PROBATE"], "probate")
+    add_if_any(["INTESTATE"], "intestate")
+
+    # Civil: Other topics
+    add_if_any(["EXPROPRIATION", "EMINENT DOMAIN"], "expropriation")
+
+    # Administrative flavor (still civil primary)
+    add_if_any(["ADMINISTRATIVE"], "administrative_matter")
+    if "COMPLAINANT" in title_upper and "RESPONDENT" in title_upper:
+        add_if_any(["COMPLAINANT"], "disciplinary_complaint")
+
+    # Motions / Resolutions / Orders
+    add_if_any(["MOTION"], "motion")
+    add_if_any(["RESOLUTION"], "resolution")
+    add_if_any(["ORDER"], "order")
+
+    # Labor / Tax / Election
+    add_if_any(["LABOR", "NLRC"], "labor")
+    add_if_any(["TAX", "BIR"], "tax")
+    add_if_any(["ELECTION", "COMELEC", "ELECTORAL"], "election")
+
+    # Consolidated
+    if gr_number and '-' in str(gr_number):
+        if "consolidated" not in subtypes:
+            subtypes.append("consolidated")
+
+    # Criminal indicators
+    criminal_indicators = [
+        "PEOPLE OF THE PHILIPPINES", "INFORMATION", "ESTAFA", "MURDER", "HOMICIDE",
+        "RAPE", "ROBBERY", "THEFT", "ILLEGAL DRUGS", "DANGEROUS DRUGS", "QUALIFIED",
+        "KIDNAPPING", "DETENTION", "CARNAPPING", "ARSON", "LIBEL", "SLANDER",
+        "REBEL", "SEDITION", "COUP", "ASSAULT", "PERJURY", "FORGERY", "COUNTERFEIT",
+        "FALSIFICATION", "BRIBERY", "MALVERSATION", "GAMBLING", "OBSCENITY", "PORNOGRAPHY",
+        "TRAFFICKING", "MONEY LAUNDERING", "TERRORISM"
+    ]
+    is_criminal = any(tok in title_upper for tok in criminal_indicators) or any(
+        tok in text_scan for tok in criminal_indicators
+    )
+
+    # Criminal subtypes
+    add_if_any(["MURDER"], "murder")
+    add_if_any(["HOMICIDE"], "homicide")
+    add_if_any(["PARRICIDE"], "parricide")
+    add_if_any(["INFANTICIDE"], "infanticide")
+    add_if_any(["PHYSICAL INJURIES"], "physical_injuries")
+    add_if_any(["RAPE"], "rape")
+    add_if_any(["ACTS OF LASCIVIOUSNESS"], "acts_of_lasciviousness")
+    add_if_any(["FRUSTRATED HOMICIDE", "ATTEMPTED HOMICIDE"], "frustrated_or_attempted_homicide")
+
+    add_if_any(["THEFT"], "theft")
+    add_if_any(["ROBBERY"], "robbery")
+    add_if_any(["CARNAPPING"], "carnapping")
+    add_if_any(["MALICIOUS MISCHIEF"], "malicious_mischief")
+    add_if_any(["ESTAFA"], "estafa")
+    add_if_any(["ARSON"], "arson")
+
+    add_if_any(["KIDNAPPING", "ILLEGAL DETENTION"], "kidnapping_or_illegal_detention")
+    add_if_any(["GRAVE THREATS"], "grave_threats")
+    add_if_any(["GRAVE COERCION"], "grave_coercion")
+    add_if_any(["SLAVERY", "CHILD LABOR"], "slavery_or_child_labor")
+
+    add_if_any(["ADULTERY"], "adultery")
+    add_if_any(["CONCUBINAGE"], "concubinage")
+    add_if_any(["SEDuction".upper()], "seduction")
+
+    add_if_any(["LIBEL"], "libel")
+    add_if_any(["SLANDER", "ORAL DEFAMATION"], "slander")
+    add_if_any(["INCRIMINATING INNOCENT PERSONS"], "incriminating_innocent_persons")
+    add_if_any(["INTRIGUING AGAINST HONOR"], "intriguing_against_honor")
+
+    add_if_any(["FORGERY"], "forgery")
+    add_if_any(["COUNTERFEIT", "COUNTERFEITING"], "counterfeiting")
+    add_if_any(["USE OF FALSIFIED", "FALSIFIED DOCUMENTS"], "use_of_falsified_documents")
+    add_if_any(["PERJURY"], "perjury")
+
+    add_if_any(["REBELLION"], "rebellion")
+    add_if_any(["SEDITION"], "sedition")
+    add_if_any(["COUP D", "COUP D’ETAT", "COUP D'ETAT"], "coup_detat")
+    add_if_any(["DIRECT ASSAULT"], "direct_assault")
+    add_if_any(["RESISTANCE AND DISOBEDIENCE", "DISOBEDIENCE"], "resistance_or_disobedience")
+
+    add_if_any(["GAMBLING", "JUETENG"], "gambling")
+    add_if_any(["OBSCENITY", "PORNOGRAPHY"], "obscenity_or_pornography")
+
+    add_if_any(["BRIBERY"], "bribery")
+    add_if_any(["CORRUPTION OF PUBLIC OFFICIALS"], "corruption_of_public_officials")
+    add_if_any(["MALVERSATION"], "malversation")
+    add_if_any(["FALSIFICATION BY PUBLIC OFFICERS"], "falsification_by_public_officers")
+
+    add_if_any(["DANGEROUS DRUGS", "RA 9165"], "dangerous_drugs")
+    add_if_any(["CYBERCRIME", "RA 10175"], "cybercrime")
+    add_if_any(["ANTI-VAWC", "VAWC", "RA 9262"], "anti_vawc")
+    add_if_any(["ANTI-HAZING", "HAZING", "RA 11053"], "anti_hazing")
+    add_if_any(["TERRORISM", "ANTI-TERRORISM", "RA 11479"], "anti_terrorism")
+    add_if_any(["TRAFFICKING IN PERSONS", "RA 9208"], "anti_trafficking")
+    add_if_any(["MONEY LAUNDERING", "RA 9160"], "anti_money_laundering")
+
+    case_type = "criminal" if is_criminal else "civil"
+
+    # Basic fallbacks for petitions without explicit label
+    if ("PETITION" in title_upper or "PETITION" in text_scan) and not any(
+        s in subtypes for s in ("certiorari", "mandamus", "prohibition", "habeas_corpus", "appeal")
+    ):
+        subtypes.append("petition")
+
     return {
-        "case_type": "other",
-        "case_subtype": subtype,
-        "is_administrative": subtype == "administrative_matter",
-        "is_regular_case": False
+        "case_type": case_type,
+        "case_subtypes": subtypes or None,
     }
 
 def parse_case(text_base: str, url: str, year_hint: int | None = None, month_hint: str | None = None,
@@ -802,7 +889,7 @@ def parse_case(text_base: str, url: str, year_hint: int | None = None, month_hin
         ponente = "PER CURIAM"
     
     # Classify case type
-    classification = classify_case_type(case_title or title_guess or "", gr_primary)
+    classification = classify_case_type(case_title or title_guess or "", gr_primary, text)
 
     # Robust title fallback if still missing (avoid body text)
     def is_valid_title_candidate(title: str) -> bool:
@@ -856,10 +943,10 @@ def parse_case(text_base: str, url: str, year_hint: int | None = None, month_hin
         # Helpful flags
         "has_gr_number": bool(gr_primary),
         # Case classification
-        "case_type": classification["case_type"],
-        "case_subtype": classification["case_subtype"],
-        "is_administrative": classification["is_administrative"],
-        "is_regular_case": classification["is_regular_case"],
+        "case_type": classification.get("case_type"),
+        "case_subtypes": classification.get("case_subtypes"),
+        # Back-compat single subtype for older consumers (first of list)
+        "case_subtype": (classification.get("case_subtypes") or [None])[0],
         # Quality metrics
         "quality_metrics": quality_metrics,
     }

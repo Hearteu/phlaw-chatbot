@@ -247,10 +247,8 @@ def _generate_case_summary(docs: List[Dict], query: str, retriever=None, history
     if full_case_content:
         log_debug("[SEARCH] Using full case content for summary generation...")
         # Extract content from full case (using actual JSONL fields)
-        facts_content = full_case_content.get("body", "")  # Use body for facts
-        issues_content = full_case_content.get("header", "")  # Use header for issues
+        facts_content = full_case_content.get("clean_text", "") or full_case_content.get("body", "")
         ruling_content = full_case_content.get("ruling", "")
-        decision_content = full_case_content.get("body", "")  # Use body for decision content
         
         # Use LLM to generate a proper storytelling summary from JSONL content
         log_debug("[SEARCH] Using LLM to generate storytelling summary from JSONL content...")
@@ -534,7 +532,7 @@ def _generate_case_summary_from_jsonl(full_case_content: Dict, query: str, retri
 
     sc_ruling_summary = _extract_sc_ruling_summary(ruling_content)
     
-    # Fallback: extract dispositive from body/clean_text/sections when explicit 'ruling' is absent
+    # Fallback: extract dispositive from body/clean_text when explicit 'ruling' is absent
     if not ruling_content or not ruling_content.strip():
         candidate_texts = []
         # Primary long-form fields
@@ -542,13 +540,6 @@ def _generate_case_summary_from_jsonl(full_case_content: Dict, query: str, retri
             val = full_case_content.get(key, "")
             if isinstance(val, str) and val.strip():
                 candidate_texts.append(val)
-        # Sectioned variants
-        sections_obj = full_case_content.get("sections")
-        if isinstance(sections_obj, dict):
-            for key in ("dispositive", "wherefore", "decision", "body", "ruling"):
-                val = sections_obj.get(key, "")
-                if isinstance(val, str) and val.strip():
-                    candidate_texts.append(val)
         # Try regex extraction on candidates
         extracted = ""
         for txt in candidate_texts:
@@ -564,18 +555,45 @@ def _generate_case_summary_from_jsonl(full_case_content: Dict, query: str, retri
     print(f"🔍 Ruling content length: {len(ruling_content)}")
     print(f"🔍 Available fields: {list(full_case_content.keys())}")
     
-    # Prepare context for LLM
-    context_parts = []
-    if facts_content and len(facts_content.strip()) > 100:
-        context_parts.append(f"FACTS: {facts_content[:2000]}...")
-    if ruling_content and len(ruling_content.strip()) > 100:
-        context_parts.append(f"RULING: {ruling_content[:2000]}...")
+    # Prepare context for LLM (metadata + sentence-bounded excerpts)
+    def _trim_to_sentences(text: str, max_chars: int) -> str:
+        if not text:
+            return ""
+        t = re.sub(r"\s+", " ", text).strip()
+        if len(t) <= max_chars:
+            return t
+        cut = t[:max_chars]
+        # Try to cut at last sentence boundary within window
+        m = re.search(r"[.!?](?=[ \]\)\"]|$)", cut[::-1])
+        if m:
+            idx = len(cut) - m.start()
+            return cut[:idx].rstrip()
+        return cut.rstrip()
+
+    meta_type = full_case_content.get("case_type") or ""
+    meta_subtypes = full_case_content.get("case_subtypes") or []
+    meta_line = f"CASE: {case_title}\nGR: {gr_number} | Date: {date} | Ponente: {ponente}"
+    if meta_type:
+        st = ", ".join(meta_subtypes) if isinstance(meta_subtypes, list) and meta_subtypes else None
+        meta_line += f"\nType: {meta_type}{(' | Subtypes: ' + st) if st else ''}"
+
+    context_parts = [meta_line]
+    # Put concise summary first to prime the model
     if sc_ruling_summary:
-        context_parts.append(f"RULING SUMMARY: {sc_ruling_summary[:600]}")
+        context_parts.append(f"RULING SUMMARY: {_trim_to_sentences(sc_ruling_summary, 900)}")
+    # Ruling excerpt (longer budget)
+    if ruling_content and len(ruling_content.strip()) > 60:
+        context_parts.append(f"RULING: {_trim_to_sentences(ruling_content, 3000)}")
+    # Dispositive verbatim, capped and labeled if truncated
     if dispositive_text:
-        context_parts.append(f"DISPOSITIVE (verbatim): \"{dispositive_text}\"")
-    
-    context = "\n\n".join(context_parts) if context_parts else "No detailed content available."
+        dispo_excerpt = _trim_to_sentences(dispositive_text, 1400)
+        label = " (excerpt)" if len(dispositive_text) > len(dispo_excerpt) else ""
+        context_parts.append(f"DISPOSITIVE (verbatim{label}): \"{dispo_excerpt}\"")
+    # Facts excerpt (smaller budget)
+    if facts_content and len(facts_content.strip()) > 60:
+        context_parts.append(f"FACTS: {_trim_to_sentences(facts_content, 2000)}")
+
+    context = "\n\n".join([p for p in context_parts if p]) if any(p.strip() for p in context_parts) else "No detailed content available."
     print(f"🔍 Final context length: {len(context)}")
     
     # Create a prompt for case digest format matching the image structure
