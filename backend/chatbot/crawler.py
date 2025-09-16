@@ -48,6 +48,10 @@ SLOWDOWN_MS  = int(os.getenv("SLOWDOWN_MS", 250))
 TIMEOUT_S    = int(os.getenv("TIMEOUT_S", 45))
 WRITE_CHUNK  = int(os.getenv("WRITE_CHUNK", 1000))  # tasks per gather batch
 
+# TXT export configuration - always enabled by default
+EXPORT_TXT       = os.getenv("EXPORT_TXT", "1").lower() in ("1", "true", "yes", "on")
+TXT_EXPORT_DIR   = os.getenv("TXT_EXPORT_DIR", "backend/jurisprudence")
+
 HEADERS = {"User-Agent": UA}
 
 RULING_REGEX = re.compile(
@@ -199,6 +203,131 @@ def normalize_text(s: str) -> str:
     s = re.sub(r"^\s+", "", s, flags=re.MULTILINE)
     s = re.sub(r"\s+$", "", s, flags=re.MULTILINE)
     return s.strip()
+
+# -----------------------------
+# TXT export helpers (optional)
+# -----------------------------
+def _safe_filename(name: str) -> str:
+    name = name or "untitled"
+    # Remove characters invalid on Windows/Linux filesystems
+    name = re.sub(r"[\\/*?:\"<>|]+", "", name)
+    # Collapse whitespace and trim
+    name = re.sub(r"\s+", " ", name).strip()
+    # Keep it reasonably short
+    return name[:160] or "untitled"
+
+def export_record_as_txt(record: dict):
+    """Export a scraped record as a TXT file in the jurisprudence folder"""
+    try:
+        # Determine year folder
+        year = record.get("promulgation_year")
+        if isinstance(year, int) and year > 0:
+            year_str = str(year)
+        elif isinstance(year, str) and year.isdigit():
+            year_str = year
+        else:
+            year_str = "unknown"
+        
+        # Create year directory
+        base_dir = os.path.join(TXT_EXPORT_DIR, year_str)
+        os.makedirs(base_dir, exist_ok=True)
+
+        # Generate filename from G.R. number or title
+        gr_number = record.get("gr_number", "")
+        case_title = record.get("case_title", "")
+        title = record.get("title", "")
+        
+        if gr_number:
+            name_part = gr_number
+        elif case_title:
+            name_part = case_title
+        elif title:
+            name_part = title
+        else:
+            name_part = "untitled"
+        
+        filename = _safe_filename(f"{name_part}.txt")
+        out_path = os.path.join(base_dir, filename)
+
+        # Build TXT content
+        secs = record.get("sections") or {}
+        lines = []
+        
+        # Header metadata
+        lines.append("=" * 80)
+        lines.append("SUPREME COURT CASE RECORD")
+        lines.append("=" * 80)
+        lines.append(f"Title: {case_title or title or 'N/A'}")
+        lines.append(f"G.R. Number: {gr_number or 'N/A'}")
+        lines.append(f"Promulgation Date: {record.get('promulgation_date') or 'N/A'}")
+        lines.append(f"Year: {year_str}")
+        lines.append(f"Division: {record.get('division') or 'N/A'}")
+        lines.append(f"En Banc: {record.get('en_banc') or 'N/A'}")
+        lines.append(f"Ponente: {record.get('ponente') or 'N/A'}")
+        lines.append(f"Case Type: {record.get('case_type') or 'N/A'}")
+        lines.append(f"Case Subtype: {record.get('case_subtype') or 'N/A'}")
+        lines.append(f"Source URL: {record.get('source_url') or 'N/A'}")
+        lines.append(f"Crawl Timestamp: {record.get('crawl_ts') or 'N/A'}")
+        lines.append("=" * 80)
+        lines.append("")
+
+        # RULING section (most important)
+        ruling = (secs.get("ruling") or "").strip()
+        if ruling:
+            lines.append("RULING")
+            lines.append("-" * 40)
+            lines.append(ruling)
+            lines.append("")
+
+        # FACTS section
+        facts = (secs.get("facts") or "").strip()
+        if facts:
+            lines.append("FACTS")
+            lines.append("-" * 40)
+            lines.append(facts)
+            lines.append("")
+
+        # ISSUES section
+        issues = (secs.get("issues") or "").strip()
+        if issues:
+            lines.append("ISSUES")
+            lines.append("-" * 40)
+            lines.append(issues)
+            lines.append("")
+
+        # ARGUMENTS/DISCUSSION section
+        arguments = (secs.get("arguments") or "").strip()
+        if arguments:
+            lines.append("ARGUMENTS / DISCUSSION")
+            lines.append("-" * 40)
+            lines.append(arguments)
+            lines.append("")
+
+        # HEADER section
+        header = (secs.get("header") or "").strip()
+        if header:
+            lines.append("HEADER")
+            lines.append("-" * 40)
+            lines.append(header)
+            lines.append("")
+
+        # FULL BODY section
+        full_text = record.get("clean_text") or secs.get("body") or ""
+        if full_text:
+            lines.append("FULL CASE TEXT")
+            lines.append("-" * 40)
+            lines.append(full_text.strip())
+            lines.append("")
+
+        # Write to file
+        with open(out_path, "w", encoding="utf-8") as tf:
+            tf.write("\n".join(lines))
+        
+        print(f"📄 Exported TXT: {out_path}")
+        
+    except Exception as e:
+        print(f"⚠️ TXT export failed for record: {e}")
+        # Non-fatal; TXT export should never break crawling
 
 # -----------------------------
 # Field extractors (caption, GR numbers, division, ponente)
@@ -960,6 +1089,7 @@ async def crawl_all_with_playwright(items: list[dict], out_path: str, existing_i
                                          month_hint=item.get("month_hint"),
                                          title_guess=title_guess, page_title=page_title)
                         f.write(orjson.dumps(rec).decode("utf-8") + "\n")
+                        export_record_as_txt(rec)
                         existing_ids.add(rec["id"])
                         written += 1
                         await asyncio.sleep(SLOWDOWN_MS / 1000.0)
@@ -1018,6 +1148,7 @@ async def crawl_all_fallback_requests(items: list[dict], out_path: str, existing
                                          month_hint=item.get("month_hint"),
                                          title_guess=title_guess, page_title=page_title)
                         f.write(orjson.dumps(rec).decode("utf-8") + "\n")
+                        export_record_as_txt(rec)
                         existing_ids.add(rec["id"])
                         written += 1
                         await asyncio.sleep(SLOWDOWN_MS / 1000.0)
@@ -1074,8 +1205,40 @@ async def crawl_all(items: list[dict], out_path: str):
             raise
 
 def main():
+    print("🚀 Starting Supreme Court E-Library Crawler")
+    print(f"📅 Year range: {YEAR_START}-{YEAR_END}")
+    print(f"📁 TXT export: {'Enabled' if EXPORT_TXT else 'Disabled'}")
+    print(f"📂 TXT directory: {TXT_EXPORT_DIR}")
+    print("=" * 60)
+    
     items = discover_case_urls()
-    asyncio.run(crawl_all(items, OUT_PATH))
+    if not items:
+        print("❌ No case URLs found!")
+        return
+    
+    print(f"📋 Found {len(items)} case URLs to crawl")
+    print("🔄 Starting crawl process...")
+    
+    try:
+        asyncio.run(crawl_all(items, OUT_PATH))
+        print("✅ Crawl completed successfully!")
+        
+        # Show summary of TXT files created
+        if EXPORT_TXT:
+            print("\n📄 TXT Files Created:")
+            try:
+                for root, dirs, files in os.walk(TXT_EXPORT_DIR):
+                    for file in files:
+                        if file.endswith('.txt'):
+                            rel_path = os.path.relpath(os.path.join(root, file), TXT_EXPORT_DIR)
+                            print(f"  • {rel_path}")
+            except Exception as e:
+                print(f"  ⚠️ Could not list TXT files: {e}")
+                
+    except Exception as e:
+        print(f"❌ Crawl failed: {e}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
     main()

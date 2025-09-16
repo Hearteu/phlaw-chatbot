@@ -288,9 +288,9 @@ class LegalRetriever:
         entities = query_analysis.entities
         print(f"🔍 Extracted entities: {sum(len(v) for v in entities.values())} total")
         
-        # Step 3: Use base retriever's hybrid method
-        all_candidates = super().retrieve(query, k=k*2, is_case_digest=is_case_digest, use_hybrid=True)
-        print(f"📋 Retrieved {len(all_candidates)} candidates from base retriever")
+        # Step 3: Use semantic search as base retrieval
+        all_candidates = self._semantic_search(query, k*2, is_case_digest)
+        print(f"📋 Retrieved {len(all_candidates)} candidates from semantic search")
         
         # Step 4: Advanced reranking if available
         if self.reranker and len(all_candidates) > 1:
@@ -366,6 +366,22 @@ class LegalRetriever:
         self._performance_stats['cache_misses'] += 1
         
         # Perform analysis
+        if self.query_processor is None:
+            # Fallback to basic analysis when enhanced components are not available
+            from .query_processor import QueryType, QueryComplexity, QueryAnalysis
+            return QueryAnalysis(
+                original_query=query,
+                query_type=QueryType.GENERAL_LEGAL,
+                complexity=QueryComplexity.SIMPLE,
+                confidence=0.5,
+                entities={'gr_numbers': [], 'case_names': [], 'legal_terms': [], 'years': [], 'courts': [], 'procedures': []},
+                legal_terms=[],
+                intent_flags={'wants_digest': False, 'wants_facts': False, 'wants_ruling': False, 'wants_issues': False, 'wants_arguments': False, 'wants_keywords': False, 'wants_citations': False},
+                reformulated_queries=[query],
+                suggested_filters={},
+                context_requirements=[]
+            )
+        
         analysis = self.query_processor.process_query(query, conversation_history)
         
         # Cache result
@@ -534,11 +550,23 @@ class LegalRetriever:
     def _semantic_search(self, query: str, k: int, is_case_digest: bool) -> List[Dict[str, Any]]:
         """Perform semantic vector search"""
         try:
-            # Use the parent class semantic search
-            results = super().retrieve(query, k, is_case_digest)
-            # Add match type to results
-            for result in results:
-                result['match_type'] = 'semantic_search'
+            # Generate query embedding
+            query_vector = self.model.encode([query])[0].tolist()
+            
+            # Search Qdrant
+            search_results = self.qdrant.search(
+                collection_name=self.collection,
+                query_vector=query_vector,
+                limit=k,
+                with_payload=True
+            )
+            
+            # Convert to our format
+            results = []
+            for hit in search_results:
+                doc = self._convert_hit_to_doc(hit, 'semantic_search')
+                results.append(doc)
+            
             return results
         except Exception as e:
             print(f"Error in semantic search: {e}")

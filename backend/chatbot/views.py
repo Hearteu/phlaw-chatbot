@@ -86,25 +86,23 @@ class ChatView(APIView):
         query = serializer.validated_data["query"]
         history = serializer.validated_data.get("history") or []
         
-        # Clear LLM cache to ensure new model is loaded
-        clear_llm_cache()
-        
-        # Pre-load LLM model to cache it
+        # Ensure LLM is loaded and cached (do not clear cache per request)
         try:
             get_cached_llm()
         except Exception as e:
             logger.warning(f"LLM pre-loading failed: {e}")
         
         try:
-            # Add timeout protection (60 seconds max)
+            # Add timeout protection (120 seconds max for case digests)
+            timeout_seconds = 120 if any(keyword in query.lower() for keyword in ["digest", "case digest", "comprehensive digest"]) else 60
             try:
-                with timeout_handler(60, query, history) as answer:
+                with timeout_handler(timeout_seconds, query, history) as answer:
                     # Ensure string response
                     if not isinstance(answer, str):
                         answer = str(answer)
                     return Response({"response": answer}, status=status.HTTP_200_OK)
             except TimeoutError:
-                logger.warning("Chat request timed out after 60 seconds")
+                logger.warning(f"Chat request timed out after {timeout_seconds} seconds")
                 return Response({
                     "response": "I apologize, but your request is taking longer than expected. Please try a simpler question or try again."
                 }, status=status.HTTP_200_OK)

@@ -4,7 +4,6 @@ import os
 import re
 from typing import Any, Dict, List, Optional
 
-import httpx
 import psutil
 from llama_cpp import Llama
 
@@ -16,12 +15,6 @@ MODEL_PATH = os.path.join(BASE_DIR, "law-chat.Q4_K_M.gguf")
 
 # LLM configuration is now centralized in model_cache.py
 # This ensures consistent settings across the application
-
-# Rev21 Labs API configuration
-REV21_BASE_URL = os.getenv("REV21_BASE_URL", "https://ai-tools.rev21labs.com/api/v1")
-REV21_ENDPOINT_PATH = os.getenv("REV21_ENDPOINT_PATH", "/chat/completions")
-REV21_API_KEY = os.getenv("REV21_API_KEY", "")
-REV21_ENABLED = (os.getenv("REV21_ENABLED", "true").lower() not in {"0", "false", "no"}) and bool(REV21_API_KEY)
 
 # Import centralized model cache
 from .model_cache import clear_llm_cache, get_cached_llm
@@ -79,85 +72,10 @@ def _ensure_llm() -> Llama:
         raise RuntimeError("Failed to load LLM model")
     return llm
 
-def _call_rev21_prompt(prompt: str) -> Optional[str]:
-    """Call Rev21 Labs API with prompt"""
-    if not REV21_ENABLED:
-        return None
-    
-    url = f"{REV21_BASE_URL}{REV21_ENDPOINT_PATH}"
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "x-api-key": REV21_API_KEY,
-    }
-    payload = {
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 1200,
-        "temperature": 0.4,
-        "top_p": 0.9,
-    }
-
-    try:
-        with httpx.Client(timeout=30.0) as client:
-            resp = client.post(url, headers=headers, json=payload)
-            if resp.status_code >= 400:
-                return None
-            data = resp.json()
-            text = _parse_rev21_response(data)
-            if isinstance(text, str) and text.strip():
-                text = re.sub(r"\s*\[/?INST\]\s*", " ", text)
-                print("LLM: REV21 (prompt)")
-                return text.strip()
-    except Exception:
-        return None
-    return None
-
-def _call_rev21_messages(messages: List[Dict[str, str]]) -> Optional[str]:
-    """Call Rev21 Labs API with message history"""
-    if not REV21_ENABLED:
-        return None
-    
-    url = f"{REV21_BASE_URL}{REV21_ENDPOINT_PATH}"
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "x-api-key": REV21_API_KEY,
-    }
-    payload = {
-        "messages": messages,
-        "max_tokens": 1200,
-        "temperature": 0.4,
-        "top_p": 0.9,
-    }
-
-    try:
-        with httpx.Client(timeout=30.0) as client:
-            resp = client.post(url, headers=headers, json=payload)
-            if resp.status_code >= 400:
-                return None
-            data = resp.json()
-            text = _parse_rev21_response(data)
-            if isinstance(text, str) and text.strip():
-                text = re.sub(r"\s*\[/?INST\]\s*", " ", text)
-                print("LLM: REV21 (messages)")
-                return text.strip()
-    except Exception:
-        return None
-    return None
-
-def _parse_rev21_response(data: Dict[str, Any]) -> Optional[str]:
-    """Parse Rev21 Labs API response"""
-    try:
-        if "choices" in data and len(data["choices"]) > 0:
-            choice = data["choices"][0]
-            if "message" in choice and "content" in choice["message"]:
-                return choice["message"]["content"]
-        return None
-    except Exception:
-        return None
+# Rev21 API removed — local LLM is now the sole generator
 
 def generate_response(prompt: str) -> str:
-    """Generate response using Rev21 Labs API or local LLM fallback with enhanced memory management"""
+    """Generate response using the local law-chat LLM with memory management"""
     # Check memory pressure before generation
     from .model_cache import auto_cleanup_if_needed, memory_managed_operation
 
@@ -165,20 +83,23 @@ def generate_response(prompt: str) -> str:
     if auto_cleanup_if_needed():
         print("🧹 Memory cleanup performed before generation")
     
-    # Try Rev21 Labs API first
-    remote = _call_rev21_prompt(prompt)
-    if remote:
-        return remote
-    
-    # Fallback to local LLM with enhanced memory management
+    # Generate using local LLM with enhanced memory management
     with memory_managed_operation():
         try:
             llm = _ensure_llm()
             
+            # Determine if this is a case digest request for token allocation
+            is_case_digest = ("case digest" in prompt.lower() or 
+                            "digest" in prompt.lower() or
+                            "comprehensive digest" in prompt.lower())
+            
+            # Use appropriate token limit based on request type
+            max_tokens = 1200 if is_case_digest else 256
+            
             # Use more conservative generation parameters to avoid CUDA tensor issues
             response = llm(
                 prompt,
-                max_tokens=256,  # Further reduced to avoid CUDA tensor issues
+                max_tokens=max_tokens,
                 temperature=0.3,
                 top_p=0.85,
                 repeat_penalty=1.1,
@@ -220,23 +141,27 @@ def generate_response(prompt: str) -> str:
                 return "I apologize, but I encountered a technical error. Please try again later."
 
 def generate_response_from_messages(messages: List[Dict[str, str]]) -> str:
-    """Generate response from message history using Rev21 Labs API or local LLM fallback"""
-    # Try Rev21 Labs API first
-    remote = _call_rev21_messages(messages)
-    if remote:
-        return remote
-    
-    # Fallback to local LLM with improved error handling
+    """Generate response from message history using the local law-chat LLM"""
+    # Local LLM with improved error handling
     try:
         llm = _ensure_llm()
         
         # Convert messages to prompt format
         prompt = _messages_to_prompt(messages)
         
+        # Determine if this is a case digest request for token allocation
+        is_case_digest = any("case digest" in msg.get("content", "").lower() or 
+                           "digest" in msg.get("content", "").lower() or
+                           "comprehensive digest" in msg.get("content", "").lower()
+                           for msg in messages)
+        
+        # Use appropriate token limit based on request type
+        max_tokens = 1200 if is_case_digest else 256
+        
         # Use more conservative generation parameters to avoid CUDA tensor issues
         response = llm(
             prompt,
-            max_tokens=256,  # Further reduced to avoid CUDA tensor issues
+            max_tokens=max_tokens,
             temperature=0.3,
             top_p=0.85,
             repeat_penalty=1.1,
@@ -366,12 +291,7 @@ G. STYLE & SAFETY
     else:
         enhanced_prompt = f"System: {legal_system_prompt}\n\nUser: {prompt}\n\nAssistant:"
     
-    # Try Rev21 Labs API first
-    remote = _call_rev21_prompt(enhanced_prompt)
-    if remote:
-        return remote
-    
-    # Fallback to local LLM
+    # Generate using local LLM
     try:
         llm = _ensure_llm()
         response = llm(
