@@ -711,9 +711,9 @@ You MUST format your response EXACTLY as follows (use these exact headers and st
 
 **{gr_number} | {date} | Ponente: {ponente}**
 
-# **Nature:** [Nature of case, e.g., Petition for Review on Certiorari]
+**Nature:** [Nature of case, e.g., Petition for Review on Certiorari]
 
-# **Topic:** [Legal topic, e.g., Original Document Rule]
+**Topic:** [Legal topic, e.g., Original Document Rule]
 
 **Case Type:** [Type of case, e.g. annulment, estafa, etc.]
 
