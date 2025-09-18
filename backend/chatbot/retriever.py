@@ -436,6 +436,7 @@ class LegalRetriever:
             r"OCA\s+No\.?\s*([0-9\-]+[A-Z]?)",
             r"U\.C\.\s+No\.?\s*([0-9\-]+[A-Z]?)",
             r"ADM\s+No\.?\s*([0-9\-]+[A-Z]?)",
+            r"A\.C\.\s+No\.?\s*([0-9\-]+[A-Z]?)",
             r"AC\s+No\.?\s*([0-9\-]+[A-Z]?)",
             r"B\.M\.\s+No\.?\s*([0-9\-]+[A-Z]?)",
             r"LRC\s+No\.?\s*([0-9\-]+[A-Z]?)",
@@ -455,6 +456,8 @@ class LegalRetriever:
                     return f"U.C. No. {number}"
                 elif "ADM" in pattern:
                     return f"ADM No. {number}"
+                elif "A\.C\." in pattern:
+                    return f"A.C. No. {number}"
                 elif "AC" in pattern:
                     return f"AC No. {number}"
                 elif "B\.M\." in pattern:

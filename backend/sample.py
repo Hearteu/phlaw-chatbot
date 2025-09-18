@@ -51,9 +51,9 @@ def extract_random_cases(input_file: str, output_file: str, num_cases: int = 5):
         print("\n📋 Selected Cases Summary:")
         for i, case in enumerate(selected_cases, 1):
             gr = case.get('gr_number', 'Unknown')
-            title = case.get('title', 'Untitled')[:60]
+            title = case.get('case_title', 'Untitled')[:60]
             date = case.get('promulgation_date', 'Unknown')
-            print(f"{i}. G.R. No. {gr} | {title}... | {date}")
+            print(f"{i}. {gr} | {title}... | {date}")
             
     except FileNotFoundError:
         print(f"❌ Error: File {input_file} not found")

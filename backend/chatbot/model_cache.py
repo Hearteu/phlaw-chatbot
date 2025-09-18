@@ -189,6 +189,45 @@ def get_cached_llm() -> Optional[Llama]:
     
     return _LLM_INSTANCE
 
+def get_fresh_llm() -> Optional[Llama]:
+    """Load a fresh Llama instance without touching or populating the global cache."""
+    try:
+        print("Loading fresh LLM (no cache)...")
+        BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        MODEL_PATH = os.path.join(BASE_DIR, "law-chat.Q4_K_M.gguf")
+        if not os.path.exists(MODEL_PATH):
+            raise FileNotFoundError(f"Model file not found: {MODEL_PATH}")
+        cfg = {
+            "model_path": MODEL_PATH,
+            "n_ctx": 4096,
+            "n_gpu_layers": -1,
+            "n_threads": 8,
+            "n_batch": 512,
+            "use_mmap": True,
+            "use_mlock": False,
+            "f16_kv": True,
+            "logits_all": False,
+            "embedding": False,
+            "verbose": False,
+        }
+        try:
+            return Llama(**cfg)
+        except Exception:
+            cpu_cfg = {
+                "model_path": MODEL_PATH,
+                "n_ctx": 2048,
+                "n_gpu_layers": 0,
+                "n_threads": 4,
+                "n_batch": 16,
+                "use_mmap": True,
+                "use_mlock": False,
+                "verbose": False,
+            }
+            return Llama(**cpu_cfg)
+    except Exception as e:
+        print(f"[ERROR] get_fresh_llm failed: {e}")
+        return None
+
 def clear_llm_cache():
     """Clear the LLM instance cache with enhanced memory management"""
     global _LLM_INSTANCE, _LLM_LOADED, _MEMORY_STATS

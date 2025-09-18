@@ -5,8 +5,6 @@ from typing import Any, Dict, List, Optional
 # Import Docker model client with fallback
 from .docker_model_client import (generate_messages_with_fallback,
                                   generate_with_fallback)
-# Import centralized model cache
-from .model_cache import get_cached_llm
 
 
 def _clean_response_text(text: str) -> str:
@@ -31,8 +29,8 @@ def _clean_response_text(text: str) -> str:
     return text
 
 def _ensure_llm():
-    """Get or create the LLM instance using centralized cache"""
-    return get_cached_llm()
+    """Docker-only mode: no local LLM."""
+    return None
 
 def generate_response(prompt: str, _retry_count: int = 0) -> str:
     """Generate response using Docker model runner with local LLM fallback"""

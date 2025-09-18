@@ -33,6 +33,7 @@ def _extract_special_number(query: str) -> str:
         (r"OCA\s+No\.?\s*([0-9\-]+[A-Z]?)", "OCA No. {}"),
         (r"U\.C\.\s+No\.?\s*([0-9\-]+[A-Z]?)", "U.C. No. {}"),
         (r"ADM\s+No\.?\s*([0-9\-]+[A-Z]?)", "ADM No. {}"),
+        (r"A\.C\.\s+No\.?\s*([0-9\-]+[A-Z]?)", "A.C. No. {}"),
         (r"AC\s+No\.?\s*([0-9\-]+[A-Z]?)", "AC No. {}"),
         (r"B\.M\.\s+No\.?\s*([0-9\-]+[A-Z]?)", "B.M. No. {}"),
         (r"LRC\s+No\.?\s*([0-9\-]+[A-Z]?)", "LRC No. {}"),
@@ -61,11 +62,12 @@ def _normalize_gr_display(value: str) -> str:
 def _display_title(d: Dict) -> str:
     """Prefer proper case titles; otherwise, provide a concise fallback."""
     meta = d.get("metadata", {}) or {}
-    # Prefer explicit title-like fields
+    # Prefer explicit title-like fields (matching actual webscraped data structure)
     title = (
-        d.get("title")
-        or meta.get("title")
+        d.get("case_title")
         or meta.get("case_title")
+        or d.get("title")
+        or meta.get("title")
         or meta.get("header")
         or ""
     )
@@ -153,18 +155,18 @@ def _extract_dispositive(text: str) -> str:
     """Return the shortest verbatim dispositive paragraph(s) if present, else ''."""
     if not text:
         return ""
-    # Prefer classic header→SO ORDERED span
+    # Prefer classic header→SO ORDERED span (greedy across lines)
     m = RULING_REGEX.search(text)
     if m:
-        return _normalize_ws(m.group(0), max_chars=2000)
+        return _normalize_ws(m.group(0), max_chars=4000)
     # Next: single-paragraph ending in SO ORDERED
     m = RULING_SO_ORDERED_FALLBACK.search(text)
     if m:
-        return _normalize_ws(m.group(0), max_chars=1200)
+        return _normalize_ws(m.group(0), max_chars=2000)
     # Last: dispositive without SO ORDERED (rare but happens)
     m = RULING_NO_SO_FALLBACK.search(text)
     if m:
-        return _normalize_ws(m.group(0), max_chars=1200)
+        return _normalize_ws(m.group(0), max_chars=2000)
     return ""
 
 # Removed title/intent heuristics for simplified engine
@@ -216,9 +218,10 @@ def _generate_case_summary(docs: List[Dict], query: str, retriever=None, history
         log_debug(f"[SEARCH] No exact match found, using main document: G.R. {main_doc.get('gr_number', 'Unknown')}")
     
     # Extract metadata from the chosen document
-    case_title = (source_doc.get("metadata", {}).get("title", "") or 
-                 source_doc.get("title", "") or 
+    case_title = (source_doc.get("case_title", "") or 
                  source_doc.get("metadata", {}).get("case_title", "") or
+                 source_doc.get("title", "") or 
+                 source_doc.get("metadata", {}).get("title", "") or
                  query)  # Fallback to query if no title found
     
     gr_number = (source_doc.get("metadata", {}).get("gr_number", "") or 
@@ -226,14 +229,19 @@ def _generate_case_summary(docs: List[Dict], query: str, retriever=None, history
                 source_doc.get("metadata", {}).get("case_id", "") or
                 "Not available")
     
+    special_number = (source_doc.get("metadata", {}).get("special_number", "") or 
+                     source_doc.get("special_number", "") or
+                     "Not available")
+    
     # Clean up G.R. number to avoid duplication
     if gr_number and gr_number != "Not available":
         # Remove "G.R. No." prefix if it exists to avoid duplication
         gr_number = re.sub(r'^G\.R\.\s+No\.\s*', '', gr_number, flags=re.IGNORECASE).strip()
         if gr_number:
             gr_number = f"G.R. No. {gr_number}"
-        else:
-            gr_number = "Not available"
+    
+    # Use special number if no GR number available
+    case_number = gr_number if gr_number != "Not available" else special_number
     
     ponente = (source_doc.get("metadata", {}).get("ponente", "") or 
               source_doc.get("ponente", "") or 
@@ -251,21 +259,25 @@ def _generate_case_summary(docs: List[Dict], query: str, retriever=None, history
                 source_doc.get("metadata", {}).get("type", "") or
                 "Not available")
     
-    log_debug(f"[SEARCH] Final metadata - Title: {case_title[:50]}... | G.R.: {gr_number} | Ponente: {ponente}")
+    log_debug(f"[SEARCH] Final metadata - Title: {case_title[:50]}... | Case: {case_number} | Ponente: {ponente}")
     
     # Try to load full case content from JSONL file
     full_case_content = None
-    if gr_number and gr_number != "Not available":
-        # Clean the G.R. number for JSONL lookup (remove display formatting)
-        jsonl_gr_number = re.sub(r'^G\.R\.\s+No\.\s*', '', gr_number, flags=re.IGNORECASE).strip()
-        log_debug(f"[SEARCH] Loading full case content from JSONL for G.R. {jsonl_gr_number}...")
+    if case_number and case_number != "Not available":
+        # Clean the case number for JSONL lookup (remove display formatting)
+        if gr_number != "Not available":
+            jsonl_case_number = re.sub(r'^G\.R\.\s+No\.\s*', '', gr_number, flags=re.IGNORECASE).strip()
+            log_debug(f"[SEARCH] Loading full case content from JSONL for G.R. {jsonl_case_number}...")
+        else:
+            jsonl_case_number = special_number
+            log_debug(f"[SEARCH] Loading full case content from JSONL for Special {jsonl_case_number}...")
         try:
             from .retriever import load_case_from_jsonl
-            full_case_content = load_case_from_jsonl(jsonl_gr_number)
+            full_case_content = load_case_from_jsonl(jsonl_case_number)
             if full_case_content:
                 log_debug(f"✅ Loaded full case content: {len(str(full_case_content))} characters")
             else:
-                log_warning(f"⚠️ No full case content found for G.R. {jsonl_gr_number}")
+                log_warning(f"⚠️ No full case content found for {jsonl_case_number}")
         except Exception as e:
             log_warning(f"⚠️ Error loading full case content: {e}")
     
@@ -292,7 +304,7 @@ def _generate_case_summary(docs: List[Dict], query: str, retriever=None, history
         storytelling_prompt = f"""Create a 5-sentence case summary for this Philippine Supreme Court case:
 
 Case: {case_title}
-G.R. No.: {gr_number}
+Case No.: {case_number}
 Ponente: {ponente}
 
 Context:
@@ -415,7 +427,7 @@ def _find_relevant_cases(docs: List[Dict], retriever, history: List[Dict] = None
     # Search for cases with similar case type and legal concepts
     try:
         # Try a more specific search for similar cases
-        case_title = main_doc.get("title", "") or main_doc.get("metadata", {}).get("title", "")
+        case_title = main_doc.get("case_title", "") or main_doc.get("metadata", {}).get("case_title", "") or main_doc.get("title", "") or main_doc.get("metadata", {}).get("title", "")
         search_queries = [
             f"case type {case_type}",
             f"similar to {case_title}",
@@ -433,7 +445,13 @@ def _find_relevant_cases(docs: List[Dict], retriever, history: List[Dict] = None
         current_gr = (main_doc.get("metadata", {}).get("gr_number", "") or 
                      main_doc.get("gr_number", "") or 
                      main_doc.get("metadata", {}).get("case_id", ""))
-        relevant_docs = [d for d in relevant_docs if (d.get("metadata", {}).get("gr_number", "") or d.get("gr_number", "")) != current_gr]
+        current_special = (main_doc.get("metadata", {}).get("special_number", "") or 
+                          main_doc.get("special_number", ""))
+        current_id = current_gr or current_special
+        
+        relevant_docs = [d for d in relevant_docs if 
+                        ((d.get("metadata", {}).get("gr_number", "") or d.get("gr_number", "")) != current_gr and
+                         (d.get("metadata", {}).get("special_number", "") or d.get("special_number", "")) != current_special)]
         
         # Filter out bad documents completely before processing
         good_docs = []
@@ -515,19 +533,17 @@ def _generate_case_summary_from_jsonl(full_case_content: Dict, query: str, retri
     
     ponente = full_case_content.get("ponente", "")
     date = full_case_content.get("promulgation_date", "") or full_case_content.get("date", "")
-    case_type = full_case_content.get("case_type", "") or "regular"
+    case_type = full_case_content.get("case_type", "")
     
-    # Extract content sections - try multiple possible fields
-    facts_content = (full_case_content.get("body", "") or 
-                    full_case_content.get("clean_text", "") or 
-                    full_case_content.get("sections", {}).get("body", "") if isinstance(full_case_content.get("sections"), dict) else "")
+    # Extract content sections - prefer clean_text over body
+    facts_content = full_case_content.get("clean_text", "")
     
     ruling_content = (full_case_content.get("ruling", "") or 
                      full_case_content.get("sections", {}).get("ruling", "") if isinstance(full_case_content.get("sections"), dict) else "")
 
     # Derive dispositive text and concise SC ruling summary from ruling content
     try:
-        dispositive_text = _extract_dispositive(ruling_content) or _extract_dispositive(full_case_content.get("body", ""))
+        dispositive_text = _extract_dispositive(ruling_content) or _extract_dispositive(full_case_content.get("clean_text", ""))
     except Exception:
         dispositive_text = ""
 
@@ -604,20 +620,81 @@ def _generate_case_summary_from_jsonl(full_case_content: Dict, query: str, retri
         meta_line += f"\nType: {meta_type}{(' | Subtypes: ' + st) if st else ''}"
 
     context_parts = [meta_line]
-    # Put concise summary first to prime the model
-    if sc_ruling_summary:
-        context_parts.append(f"RULING SUMMARY: {_trim_to_sentences(sc_ruling_summary, 1000)}")
-    # Ruling excerpt (longer budget)
-    if ruling_content and len(ruling_content.strip()) > 60:
-        context_parts.append(f"RULING: {_trim_to_sentences(ruling_content, 3000)}")
-    # Dispositive verbatim, capped and labeled if truncated
-    if dispositive_text:
-        dispo_excerpt = _trim_to_sentences(dispositive_text, 1400)
-        label = " (excerpt)" if len(dispositive_text) > len(dispo_excerpt) else ""
-        context_parts.append(f"DISPOSITIVE (verbatim{label}): \"{dispo_excerpt}\"")
-    # Facts excerpt (smaller budget)
-    if facts_content and len(facts_content.strip()) > 60:
-        context_parts.append(f"FACTS: {_trim_to_sentences(facts_content, 6000)}")
+    # # Put concise summary first to prime the model
+    # if sc_ruling_summary:
+    #     context_parts.append(f"RULING SUMMARY: {_trim_to_sentences(sc_ruling_summary, 1000)}")
+    # # Ruling excerpt (longer budget)
+    # if ruling_content and len(ruling_content.strip()) > 60:
+    #     context_parts.append(f"RULING: {_trim_to_sentences(ruling_content, 3000)}")
+    # # Dispositive verbatim, capped and labeled if truncated
+    # if dispositive_text:
+    #     dispo_excerpt = _trim_to_sentences(dispositive_text, 1400)
+    #     label = " (excerpt)" if len(dispositive_text) > len(dispo_excerpt) else ""
+    #     context_parts.append(f"DISPOSITIVE (verbatim{label}): \"{dispo_excerpt}\"")
+    # # Facts excerpt (smaller budget)
+    # if facts_content and len(facts_content.strip()) > 60:
+    #     context_parts.append(f"FACTS: {_trim_to_sentences(facts_content, 6000)}")
+
+    # Batch-extractive pipeline to stay within context limits
+    aggregated_facts: List[str] = []
+    aggregated_issues: List[str] = []
+
+    def _chunk(text: str, size: int = 4500, overlap: int = 200) -> List[str]:
+        blocks: List[str] = []
+        i = 0
+        n = len(text)
+        while i < n:
+            j = min(i + size, n)
+            blocks.append(text[i:j])
+            if j >= n:
+                break
+            i = j - overlap
+        return blocks
+
+    if facts_content and len(facts_content.strip()) > 0:
+        chunks = _chunk(facts_content)
+        try:
+            from .generator import generate_legal_response
+            for idx, ch in enumerate(chunks[:6]):  # cap chunks per case to control calls
+                extract_prompt = (
+                    "Extract up to 3 short factual sentences and up to 1 issue from the text.\n"
+                    "Rules: Use verbatim or lightly trimmed sentences from the text; no invention.\n"
+                    "Output JSON with keys: facts (list of strings), issues (list of strings).\n"
+                    "Text:\n" + ch
+                )
+                try:
+                    resp = generate_legal_response(extract_prompt, context="", is_case_digest=False)
+                    # naive JSON parse with fallback
+                    import json as _json
+                    data = None
+                    try:
+                        data = _json.loads(resp)
+                    except Exception:
+                        # fallback: try to find a JSON block
+                        m = re.search(r"\{[\s\S]*\}", resp)
+                        if m:
+                            data = _json.loads(m.group(0))
+                    if isinstance(data, dict):
+                        for s in (data.get("facts") or []):
+                            s = s.strip()
+                            if s and s not in aggregated_facts and len(aggregated_facts) < 12:
+                                aggregated_facts.append(s)
+                        for s in (data.get("issues") or []):
+                            s = s.strip()
+                            if s and s not in aggregated_issues and len(aggregated_issues) < 4:
+                                aggregated_issues.append(s)
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+    # Add aggregated facts/issues into context (bounded)
+    if aggregated_facts:
+        facts_block = "\n".join(f"- {s}" for s in aggregated_facts[:8])
+        context_parts.append(f"FACTS (extractive):\n{facts_block}")
+    if aggregated_issues:
+        issues_block = "\n".join(f"- {s}" for s in aggregated_issues[:3])
+        context_parts.append(f"ISSUES (from text):\n{issues_block}")
 
     context = "\n\n".join([p for p in context_parts if p]) if any(p.strip() for p in context_parts) else "No detailed content available."
     print(f"🔍 Final context length: {len(context)}")
@@ -634,12 +711,14 @@ You MUST format your response EXACTLY as follows (use these exact headers and st
 
 **{gr_number} | {date} | Ponente: {ponente}**
 
-**Nature:** [Type of case, e.g., Petition for Review on Certiorari]
+# **Nature:** [Nature of case, e.g., Petition for Review on Certiorari]
 
-**Topic:** [Legal topic, e.g., Original Document Rule]
+# **Topic:** [Legal topic, e.g., Original Document Rule]
+
+**Case Type:** [Type of case, e.g. annulment, estafa, etc.]
 
 **Doctrine:**
-[Extract ONE controlling rule from the RULING/RULING SUMMARY in Context. If none is present in the sources, write "Not stated in sources."]
+[the doctrine is the crucial legal rule, principle, or "takeaway" that the court established in its ruling. It represents the fundamental legal lesson or standard derived from the case's facts and issues, serving as a concise statement of the applicable law upon which the decision was based. Extract the doctrine from the Context.]
 
 **Ticker/Summary:**
 [Brief case summary]
@@ -661,19 +740,19 @@ You MUST format your response EXACTLY as follows (use these exact headers and st
 2) [Second contention]
 3) [Continue with numbered contention]
 
-**RTC:** [RTC decision, e.g., IN FAVOR OF PETITIONER/RESPONDENT]
-- [RTC's statement or reasoning; explain the RTC's reasoning]
+**RTC:** [Regional Trial Court decision, e.g., IN FAVOR OF PETITIONER/RESPONDENT]
+- [Explain the Regional Trial Court's reasoning]
 
-**CA:** [CA decision, e.g., REVERSED THE RTC'S RULING]
-- [CA's statement or reasoning; explain the CA's reasoning]
+**CA:** [Court of Appeals decision if applicable, e.g., REVERSED THE RTC'S RULING]
+- Explain the Court of Appeals' reasoning]
 
-**ISSUE/S:** [Legal issue/s, the formar should start with "WHETHER OR NOT", e.g., WHETHER OR NOT...]
-- [Answer to the issue, YES OR NO]
+**ISSUE/S:** [Legal issue/s, the format should start with "WHETHER OR NOT", e.g., WHETHER OR NOT...]
+- [Answer to the issue, Always answer in YES or NO]
 
 **SC RULING:**
-[Summarize the Court's reasoning in 2–3 sentences based ONLY on the RULING and RULING SUMMARY in Context. Do not invent content.]
+[Supreme Court's ruling; explain the Supreme Court's reasoning; 3-5 sentences]
 
-**DISPOSITIVE:** [Quote the WHEREFORE/So Ordered clause VERBATIM from Context. If none in sources, write "Not stated in sources."]
+**DISPOSITIVE:** [Quote the dispositive, e.g. PETITION is GRANTED]
 
 Use only information from the provided context. If information is not available, write "Not stated in sources."""
 
@@ -719,9 +798,10 @@ Use only information from the provided context. If information is not available,
     if relevant_cases:
         response_parts.append("\n**Related Cases:**")
         for i, case in enumerate(relevant_cases, 1):
-            case_title = (case.get("title", "") or 
-                         case.get("metadata", {}).get("title", "") or 
-                         case.get("metadata", {}).get("case_title", ""))
+            case_title = (case.get("case_title", "") or 
+                         case.get("metadata", {}).get("case_title", "") or
+                         case.get("title", "") or 
+                         case.get("metadata", {}).get("title", ""))
             case_gr = (case.get("gr_number", "") or 
                       case.get("metadata", {}).get("gr_number", "") or 
                       "Unknown")
@@ -780,7 +860,32 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
                 # Direct exact GR number metadata search
                 print(f"🎯 GR-number path: {gr_num}")
                 docs = retriever._retrieve_by_gr_number(gr_num, k=8)
+                print(f"🔍 Docs returned: {len(docs) if docs else 0} items")
+                if docs:
+                    print(f"🔍 First doc keys: {list(docs[0].keys()) if docs else 'None'}")
                 wants_digest = True  # enforce digest format for GR path
+                
+                # For GR number path, always use JSONL for full content
+                # Vector DB only has metadata, JSONL has the actual case content
+                if docs:
+                    print(f"🔄 Found metadata for GR {gr_num}, fetching full content from JSONL")
+                    try:
+                        from .retriever import load_case_from_jsonl
+                        full_case = load_case_from_jsonl(gr_num)
+                        print(f"🔍 JSONL load result: {type(full_case)} - {bool(full_case)}")
+                        if full_case:
+                            print(f"✅ JSONL content loaded for GR {gr_num}")
+                            result = _generate_case_summary_from_jsonl(full_case, query, retriever, history)
+                            print(f"🔍 Generated summary: {type(result)} - {bool(result)}")
+                            return result
+                        else:
+                            print(f"❌ No JSONL data found for GR {gr_num}")
+                    except Exception as e:
+                        print(f"⚠️ JSONL loading failed for GR {gr_num}: {e}")
+                        import traceback
+                        traceback.print_exc()
+                else:
+                    print(f"❌ No metadata found for GR {gr_num} in vector DB")
             elif special_num:
                 # Direct exact special number metadata search
                 print(f"🎯 Special-number path: {special_num}")
@@ -795,23 +900,6 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
                     print(f"🔍 GR number: {first_doc.get('gr_number', '')}")
                     print(f"🔍 Case type: {first_doc.get('case_type', '')}")
                 
-                # For GR number path, always use JSONL for full content
-                # Vector DB only has metadata, JSONL has the actual case content
-                if docs:
-                    print(f"🔄 Found metadata for GR {gr_num}, fetching full content from JSONL")
-                    try:
-                        from .retriever import load_case_from_jsonl
-                        full_case = load_case_from_jsonl(gr_num)
-                        if full_case:
-                            print(f"✅ JSONL content loaded for GR {gr_num}")
-                            return _generate_case_summary_from_jsonl(full_case, query, retriever, history)
-                        else:
-                            print(f"❌ No JSONL data found for GR {gr_num}")
-                    except Exception as e:
-                        print(f"⚠️ JSONL loading failed for GR {gr_num}: {e}")
-                else:
-                    print(f"❌ No metadata found for GR {gr_num} in vector DB")
-            elif special_num:
                 # For special number path, try to load from JSONL using special number
                 if docs:
                     print(f"🔄 Found metadata for Special {special_num}, fetching full content from JSONL")
@@ -836,7 +924,11 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
                 picked = []
                 seen_keys = set()
                 for d in hits:
-                    key = (d.get("gr_number") or d.get("metadata", {}).get("gr_number") or d.get("title") or d.get("metadata", {}).get("title"))
+                    # Use GR number, special number, or title as unique key
+                    gr_num = d.get("gr_number") or d.get("metadata", {}).get("gr_number")
+                    special_num = d.get("special_number") or d.get("metadata", {}).get("special_number")
+                    title = d.get("title") or d.get("metadata", {}).get("title")
+                    key = gr_num or special_num or title
                     if key and key not in seen_keys:
                         seen_keys.add(key)
                         picked.append(d)
@@ -848,11 +940,21 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
                         title = _display_title(d)
                         if title == "Untitled case":
                             title = _title_from_query(query)
+                        
+                        # Get case number (GR or special)
                         gr_raw = d.get("gr_number") or d.get("metadata", {}).get("gr_number") or ""
-                        gr = _normalize_gr_display(str(gr_raw))
+                        special_raw = d.get("special_number") or d.get("metadata", {}).get("special_number") or ""
+                        
+                        if gr_raw:
+                            case_number = _normalize_gr_display(str(gr_raw))
+                        elif special_raw:
+                            case_number = str(special_raw)
+                        else:
+                            case_number = "Unknown"
+                        
                         case_type = (d.get("case_type") or d.get("metadata", {}).get("case_type") or "").strip()
                         suffix = f" — {case_type}" if case_type else ""
-                        items.append(f"{i}. {title} ({gr}){suffix}")
+                        items.append(f"{i}. {title} ({case_number}){suffix}")
                     return "Here are the possible cases:\n" + "\n".join(items)
                 else:
                     return "I couldn't find matching cases in the current database. Try a different G.R. number or broader keywords."

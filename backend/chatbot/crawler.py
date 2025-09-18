@@ -194,7 +194,6 @@ def normalize_text(s: str) -> str:
     
     # Convert literal "\n" sequences to real newlines
     s = s.replace("\\n", "\n")
-
     # Normalize whitespace
     s = re.sub(r"\r\n", "\n", s)
     s = re.sub(r"\r", "\n", s)
@@ -270,6 +269,15 @@ def _clean_noise(line: str) -> str:
     s = line.strip()
     for t in TITLE_NOISE:
         s = s.replace(t, "")
+    # Remove "PROMULGATED:" and similar prefixes that sometimes appear in titles
+    s = re.sub(r"^PROMULGATED:\s*", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"^DECIDED:\s*", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"^RESOLVED:\s*", "", s, flags=re.IGNORECASE)
+    # Remove decision headers that sometimes get appended to titles
+    s = re.sub(r"\s+D\s+E\s+C\s+I\s+S\s+I\s+O\s+N.*$", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"\s+DECISION.*$", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"\s+RESOLUTION.*$", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"\s+ORDER.*$", "", s, flags=re.IGNORECASE)
     return re.sub(r"\s{2,}", " ", s).strip(",;:- ")
 
 def _is_body_text(line: str) -> bool:
@@ -348,14 +356,56 @@ def _extract_am_case_title(text: str) -> str | None:
 def derive_case_title_from_text(text: str) -> str | None:
     if not text:
         return None
-    head = text[:1500]
+    head = text[:2000]  # Increased window for long titles
     
     # Priority 1: A.M. cases with RE: format (most specific)
     am_title = _extract_am_case_title(text)
     if am_title and 10 <= len(am_title) <= 500:
         return am_title
     
-    # Priority 2: Standard VS. format
+    # Priority 2: Multi-line VS. format (handle long titles that span multiple lines)
+    # Look for the pattern across multiple lines
+    lines = head.splitlines()
+    for i in range(len(lines)):
+        line = lines[i].strip()
+        if not line:
+            continue
+        
+        # Check if this line contains a case title pattern
+        if CAPTION_RE.search(line) and re.search(r"\b(PETITIONER|RESPONDENT|COMPLAINANT|PLAINTIFF|DEFENDANT)\b", line, re.IGNORECASE):
+            # This line looks like a case title, check if it's complete
+            if len(line) <= 500:  # Reasonable title length
+                cleaned = _clean_noise(line)
+                if 20 <= len(cleaned) <= 500:
+                    return cleaned
+            
+            # If the title is incomplete, try to find the complete title across lines
+            title_parts = [line]
+            # Look forwards to complete the title (but be very conservative)
+            for j in range(i + 1, min(i + 3, len(lines))):  # Only look ahead 2-3 lines
+                next_line = lines[j].strip()
+                if not next_line:
+                    continue
+                # Stop immediately if we hit decision content
+                if re.search(r"\b(DECISION|RESOLUTION|ORDER|PER CURIAM|J\.|CHICO-NAZARIO|CARPIO|MORALES)\b", next_line, re.IGNORECASE):
+                    break
+                # Also stop if we hit "D E C I S I O N" pattern (common in case headers)
+                if re.search(r"D\s+E\s+C\s+I\s+S\s+I\s+O\s+N", next_line, re.IGNORECASE):
+                    break
+                # Only add if it looks like part of a title (contains legal terms)
+                if re.search(r"\b(PETITIONER|RESPONDENT|COMPLAINANT|PLAINTIFF|DEFENDANT|VS\.|V\.)\b", next_line, re.IGNORECASE):
+                    title_parts.append(next_line)
+                else:
+                    break
+            
+            # Join the parts and check if it forms a valid title
+            full_title = " ".join(title_parts)
+            if CAPTION_RE.search(full_title) and 20 <= len(full_title) <= 800:
+                cleaned = _clean_noise(full_title)
+                if 20 <= len(cleaned) <= 800:
+                    return cleaned
+    
+    # Priority 3: Single-line VS. format
     for raw in head.splitlines():
         line = raw.strip()
         if not line:
@@ -365,7 +415,7 @@ def derive_case_title_from_text(text: str) -> str | None:
             if 10 <= len(cleaned) <= 400:
                 return cleaned
     
-    # Priority 3: Administrative case formats
+    # Priority 4: Administrative case formats
     for raw in head.splitlines():
         line = raw.strip()
         if not line:
@@ -374,7 +424,7 @@ def derive_case_title_from_text(text: str) -> str | None:
         if admin_title and 10 <= len(admin_title) <= 400:
             return admin_title
     
-    # Priority 4: Fallback candidates (avoid body text)
+    # Priority 5: Fallback candidates (avoid body text)
     candidates = []
     for raw in head.splitlines():
         line = raw.strip()
@@ -429,14 +479,15 @@ def parse_special_numbers_from_text(text: str) -> tuple[str | None, list[str]]:
     
     # Patterns for different special case types
     special_patterns = [
-        (r"A\.M\.\s+No\.?\s*([0-9\-]+[A-Z]?)", "A.M. No. {}"),
-        (r"OCA\s+No\.?\s*([0-9\-]+[A-Z]?)", "OCA No. {}"),
-        (r"U\.C\.\s+No\.?\s*([0-9\-]+[A-Z]?)", "U.C. No. {}"),
-        (r"ADM\s+No\.?\s*([0-9\-]+[A-Z]?)", "ADM No. {}"),
-        (r"AC\s+No\.?\s*([0-9\-]+[A-Z]?)", "AC No. {}"),
-        (r"B\.M\.\s+No\.?\s*([0-9\-]+[A-Z]?)", "B.M. No. {}"),
-        (r"LRC\s+No\.?\s*([0-9\-]+[A-Z]?)", "LRC No. {}"),
-        (r"SP\s+No\.?\s*([0-9\-]+[A-Z]?)", "SP No. {}"),
+        (r"A\.M\.\s+No\.?\s*([A-Z0-9\-]+)", "A.M. No. {}"),
+        (r"OCA\s+No\.?\s*([A-Z0-9\-]+)", "OCA No. {}"),
+        (r"U\.C\.\s+No\.?\s*([A-Z0-9\-]+)", "U.C. No. {}"),
+        (r"ADM\s+No\.?\s*([A-Z0-9\-]+)", "ADM No. {}"),
+        (r"A\.C\.\s+No\.?\s*([A-Z0-9\-]+)", "A.C. No. {}"),
+        (r"AC\s+No\.?\s*([A-Z0-9\-]+)", "AC No. {}"),
+        (r"B\.M\.\s+No\.?\s*([A-Z0-9\-]+)", "B.M. No. {}"),
+        (r"LRC\s+No\.?\s*([A-Z0-9\-]+)", "LRC No. {}"),
+        (r"SP\s+No\.?\s*([A-Z0-9\-]+)", "SP No. {}"),
     ]
     
     found: list[str] = []
@@ -505,10 +556,11 @@ def extract_ponente(text: str) -> str | None:
         return name.strip()
     # Prefer explicit justice suffixes: J., JJ., CJ, SAJ (optionally followed by ':' or '.')
     # Handle titles like SR., JR., III, etc. before the justice suffix
+    # Also handle compound names like "CARPIO MORALES"
     patterns = [
-        r"\b([A-Z][A-Za-z\-']+(?:\s+(?:SR\.|JR\.|III|IV|V|VI|VII|VIII|IX|X))*)\s*,\s*(J\.|JJ\.|CJ|SAJ)\s*[:\.]?\b",
+        r"\b([A-Z][A-Za-z\-']+(?:\s+[A-Z][A-Za-z\-']+)*(?:\s+(?:SR\.|JR\.|III|IV|V|VI|VII|VIII|IX|X))*)\s*,\s*(J\.|JJ\.|CJ|SAJ)\s*[:\.]?\b",
         # Some pages omit dot after J
-        r"\b([A-Z][A-Za-z\-']+(?:\s+(?:SR\.|JR\.|III|IV|V|VI|VII|VIII|IX|X))*)\s*,\s*(J|JJ|CJ|SAJ)\s*[:\.]?\b",
+        r"\b([A-Z][A-Za-z\-']+(?:\s+[A-Z][A-Za-z\-']+)*(?:\s+(?:SR\.|JR\.|III|IV|V|VI|VII|VIII|IX|X))*)\s*,\s*(J|JJ|CJ|SAJ)\s*[:\.]?\b",
     ]
     for pat in patterns:
         m = re.search(pat, window)
@@ -788,10 +840,12 @@ def classify_case_type(title: str, gr_number: str | None = None, full_text: str 
     # Civil: Other topics
     add_if_any(["EXPROPRIATION", "EMINENT DOMAIN"], "expropriation")
 
-    # Administrative flavor (still civil primary)
-    add_if_any(["ADMINISTRATIVE"], "administrative_matter")
-    if "COMPLAINANT" in title_upper and "RESPONDENT" in title_upper:
-        add_if_any(["COMPLAINANT"], "disciplinary_complaint")
+    # Administrative flavor (still civil primary) - but not for criminal cases
+    # Only add administrative_matter if it's not a criminal case
+    if not any(tok in title_upper for tok in ["PEOPLE OF THE PHILIPPINES", "INFORMATION", "ESTAFA", "MURDER", "HOMICIDE"]):
+        add_if_any(["ADMINISTRATIVE"], "administrative_matter")
+        if "COMPLAINANT" in title_upper and "RESPONDENT" in title_upper:
+            add_if_any(["COMPLAINANT"], "disciplinary_complaint")
 
     # Motions / Resolutions / Orders
     add_if_any(["MOTION"], "motion")
@@ -879,14 +933,19 @@ def classify_case_type(title: str, gr_number: str | None = None, full_text: str 
     add_if_any(["TRAFFICKING IN PERSONS", "RA 9208"], "anti_trafficking")
     add_if_any(["MONEY LAUNDERING", "RA 9160"], "anti_money_laundering")
 
-    case_type = "criminal" if is_criminal else "civil"
+    # Special handling for A.M. cases - they should be administrative, not criminal
+    is_am_case = "A.M." in title_upper or "A.M." in text_scan
+    if is_am_case:
+        case_type = "administrative"
+    else:
+        case_type = "criminal" if is_criminal else "civil"
 
     # Basic fallbacks for petitions without explicit label
     if ("PETITION" in title_upper or "PETITION" in text_scan) and not any(
         s in subtypes for s in ("certiorari", "mandamus", "prohibition", "habeas_corpus", "appeal")
     ):
         subtypes.append("petition")
-
+    
     return {
         "case_type": case_type,
         "case_subtypes": subtypes or None,
@@ -909,7 +968,7 @@ def parse_case(text_base: str, url: str, year_hint: int | None = None, month_hin
 
     # Date (prioritize header dates over body dates)
     date_iso = extract_promulgation_date(text)
-    
+
     # Simple ruling presence flag from full text
     has_ruling_flag = bool(RULING_REGEX.search(text or ""))
 

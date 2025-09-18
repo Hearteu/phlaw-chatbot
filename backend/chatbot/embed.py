@@ -304,6 +304,7 @@ def derive_special_numbers(rec: Dict[str, Any]) -> Tuple[Optional[str], List[str
         (r"OCA\s+No\.?\s*([0-9\-]+[A-Z]?)", "OCA No. {}"),
         (r"U\.C\.\s+No\.?\s*([0-9\-]+[A-Z]?)", "U.C. No. {}"),
         (r"ADM\s+No\.?\s*([0-9\-]+[A-Z]?)", "ADM No. {}"),
+        (r"A\.C\.\s+No\.?\s*([0-9\-]+[A-Z]?)", "A.C. No. {}"),
         (r"AC\s+No\.?\s*([0-9\-]+[A-Z]?)", "AC No. {}"),
         (r"B\.M\.\s+No\.?\s*([0-9\-]+[A-Z]?)", "B.M. No. {}"),
         (r"LRC\s+No\.?\s*([0-9\-]+[A-Z]?)", "LRC No. {}"),

@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
 
-from .model_cache import get_cached_llm
+from .model_cache import get_fresh_llm
 
 
 class DockerModelClient:
@@ -53,10 +53,10 @@ class DockerModelClient:
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,
-                max_tokens=kwargs.get('max_tokens', 4096),
+                max_tokens=kwargs.get('max_tokens', 10000),
                 temperature=kwargs.get('temperature', 0.3),
                 top_p=kwargs.get('top_p', 0.85),
-                stop=kwargs.get('stop', ["User:", "Human:", "Assistant:", "\n\n\n\n"])
+                stop=kwargs.get('stop', ["User:", "Human:", "Assistant:", "\n\n\n\n"]),
             )
             
             return response.choices[0].message.content.strip()
@@ -120,13 +120,11 @@ class DockerModelClient:
 
 
 # Global instance
-_docker_client = None
+_docker_client = DockerModelClient()
 
 def get_docker_model_client() -> DockerModelClient:
     """Get or create Docker model client instance"""
     global _docker_client
-    if _docker_client is None:
-        _docker_client = DockerModelClient()
     return _docker_client
 
 
@@ -139,32 +137,10 @@ def generate_with_fallback(prompt: str, **kwargs) -> str:
             print("🐳 Using Docker model runner...")
             return docker_client.generate_response(prompt, **kwargs)
         except Exception as e:
-            print(f"⚠️ Docker model failed, falling back to local LLM: {e}")
-    
-    # Fallback to local LLM
-    print("🖥️ Using local LLM...")
-    try:
-        local_llm = get_cached_llm()
-        response = local_llm(
-            prompt,
-            max_tokens=kwargs.get('max_tokens', 2048),
-            temperature=kwargs.get('temperature', 0.3),
-            top_p=kwargs.get('top_p', 0.85),
-            repeat_penalty=kwargs.get('repeat_penalty', 1.1),
-            stop=kwargs.get('stop', ["User:", "Human:", "Assistant:", "\n\n\n\n"]),
-            stream=False,
-            echo=False,
-            tfs_z=1.0,
-        )
-        
-        if response and "choices" in response and len(response["choices"]) > 0:
-            return response["choices"][0]["text"].strip()
-        else:
-            return "I apologize, but I was unable to generate a response."
-            
-    except Exception as e:
-        print(f"❌ Local LLM also failed: {e}")
-        return "I apologize, but I encountered a technical error. Please try again later."
+            print(f"❌ Docker model failed: {e}")
+            raise
+    else:
+        raise RuntimeError("Docker model runner not available")
 
 
 def generate_messages_with_fallback(messages: List[Dict[str, str]], **kwargs) -> str:
@@ -176,45 +152,7 @@ def generate_messages_with_fallback(messages: List[Dict[str, str]], **kwargs) ->
             print("🐳 Using Docker model runner...")
             return docker_client.generate_response_from_messages(messages, **kwargs)
         except Exception as e:
-            print(f"⚠️ Docker model failed, falling back to local LLM: {e}")
-    
-    # Fallback to local LLM
-    print("🖥️ Using local LLM...")
-    try:
-        local_llm = get_cached_llm()
-        
-        # Convert messages to prompt format
-        prompt_parts = []
-        for message in messages:
-            role = message.get("role", "user")
-            content = message.get("content", "")
-            
-            if role == "system":
-                prompt_parts.append(f"System: {content}")
-            elif role == "user":
-                prompt_parts.append(f"User: {content}")
-            elif role == "assistant":
-                prompt_parts.append(f"Assistant: {content}")
-        
-        prompt = "\n\n".join(prompt_parts) + "\n\nAssistant:"
-        
-        response = local_llm(
-            prompt,
-            max_tokens=kwargs.get('max_tokens', 2048),
-            temperature=kwargs.get('temperature', 0.3),
-            top_p=kwargs.get('top_p', 0.85),
-            repeat_penalty=kwargs.get('repeat_penalty', 1.1),
-            stop=kwargs.get('stop', ["User:", "Human:", "Assistant:", "\n\n\n\n"]),
-            stream=False,
-            echo=False,
-            tfs_z=1.0,
-        )
-        
-        if response and "choices" in response and len(response["choices"]) > 0:
-            return response["choices"][0]["text"].strip()
-        else:
-            return "I apologize, but I was unable to generate a response."
-            
-    except Exception as e:
-        print(f"❌ Local LLM also failed: {e}")
-        return "I apologize, but I encountered a technical error. Please try again later."
+            print(f"❌ Docker model failed: {e}")
+            raise
+    else:
+        raise RuntimeError("Docker model runner not available")
