@@ -1,8 +1,6 @@
-# chat_engine.py — Simplified Law LLM chat engine (GR-number path vs keyword path)
+# chat_engine.py — Simplified Law LLM chat engine with chunking support
 import re
-from typing import Dict, List
-
-from .debug_logger import log_debug, log_warning
+from typing import Any, Dict, List, Optional, Tuple
 
 
 def _extract_gr_number(query: str) -> str:
@@ -77,13 +75,28 @@ def _display_title(d: Dict) -> str:
         if re.search(r"\b(v\.|vs\.|versus)\b", t, re.IGNORECASE) or len(t) <= 120:
             return t if len(t) <= 120 else (t[:117] + "...")
     # Try to infer a title from content lines containing v./vs.
-    text = d.get("content") or d.get("text") or ""
+    text = d.get("content") or d.get("text") or meta.get("text") or ""
     if text:
         for line in (text.split('\n')[:10]):
             line = line.strip()
             if len(line) >= 20 and re.search(r"\b(v\.|vs\.|versus)\b", line, re.IGNORECASE):
                 return line[:117] + "..." if len(line) > 120 else line
+        # Fallback: detect all-caps caption with PETITIONER/RESPONDENT/COMPLAINANT
+        for line in (text.split('\n')[:12]):
+            line = line.strip().strip('. ')
+            if not line:
+                continue
+            if re.search(r"\b(PETITIONER|RESPONDENT|COMPLAINANT|PLAINTIFF|DEFENDANT)S?\b", line, re.IGNORECASE):
+                if 20 <= len(line) <= 160:
+                    return line
     # Fallback to generic label to avoid duplicating GR in title and suffix
+    # Use GR/special number if available
+    gr = d.get("gr_number") or meta.get("gr_number")
+    spec = d.get("special_number") or meta.get("special_number")
+    if gr:
+        return f"Case ({_normalize_gr_display(str(gr))})"
+    if spec:
+        return f"Case ({spec})"
     return "Untitled case"
 
 def _title_from_query(query: str) -> str:
@@ -105,8 +118,16 @@ def _title_from_query(query: str) -> str:
     return " ".join(out)
 
 def _advanced_retrieve(retriever, query: str, k: int = 8, is_case_digest: bool = False, history: List[Dict] = None):
-    """Unified retrieval wrapper (uses retriever.retrieve)."""
-    return retriever.retrieve(query, k=k, is_case_digest=is_case_digest)
+    """Unified retrieval wrapper with chunking support"""
+    results = retriever.retrieve(query, k=k, is_case_digest=is_case_digest, conversation_history=history)
+    
+    # If results are chunks, create context efficiently
+    if results and 'section' in results[0]:
+        # Results are chunks - create compact context
+        context = retriever._create_context_from_chunks(results, max_tokens=2500)
+        return results, context
+    
+    return results
 
 # --- Stronger dispositive detection & extraction ---
 DISPOSITIVE_HDR = r"(?:WHEREFORE|ACCORDINGLY|IN VIEW OF THE FOREGOING|IN VIEW WHEREOF|THUS|HENCE|PREMISES CONSIDERED)"
@@ -184,8 +205,8 @@ def _generate_case_summary(docs: List[Dict], query: str, retriever=None, history
     query_lower = query.lower().strip()
     query_words = set(query_lower.split())
     
-    log_debug(f"[SEARCH] Looking for exact match for query: '{query_lower}'")
-    log_debug(f"[SEARCH] Query words: {query_words}")
+    print(f"[SEARCH] Looking for exact match for query: '{query_lower}'")
+    print(f"[SEARCH] Query words: {query_words}")
     
     # First, try to find a document that matches the query exactly
     for i, doc in enumerate(docs):
@@ -193,7 +214,7 @@ def _generate_case_summary(docs: List[Dict], query: str, retriever=None, history
         gr = doc.get("gr_number", "") or doc.get("metadata", {}).get("gr_number", "")
         score = doc.get("score", 0.0)
         
-        log_debug(f"  Doc {i+1}: '{title[:50]}...' | G.R. {gr} | Score: {score:.3f}")
+        print(f"  Doc {i+1}: '{title[:50]}...' | G.R. {gr} | Score: {score:.3f}")
 
         if not title:
             continue
@@ -201,21 +222,21 @@ def _generate_case_summary(docs: List[Dict], query: str, retriever=None, history
         # More strict matching: check for exact phrase match first
         if query_lower in title or title in query_lower:
             exact_match_doc = doc
-            log_debug(f"  ✅ Exact phrase match found: '{title[:50]}...'")
+            print(f"  ✅ Exact phrase match found: '{title[:50]}...'")
             break
         # Then check for significant word overlap (at least 4 words for better precision)
         elif len(query_words.intersection(set(title.split()))) >= 4:
             exact_match_doc = doc
-            log_debug(f"  ✅ Significant word overlap found: '{title[:50]}...'")
+            print(f"  ✅ Significant word overlap found: '{title[:50]}...'")
             break
     
     # Use exact match document if found, otherwise use main document
     source_doc = exact_match_doc if exact_match_doc else main_doc
     
     if exact_match_doc:
-        log_debug(f"[SEARCH] Using exact match document: G.R. {exact_match_doc.get('gr_number', 'Unknown')}")
+        print(f"[SEARCH] Using exact match document: G.R. {exact_match_doc.get('gr_number', 'Unknown')}")
     else:
-        log_debug(f"[SEARCH] No exact match found, using main document: G.R. {main_doc.get('gr_number', 'Unknown')}")
+        print(f"[SEARCH] No exact match found, using main document: G.R. {main_doc.get('gr_number', 'Unknown')}")
     
     # Extract metadata from the chosen document
     case_title = (source_doc.get("case_title", "") or 
@@ -259,7 +280,7 @@ def _generate_case_summary(docs: List[Dict], query: str, retriever=None, history
                 source_doc.get("metadata", {}).get("type", "") or
                 "Not available")
     
-    log_debug(f"[SEARCH] Final metadata - Title: {case_title[:50]}... | Case: {case_number} | Ponente: {ponente}")
+    print(f"[SEARCH] Final metadata - Title: {case_title[:50]}... | Case: {case_number} | Ponente: {ponente}")
     
     # Try to load full case content from JSONL file
     full_case_content = None
@@ -267,29 +288,29 @@ def _generate_case_summary(docs: List[Dict], query: str, retriever=None, history
         # Clean the case number for JSONL lookup (remove display formatting)
         if gr_number != "Not available":
             jsonl_case_number = re.sub(r'^G\.R\.\s+No\.\s*', '', gr_number, flags=re.IGNORECASE).strip()
-            log_debug(f"[SEARCH] Loading full case content from JSONL for G.R. {jsonl_case_number}...")
+            print(f"[SEARCH] Loading full case content from JSONL for G.R. {jsonl_case_number}...")
         else:
             jsonl_case_number = special_number
-            log_debug(f"[SEARCH] Loading full case content from JSONL for Special {jsonl_case_number}...")
+            print(f"[SEARCH] Loading full case content from JSONL for Special {jsonl_case_number}...")
         try:
             from .retriever import load_case_from_jsonl
             full_case_content = load_case_from_jsonl(jsonl_case_number)
             if full_case_content:
-                log_debug(f"✅ Loaded full case content: {len(str(full_case_content))} characters")
+                print(f"✅ Loaded full case content: {len(str(full_case_content))} characters")
             else:
-                log_warning(f"⚠️ No full case content found for {jsonl_case_number}")
+                print(f"⚠️ No full case content found for {jsonl_case_number}")
         except Exception as e:
-            log_warning(f"⚠️ Error loading full case content: {e}")
+            print(f"⚠️ Error loading full case content: {e}")
     
     # If we have full case content, use it for better summary
     if full_case_content:
-        log_debug("[SEARCH] Using full case content for summary generation...")
+        print("[SEARCH] Using full case content for summary generation...")
         # Extract content from full case (using actual JSONL fields)
         facts_content = full_case_content.get("clean_text", "") or full_case_content.get("body", "")
         ruling_content = full_case_content.get("ruling", "")
         
         # Use LLM to generate a proper storytelling summary from JSONL content
-        log_debug("[SEARCH] Using LLM to generate storytelling summary from JSONL content...")
+        print("[SEARCH] Using LLM to generate storytelling summary from JSONL content...")
         
         # Prepare context for LLM
         context_parts = []
@@ -437,7 +458,8 @@ def _find_relevant_cases(docs: List[Dict], retriever, history: List[Dict] = None
         
         relevant_docs = []
         for search_query in search_queries:
-            docs = _advanced_retrieve(retriever, search_query, k=3, is_case_digest=False, history=history)
+            result = _advanced_retrieve(retriever, search_query, k=3, is_case_digest=False, history=history)
+            docs = result[0] if isinstance(result, tuple) else result
             relevant_docs.extend(docs)
             if len(relevant_docs) >= 5:
                 break
@@ -787,7 +809,8 @@ Use only information from the provided context. If information is not available,
     if retriever:
         try:
             # Search for related cases
-            related_docs = _advanced_retrieve(retriever, f"{case_title} similar cases", k=3, history=history)
+            result = _advanced_retrieve(retriever, f"{case_title} similar cases", k=3, history=history)
+            related_docs = result[0] if isinstance(result, tuple) else result
             relevant_cases = _find_relevant_cases(related_docs, retriever, history)
         except Exception as e:
             print(f"⚠️ Error finding related cases: {e}")
@@ -919,7 +942,8 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
                     print(f"❌ No metadata found for Special {special_num} in vector DB")
             else:
                 # Keyword path: retrieve and return the top 3 unique cases
-                hits = _advanced_retrieve(retriever, query, k=12, is_case_digest=False, history=history)
+                result = _advanced_retrieve(retriever, query, k=12, is_case_digest=False, history=history)
+                hits = result[0] if isinstance(result, tuple) else result
                 # Pick top 3 unique cases by GR/title
                 picked = []
                 seen_keys = set()
@@ -938,9 +962,7 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
                     items = []
                     for i, d in enumerate(picked, 1):
                         title = _display_title(d)
-                        if title == "Untitled case":
-                            title = _title_from_query(query)
-                        
+                            
                         # Get case number (GR or special)
                         gr_raw = d.get("gr_number") or d.get("metadata", {}).get("gr_number") or ""
                         special_raw = d.get("special_number") or d.get("metadata", {}).get("special_number") or ""
@@ -951,10 +973,28 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
                             case_number = str(special_raw)
                         else:
                             case_number = "Unknown"
-                        
-                        case_type = (d.get("case_type") or d.get("metadata", {}).get("case_type") or "").strip()
+
+                        case_type = (d.get("case_subtype") or d.get("metadata", {}).get("case_subtype") or "").strip()
                         suffix = f" — {case_type}" if case_type else ""
-                        items.append(f"{i}. {title} ({case_number}){suffix}")
+
+                        # Lazy JSONL lookup to improve missing/generic titles
+                        if (title in {"Untitled case", ""} or title.startswith("Case (")) and (gr_raw or special_raw):
+                            try:
+                                from .retriever import load_case_from_jsonl
+                                lookup_id = str(gr_raw) if gr_raw else str(special_raw)
+                                full_case = load_case_from_jsonl(lookup_id)
+                                if full_case and isinstance(full_case, dict):
+                                    t2 = full_case.get("case_title") or full_case.get("title")
+                                    if t2 and isinstance(t2, str) and len(t2.strip()) >= 10:
+                                        title = t2.strip()[:120]
+                            except Exception as _e:
+                                pass
+
+                        # Avoid duplicating case number if already present in title
+                        if case_number != "Unknown" and case_number in title:
+                            items.append(f"{i}. {title}{suffix}")
+                        else:
+                            items.append(f"{i}. {title} ({case_number}){suffix}")
                     return "Here are the possible cases:\n" + "\n".join(items)
                 else:
                     return "I couldn't find matching cases in the current database. Try a different G.R. number or broader keywords."

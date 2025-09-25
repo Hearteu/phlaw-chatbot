@@ -11,7 +11,7 @@ def extract_random_cases(input_file: str, output_file: str, num_cases: int = 5):
     Extract random cases from gzipped JSONL file and save to plain JSONL file
     """
     print(f"📖 Reading from: {input_file}")
-    print(f"�� Writing to: {output_file}")
+    print(f"📝 Writing to: {output_file}")
     print(f"🎲 Extracting {num_cases} random cases...")
     
     # First, read all cases to get total count
@@ -41,9 +41,11 @@ def extract_random_cases(input_file: str, output_file: str, num_cases: int = 5):
         # Write selected cases to output file
         with open(output_file, 'w', encoding='utf-8') as f:
             for i, case in enumerate(selected_cases, 1):
-                print(f"�� Writing case {i}: {case.get('title', 'Untitled')[:50]}...")
-                f.write(json.dumps(case, ensure_ascii=False, indent=2))
-                f.write('\n\n')  # Add spacing between cases for readability
+                # Crawler uses 'case_title' as the canonical title field
+                print(f"📝 Writing case {i}: {case.get('case_title', case.get('title', 'Untitled'))[:50]}...")
+                # Write as proper JSONL (one JSON object per line) to align with crawler output
+                f.write(json.dumps(case, ensure_ascii=False))
+                f.write('\n')
         
         print(f"✅ Successfully extracted {len(selected_cases)} cases to {output_file}")
         

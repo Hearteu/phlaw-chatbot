@@ -17,7 +17,7 @@ import os
 import re
 import sys
 from datetime import datetime
-from typing import Any
+from typing import Any, Dict
 from urllib.parse import urljoin
 
 import aiohttp
@@ -576,7 +576,52 @@ def extract_ponente(text: str) -> str | None:
         return f"{_clean_justice_name(m.group(1))}, J."
     return None
 
-# Removed unused section extractors and splitter; pipeline relies on clean_text only
+# -----------------------------
+# Section Extraction for Chunking Alignment
+# -----------------------------
+def extract_sections_for_chunking(text: str) -> Dict[str, str]:
+    """Extract structured sections that align with the chunking strategy"""
+    if not text:
+        return {}
+    
+    sections = {}
+    
+    # Extract dispositive/ruling first (highest priority)
+    ruling_match = RULING_REGEX.search(text)
+    if ruling_match:
+        sections['ruling'] = ruling_match.group(0).strip()
+    
+    # Simple heuristic patterns for other sections
+    section_patterns = [
+        (r'THE FACTS?[\s\S]*?(?=THE ISSUE|THE RULING|WHEREFORE|$)', 'facts'),
+        (r'ANTECEDENT FACTS?[\s\S]*?(?=THE ISSUE|THE RULING|WHEREFORE|$)', 'facts'),
+        (r'THE ISSUE[S]?[\s\S]*?(?=THE RULING|WHEREFORE|$)', 'issues'),
+        (r'ISSUE[S]?[\s\S]*?(?=THE RULING|WHEREFORE|$)', 'issues'),
+        (r'THE RULING[\s\S]*?(?=WHEREFORE|$)', 'arguments'),
+        (r'DISCUSSION[\s\S]*?(?=WHEREFORE|$)', 'arguments'),
+    ]
+    
+    for pattern, section_name in section_patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match and section_name not in sections:
+            content = match.group(0).strip()
+            if len(content) > 100:  # Only add substantial content
+                sections[section_name] = content
+    
+    # Add header section (first part of document)
+    lines = text.split('\n')
+    header_lines = []
+    for i, line in enumerate(lines):
+        if i > 20:  # Limit header to first 20 lines
+            break
+        if any(indicator in line.upper() for indicator in ['DECISION', 'RESOLUTION', 'ORDER']):
+            break
+        header_lines.append(line)
+    
+    if header_lines:
+        sections['header'] = '\n'.join(header_lines).strip()
+    
+    return sections
 
 def load_existing_ids(path: str) -> set[str]:
     ids: set[str] = set()
@@ -1006,10 +1051,15 @@ def parse_case(text_base: str, url: str, year_hint: int | None = None, month_hin
         url_fragment = url.rsplit('/', 1)[-1] if url else None
         fallback_title = url_fragment if is_valid_title_candidate(url_fragment or "") else "Untitled Case"
 
+    # Extract structured sections for chunking alignment
+    sections = extract_sections_for_chunking(text)
+    
     # Add quality metrics (drop per-section booleans)
     quality_metrics = {
         "has_ruling": has_ruling_flag,
         "text_length": len(text),
+        "sections_extracted": len(sections),
+        "has_structured_sections": len(sections) > 1,
     }
 
     record = {
@@ -1025,7 +1075,7 @@ def parse_case(text_base: str, url: str, year_hint: int | None = None, month_hin
         "promulgation_month": month_hint,      # optional
         "court": "Supreme Court",
         "source_url": url,
-        "clean_version": "v2.1",  # Updated version for special numbers
+        "clean_version": "v2.2",  # Updated version for sections + chunking alignment
         "checksum": sha256(text),
         "crawl_ts": datetime.utcnow().isoformat() + "Z",
         "ponente": ponente,
@@ -1033,6 +1083,8 @@ def parse_case(text_base: str, url: str, year_hint: int | None = None, month_hin
         "en_banc": en_banc,
         # Always include cleaned full text for hybrid retrieval
         "clean_text": text,
+        # Structured sections for chunking alignment
+        "sections": sections if sections else None,
         # Helpful flags
         "has_gr_number": bool(gr_primary),
         "has_special_number": bool(special_primary),

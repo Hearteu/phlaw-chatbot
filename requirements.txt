@@ -40,6 +40,9 @@ tqdm==4.67.1
 python-dateutil==2.9.0.post0
 regex==2024.11.6
 
+# Evaluation
+sacrebleu==2.4.3
+
 # Optional: For data collection (crawler)
 # Uncomment if you need to update case data
 # beautifulsoup4==4.13.4

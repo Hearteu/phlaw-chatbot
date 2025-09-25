@@ -270,87 +270,26 @@ def reload_llm():
 # CROSS-ENCODER CACHING
 # =============================================================================
 def get_cached_cross_encoder():
-    """Get cached CrossEncoder with lazy loading."""
-    global _CROSS_ENCODER_INSTANCE, _CROSS_ENCODER_LOADED, _MEMORY_STATS
-    if _CROSS_ENCODER_INSTANCE is None and not _CROSS_ENCODER_LOADED:
-        print("🔄 Loading cross-encoder model...")
-        start_time = time.time()
-        try:
-            from sentence_transformers import CrossEncoder
-            device = "cuda" if os.getenv("USE_CUDA", "true").lower() == "true" else "cpu"
-            _CROSS_ENCODER_INSTANCE = CrossEncoder(
-                "cross-encoder/ms-marco-MiniLM-L-6-v2",
-                device=device
-            )
-            _MEMORY_STATS["cross_encoder_loads"] += 1
-            print(f"[SUCCESS] Cross-encoder loaded in {time.time()-start_time:.2f}s")
-        finally:
-            _CROSS_ENCODER_LOADED = True
-    return _CROSS_ENCODER_INSTANCE
+    """Cross-encoder disabled (vector-only mode)."""
+    _ = (_CROSS_ENCODER_INSTANCE, _CROSS_ENCODER_LOADED)  # keep globals referenced
+    print("ℹ️ Cross-encoder caching disabled")
+    return None
 
 def clear_cross_encoder_cache():
-    """Clear the CrossEncoder cache."""
-    global _CROSS_ENCODER_INSTANCE, _CROSS_ENCODER_LOADED
-    if _CROSS_ENCODER_INSTANCE is not None:
-        try:
-            del _CROSS_ENCODER_INSTANCE
-        except Exception:
-            pass
-    _CROSS_ENCODER_INSTANCE = None
-    _CROSS_ENCODER_LOADED = False
-    print("[CLEARED] Cross-encoder cache cleared")
+    """No-op: Cross-encoder disabled."""
+    print("ℹ️ Cross-encoder cache clear skipped (disabled)")
 
 # =============================================================================
 # BM25 CACHING
 # =============================================================================
 def get_cached_bm25() -> Tuple[Optional[Any], Optional[List[List[str]]], Optional[List[Dict[str, Any]]]]:
-    """Get cached BM25 with loaded corpus and metadata."""
-    global _BM25_MODEL, _BM25_CORPUS, _BM25_DOC_METADATA, _BM25_LOADED, _MEMORY_STATS
-    if _BM25_MODEL is None and not _BM25_LOADED:
-        print("🔄 Loading BM25 model and corpus...")
-        start_time = time.time()
-        try:
-            import gzip
-            import json
-
-            from rank_bm25 import BM25Okapi
-
-            corpus: List[List[str]] = []
-            doc_metadata: List[Dict[str, Any]] = []
-            jsonl_path = os.path.join(BASE_DIR, "data", "cases.jsonl.gz")
-            if os.path.exists(jsonl_path):
-                with gzip.open(jsonl_path, 'rt', encoding='utf-8') as f:
-                    for line in f:
-                        if not line.strip():
-                            continue
-                        case = json.loads(line)
-                        text = f"{case.get('title', '')} {case.get('body', '')}"
-                        corpus.append(text.split())
-                        doc_metadata.append({
-                            'id': case.get('id', ''),
-                            'gr_number': case.get('gr_number', ''),
-                            'title': case.get('title', ''),
-                            'date': case.get('date', ''),
-                            'ponente': case.get('ponente', ''),
-                            'case_type': case.get('case_type', '')
-                        })
-            _BM25_MODEL = BM25Okapi(corpus)
-            _BM25_CORPUS = corpus
-            _BM25_DOC_METADATA = doc_metadata
-            _MEMORY_STATS["bm25_loads"] += 1
-            print(f"[SUCCESS] BM25 loaded in {time.time()-start_time:.2f}s")
-        finally:
-            _BM25_LOADED = True
-    return _BM25_MODEL, _BM25_CORPUS, _BM25_DOC_METADATA
+    """BM25 disabled (vector-only mode)."""
+    print("ℹ️ BM25 caching disabled")
+    return None, [], []
 
 def clear_bm25_cache():
-    """Clear BM25 and its data from cache."""
-    global _BM25_MODEL, _BM25_CORPUS, _BM25_DOC_METADATA, _BM25_LOADED
-    _BM25_MODEL = None
-    _BM25_CORPUS = None
-    _BM25_DOC_METADATA = None
-    _BM25_LOADED = False
-    print("[CLEARED] BM25 cache cleared")
+    """No-op: BM25 disabled."""
+    print("ℹ️ BM25 cache clear skipped (disabled)")
 
 # =============================================================================
 # SENTENCE TRANSFORMER CACHING
