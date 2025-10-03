@@ -65,12 +65,18 @@ class LegalDocumentChunker:
     
     def _extract_case_metadata(self, case_data: Dict[str, Any]) -> Dict[str, Any]:
         """Extract core metadata for all chunks"""
+        # Get title - prefer case_title, fallback to title field
+        title = case_data.get('case_title', '') or case_data.get('title', '')
+        
+        # Get date - prefer promulgation_date, fallback to date field  
+        date = case_data.get('promulgation_date', '') or case_data.get('date', '')
+        
         return {
             'case_id': case_data.get('gr_number') or case_data.get('special_number') or case_data.get('id', ''),
             'gr_number': case_data.get('gr_number', ''),
             'special_number': case_data.get('special_number', ''),
-            'title': case_data.get('case_title', ''),
-            'date': case_data.get('date', ''),
+            'title': title,
+            'date': date,
             'ponente': case_data.get('ponente', ''),
             'case_type': case_data.get('case_type', ''),
             'division': case_data.get('division', ''),

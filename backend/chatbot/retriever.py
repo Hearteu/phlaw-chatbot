@@ -11,6 +11,8 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import FieldCondition, Filter, MatchValue
 from sentence_transformers import SentenceTransformer
 
+# Import Contextual RAG system
+from .contextual_rag import create_contextual_rag_system
 # Import centralized model cache
 from .model_cache import get_cached_embedding_model
 
@@ -106,10 +108,23 @@ def load_case_from_jsonl(case_id: str, jsonl_path: str = DATA_FILE) -> Optional[
 class LegalRetriever:
     """Simplified legal document retriever with structure-aware chunking support"""
     
-    def __init__(self, collection: str = "jurisprudence"):
+    def __init__(self, collection: str = "jurisprudence", use_contextual_rag: bool = False):
         self.collection = collection
         self.model = _get_cached_embedding_model()
         self.qdrant = _get_cached_qdrant_client()
+        self.use_contextual_rag = use_contextual_rag
+        # Simple cache for retrieval results to ensure consistency
+        self._retrieval_cache = {}
+        
+        # Initialize Contextual RAG system if requested
+        self.contextual_rag = None
+        if use_contextual_rag:
+            try:
+                self.contextual_rag = create_contextual_rag_system(collection=collection)
+                print(f"✅ Contextual RAG system initialized for collection: {collection}")
+            except Exception as e:
+                print(f"⚠️ Failed to initialize Contextual RAG: {e}")
+                self.use_contextual_rag = False
         
         # Verify collection exists
         if not self.qdrant.collection_exists(collection):
@@ -142,40 +157,84 @@ class LegalRetriever:
         
         print(f"🎯 Retrieving: '{query}'")
         
+        # Create cache key
+        cache_key = f"{query.strip()}_{k}_{is_case_digest}"
+        
+        # Check cache first
+        if cache_key in self._retrieval_cache:
+            print(f"📋 Cache hit for query: {query[:50]}...")
+            return self._retrieval_cache[cache_key]
+        
         # Path 1: Check if query contains GR number
         gr_number = self._extract_gr_number(query)
         if gr_number:
             print(f"📋 GR-number path: {gr_number}")
             results = self._retrieve_by_gr_number(gr_number, k)
-            return self._apply_section_boosts(results)
+            results = self._apply_section_boosts(results)
+            # Cache the results
+            self._retrieval_cache[cache_key] = results
+            return results
         
         # Path 2: Check if query contains special number (A.M., OCA, etc.)
         special_number = self._extract_special_number(query)
         if special_number:
             print(f"📋 Special-number path: {special_number}")
             results = self._retrieve_by_special_number(special_number, k)
-            return self._apply_section_boosts(results)
+            results = self._apply_section_boosts(results)
+            # Cache the results
+            self._retrieval_cache[cache_key] = results
+            return results
         
-        # Path 3: Keyword search with section-aware retrieval
-        print(f"📋 Keyword path: {query}")
+        # Path 3: Use Contextual RAG for keyword search if available
+        if self.use_contextual_rag and self.contextual_rag:
+            print(f"🧠 Contextual RAG path: {query}")
+            try:
+                results = self.contextual_rag.retrieve_and_rank(
+                    query, 
+                    vector_k=150, 
+                    bm25_k=150, 
+                    final_k=k
+                )
+                # Cache the results
+                self._retrieval_cache[cache_key] = results
+                return results
+            except Exception as e:
+                print(f"⚠️ Contextual RAG failed, falling back to standard retrieval: {e}")
+        
+        # Path 4: Standard keyword search with section-aware retrieval (fallback)
+        print(f"📋 Standard keyword path: {query}")
         results = self._retrieve_by_keywords(query, k, is_case_digest)
-        return self._apply_section_boosts(results)
+        results = self._apply_section_boosts(results)
+        # Cache the results
+        self._retrieval_cache[cache_key] = results
+        return results
     
     def _extract_gr_number(self, query: str) -> Optional[str]:
         """Extract GR number from query, returns normalized number or None"""
         if not query:
             return None
         
+        # Normalize query for consistent matching
+        query = query.strip()
+        
         patterns = [
-            r"G\.R\.?\s*No\.?\s*([0-9\-]+)",
-            r"GR\s*No\.?\s*([0-9\-]+)",
+            r"G\.R\.?\s*NOS?\.?\s*([0-9\-]+)",  # G.R. No. or G.R. NOS.
+            r"GR\s*NOS?\.?\s*([0-9\-]+)",       # GR No. or GR NOS.
             r"\b(\d{5,})\b"  # 5+ digit number
         ]
         
         for pattern in patterns:
             match = re.search(pattern, query, re.IGNORECASE)
             if match:
-                return match.group(1).strip()
+                # Normalize the extracted number
+                number = match.group(1).strip()
+                # Remove any leading zeros and ensure consistent format
+                if '-' in number:
+                    parts = number.split('-')
+                    normalized = '-'.join(parts)
+                else:
+                    normalized = number.lstrip('0') or '0'
+                return normalized
         
         return None
     
@@ -387,9 +446,12 @@ class LegalRetriever:
         return results
     
     def _ensure_section_diversity(self, results: List[Dict], target_k: int) -> List[Dict]:
-        """Ensure diverse section representation in results"""
+        """Ensure diverse section representation in results with deterministic selection"""
         if not results:
             return results
+        
+        # Sort results by score first to ensure deterministic selection
+        results = sorted(results, key=lambda x: (-x.get('score', 0), x.get('metadata', {}).get('case_id', ''), x.get('section', '')))
         
         # Group by section type
         by_section = {}
@@ -412,17 +474,18 @@ class LegalRetriever:
             'general': target_k // 10               # ~10%
         }
         
-        # Add results respecting quotas and priority
+        # Add results respecting quotas and priority (deterministic order)
         for section_type in section_priority:
             if section_type in by_section:
                 quota = section_quotas.get(section_type, 1)
+                # Take first N results (already sorted by score)
                 section_results = by_section[section_type][:quota]
                 diverse_results.extend(section_results)
                 
                 if len(diverse_results) >= target_k:
                     break
         
-        # Fill remaining slots with best remaining results
+        # Fill remaining slots with best remaining results (deterministic)
         used_ids = {r.get('id', '') for r in diverse_results}
         remaining = [r for r in results if r.get('id', '') not in used_ids]
         
@@ -430,6 +493,11 @@ class LegalRetriever:
             diverse_results.append(remaining.pop(0))
         
         return diverse_results
+    
+    def clear_cache(self):
+        """Clear the retrieval cache"""
+        self._retrieval_cache.clear()
+        print("📋 Retrieval cache cleared")
     
     def _dedupe_by_case_and_section(self, results: List[Dict]) -> List[Dict]:
         """Remove duplicates based on case_id and section, keeping highest scoring"""

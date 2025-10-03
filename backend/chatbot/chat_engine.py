@@ -2,17 +2,28 @@
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
+# Import evaluation metrics
+try:
+    from .evaluation_metrics import (AutomatedContentScoring,
+                                     ContentRelevanceMetrics,
+                                     EvaluationTracker, LegalAccuracyMetrics)
+    METRICS_AVAILABLE = True
+except ImportError:
+    METRICS_AVAILABLE = False
+    print("⚠️ Evaluation metrics not available")
+
 
 def _extract_gr_number(query: str) -> str:
     """Extract G.R. number from query, returns numeric part or empty string."""
     if not query:
         return ""
     q = query.strip()
-    # Common patterns: "G.R. No. 123456", "GR No. 123456", bare digits with separators
-    m = re.search(r"G\.R\.?\s*No\.?\s*([0-9\-]+)", q, re.IGNORECASE)
+    # Common patterns: "G.R. No. 123456", "G.R. NOS. 151809-12", "GR No. 123456", bare digits with separators
+    # Match "G.R. NOS." (plural) or "G.R. No." (singular)
+    m = re.search(r"G\.R\.?\s*NOS?\.?\s*([0-9\-]+)", q, re.IGNORECASE)
     if m:
         return m.group(1)
-    m = re.search(r"GR\s*No\.?\s*([0-9\-]+)", q, re.IGNORECASE)
+    m = re.search(r"GR\s*NOS?\.?\s*([0-9\-]+)", q, re.IGNORECASE)
     if m:
         return m.group(1)
     # Fallback: a long number that looks like GR (7+ digits)
@@ -46,6 +57,47 @@ def _extract_special_number(query: str) -> str:
     
     return ""
 
+def _to_title_case(text: str) -> str:
+    """Convert text to proper title case for better readability"""
+    if not text:
+        return text
+    
+    # Handle special legal terms that should stay uppercase
+    legal_terms = {
+        'VERSUS', 'PETITIONER', 'PETITIONERS', 'RESPONDENT', 'RESPONDENTS',
+        'COMPLAINANT', 'COMPLAINANTS', 'PLAINTIFF', 'PLAINTIFFS', 'DEFENDANT', 'DEFENDANTS',
+        'G.R.', 'A.M.', 'LRC', 'SP', 'NO.', 'ET', 'AL.', 'ET AL', 'JR.', 'SR.', 'III', 'IV',
+        'INC.', 'CORP.', 'CO.', 'LTD.', 'LLC.', 'PHIL.'
+    }
+    
+    # Convert to title case first
+    title_text = text.title()
+    
+    # Restore legal terms to uppercase
+    for term in legal_terms:
+        title_text = re.sub(r'\b' + re.escape(term.lower()) + r'\b', term, title_text, flags=re.IGNORECASE)
+    
+    # Make common words lowercase
+    lowercase_words = {'Of', 'The', 'And', 'In', 'On', 'At', 'To', 'For', 'With', 'By'}
+    for word in lowercase_words:
+        # Only replace if not at the beginning of the sentence and not after punctuation
+        title_text = re.sub(r'(?<!^)(?<![.!?]\s)\b' + re.escape(word) + r'\b', word.lower(), title_text)
+    
+    # Handle special cases for names with periods
+    title_text = re.sub(r'\b([A-Z])\.\s+([A-Z])\.\s+([A-Z])', r'\1. \2. \3', title_text)  # J. P. SMITH
+    title_text = re.sub(r'\b([A-Z])\.\s+([A-Z])', r'\1. \2', title_text)  # J. SMITH
+    
+    # Make "vs." lowercase LAST (after all other processing to ensure it sticks)
+    title_text = re.sub(r'\bVs\.\b', 'vs.', title_text, flags=re.IGNORECASE)
+    title_text = re.sub(r'\bV\.\b', 'v.', title_text, flags=re.IGNORECASE)
+    title_text = re.sub(r'\bVersus\b', 'versus', title_text, flags=re.IGNORECASE)
+    
+    # Highlight GR numbers with clickable links (using custom protocol for frontend handling)
+    title_text = re.sub(r'\(G\.R\.\s+No\.\s+([0-9\-]+)\)', r'**[G.R. No. \1](gr:\1)**', title_text)
+    title_text = re.sub(r'\(A\.M\.\s+No\.\s+([0-9\-]+)\)', r'**[A.M. No. \1](am:\1)**', title_text)
+    
+    return title_text
+
 def _normalize_gr_display(value: str) -> str:
     """Return a clean 'G.R. No. <num>' or 'Unknown' if not parseable."""
     if not value:
@@ -60,6 +112,14 @@ def _normalize_gr_display(value: str) -> str:
 def _display_title(d: Dict) -> str:
     """Prefer proper case titles; otherwise, provide a concise fallback."""
     meta = d.get("metadata", {}) or {}
+    
+    # Debug: Print what we have
+    print(f"🔍 _display_title debug:")
+    print(f"   d.get('title'): '{d.get('title', 'None')[:50]}...'")
+    print(f"   d.get('case_title'): '{d.get('case_title', 'None')[:50]}...'")
+    print(f"   meta.get('title'): '{meta.get('title', 'None')[:50]}...'")
+    print(f"   meta.get('case_title'): '{meta.get('case_title', 'None')[:50]}...'")
+    
     # Prefer explicit title-like fields (matching actual webscraped data structure)
     title = (
         d.get("case_title")
@@ -71,9 +131,19 @@ def _display_title(d: Dict) -> str:
     )
     if title:
         t = title.strip()
-        # If looks like a case title or is reasonably short, use as-is (with trim)
-        if re.search(r"\b(v\.|vs\.|versus)\b", t, re.IGNORECASE) or len(t) <= 120:
-            return t if len(t) <= 120 else (t[:117] + "...")
+        print(f"   Found title: '{t[:100]}...'")
+        # Just use the actual title from the database - it's already correct!
+        # Truncate if too long for display, but use the real title
+        if len(t) <= 200:
+            result = t
+        else:
+            result = t[:197] + "..."
+        # Convert to title case for better readability
+        result = _to_title_case(result)
+        print(f"   Using database title: '{result[:100]}...'")
+        return result
+    else:
+        print(f"   No title found, trying content extraction...")
     # Try to infer a title from content lines containing v./vs.
     text = d.get("content") or d.get("text") or meta.get("text") or ""
     if text:
@@ -116,6 +186,80 @@ def _title_from_query(query: str) -> str:
         else:
             out.append(p[:1].upper() + p[1:])
     return " ".join(out)
+
+def _extract_case_title_components(query: str) -> Dict[str, str]:
+    """Extract case title components for smart matching"""
+    query_lower = query.lower().strip()
+    
+    # Normalize vs variants
+    query_normalized = re.sub(r'\bversus\b', 'vs', query_lower, flags=re.IGNORECASE)
+    query_normalized = re.sub(r'\bvs\.?\b', 'vs', query_normalized, flags=re.IGNORECASE)
+    
+    # Extract parties (before and after vs)
+    vs_match = re.search(r'\bvs\b', query_normalized)
+    if vs_match:
+        before_vs = query_normalized[:vs_match.start()].strip()
+        after_vs = query_normalized[vs_match.end():].strip()
+        
+        # Extract individual names/entities
+        petitioner_parts = [p.strip() for p in re.split(r'[,&\s]+', before_vs) if p.strip()]
+        respondent_parts = [p.strip() for p in re.split(r'[,&\s]+', after_vs) if p.strip()]
+        
+        return {
+            'petitioner': ' '.join(petitioner_parts),
+            'respondent': ' '.join(respondent_parts),
+            'petitioner_parts': petitioner_parts,
+            'respondent_parts': respondent_parts,
+            'full_query': query_normalized
+        }
+    else:
+        # No vs found, treat as single entity search
+        parts = [p.strip() for p in re.split(r'[,&\s]+', query_normalized) if p.strip()]
+        return {
+            'petitioner': query_normalized,
+            'respondent': '',
+            'petitioner_parts': parts,
+            'respondent_parts': [],
+            'full_query': query_normalized
+        }
+
+def _calculate_title_similarity(query_components: Dict[str, str], case_title: str) -> float:
+    """Calculate similarity score between query components and case title"""
+    if not case_title:
+        return 0.0
+    
+    case_title_lower = case_title.lower()
+    score = 0.0
+    
+    # Exact match gets highest score
+    if query_components['full_query'] in case_title_lower:
+        score += 100.0
+    
+    # Check for petitioner and respondent matches
+    if query_components['petitioner'] and query_components['petitioner'] in case_title_lower:
+        score += 50.0
+    
+    if query_components['respondent'] and query_components['respondent'] in case_title_lower:
+        score += 50.0
+    
+    # Check for individual name parts
+    for part in query_components['petitioner_parts']:
+        if part and len(part) > 2:  # Skip very short parts
+            if part in case_title_lower:
+                score += 20.0
+            # Partial match
+            elif any(part in word for word in case_title_lower.split()):
+                score += 10.0
+    
+    for part in query_components['respondent_parts']:
+        if part and len(part) > 2:  # Skip very short parts
+            if part in case_title_lower:
+                score += 20.0
+            # Partial match
+            elif any(part in word for word in case_title_lower.split()):
+                score += 10.0
+    
+    return score
 
 def _advanced_retrieve(retriever, query: str, k: int = 8, is_case_digest: bool = False, history: List[Dict] = None):
     """Unified retrieval wrapper with chunking support"""
@@ -161,6 +305,72 @@ ISSUES_HINT_RE = re.compile(
 
 # Keep a single retriever instance (lazy-init for reuse)
 retriever = None
+
+# Evaluation tracker instance
+evaluation_tracker = None
+
+def get_evaluation_tracker():
+    """Get or create evaluation tracker instance"""
+    global evaluation_tracker
+    if evaluation_tracker is None and METRICS_AVAILABLE:
+        evaluation_tracker = EvaluationTracker()
+    return evaluation_tracker
+
+
+def evaluate_response(query: str, response: str, reference_text: str, 
+                     case_metadata: Optional[Dict] = None,
+                     expert_scores: Optional[Dict] = None) -> Optional[Dict[str, Any]]:
+    """
+    Evaluate chatbot response using integrated metrics
+    
+    Args:
+        query: User query
+        response: Chatbot generated response
+        reference_text: Reference legal text from JSONL
+        case_metadata: Optional case metadata
+        expert_scores: Optional expert evaluation scores
+        
+    Returns:
+        Evaluation results dictionary or None if metrics not available
+    """
+    if not METRICS_AVAILABLE:
+        print("⚠️ Evaluation metrics not available")
+        return None
+    
+    try:
+        tracker = get_evaluation_tracker()
+        if tracker:
+            evaluation_result = tracker.log_evaluation(
+                query=query,
+                response=response,
+                reference=reference_text,
+                case_metadata=case_metadata,
+                expert_scores=expert_scores
+            )
+            
+            print(f"📊 Evaluation Scores:")
+            print(f"   BLEU: {evaluation_result['automated_scores']['bleu']['bleu_avg']:.4f}")
+            print(f"   ROUGE-1 F1: {evaluation_result['automated_scores']['rouge']['rouge_1']['f1']:.4f}")
+            print(f"   ROUGE-2 F1: {evaluation_result['automated_scores']['rouge']['rouge_2']['f1']:.4f}")
+            print(f"   ROUGE-L F1: {evaluation_result['automated_scores']['rouge']['rouge_l']['f1']:.4f}")
+            print(f"   Legal Elements: {evaluation_result['automated_scores']['legal_elements']['presence_rate']:.4f}")
+            print(f"   Overall Relevance: {evaluation_result['automated_scores']['overall_relevance']['score']:.4f}")
+            
+            return evaluation_result
+    except Exception as e:
+        print(f"⚠️ Error during evaluation: {e}")
+        return None
+
+
+def get_evaluation_statistics() -> Optional[Dict[str, Any]]:
+    """Get aggregated evaluation statistics for current session"""
+    if not METRICS_AVAILABLE:
+        return None
+    
+    tracker = get_evaluation_tracker()
+    if tracker:
+        return tracker.get_session_statistics()
+    return None
 
 # --- Small utils ---
 def _normalize_ws(s: str, max_chars: int = 1600) -> str:
@@ -267,7 +477,19 @@ def _generate_case_summary(docs: List[Dict], query: str, retriever=None, history
     ponente = (source_doc.get("metadata", {}).get("ponente", "") or 
               source_doc.get("ponente", "") or 
               source_doc.get("metadata", {}).get("justice", "") or
-              "Not available")
+              "")
+    
+    # If ponente is still empty, try to extract from content
+    if not ponente:
+        content = source_doc.get("content", "") or source_doc.get("text", "")
+        if content:
+            # Try to extract ponente from content (e.g., "CALLEJO, SR., J.")
+            ponente_match = re.search(r'\b([A-Z][A-Za-z\-\']+(?:\s+[A-Z][A-Za-z\-\']+)*(?:\s+(?:SR\.|JR\.|III|IV))*)\s*,\s*(J\.|JJ\.|CJ|SAJ)\b', content[:2000])
+            if ponente_match:
+                ponente = f"{ponente_match.group(1)}, {ponente_match.group(2)}"
+    
+    if not ponente:
+        ponente = "Not available"
     
     date = (source_doc.get("metadata", {}).get("promulgation_date", "") or 
            source_doc.get("metadata", {}).get("date", "") or 
@@ -423,116 +645,435 @@ Write exactly 5 complete sentences that tell the story of this case. Start with 
 
 
 def _find_relevant_cases(docs: List[Dict], retriever, history: List[Dict] = None) -> List[Dict]:
-    """Find relevant cases with similar case type"""
+    """Find relevant cases with enhanced similarity matching and legal concept extraction"""
     if not docs or not retriever:
         return []
     
-    # Get case type from main document with better fallbacks
+    # Get main document (highest scoring)
     main_doc = max(docs, key=lambda x: x.get("score", 0.0))
+    
+    # Enhanced case type detection with legal categorization
+    case_type = _extract_enhanced_case_type(main_doc)
+    
+    # Extract legal concepts and key terms for better matching
+    legal_concepts = _extract_legal_concepts(main_doc)
+    
+    # Extract case relationships for enhanced matching
+    case_relationships = _extract_case_relationships(main_doc)
+    
+    # Get case metadata for filtering
+    case_title = (main_doc.get("case_title", "") or 
+                 main_doc.get("metadata", {}).get("case_title", "") or 
+                 main_doc.get("title", "") or 
+                 main_doc.get("metadata", {}).get("title", ""))
+    
+    current_gr = (main_doc.get("metadata", {}).get("gr_number", "") or 
+                 main_doc.get("gr_number", "") or 
+                 main_doc.get("metadata", {}).get("case_id", ""))
+    current_special = (main_doc.get("metadata", {}).get("special_number", "") or 
+                      main_doc.get("special_number", ""))
+    
+    try:
+        # Multi-strategy search for related cases
+        search_queries = _generate_enhanced_search_queries(case_type, legal_concepts, case_title, case_relationships)
+        
+        relevant_docs = []
+        seen_case_ids = set()
+        
+        # Search with different strategies
+        for search_query in search_queries:
+            result = _advanced_retrieve(retriever, search_query, k=4, is_case_digest=False, history=history)
+            docs = result[0] if isinstance(result, tuple) else result
+            
+            for doc in docs:
+                case_id = (doc.get("metadata", {}).get("gr_number", "") or 
+                          doc.get("gr_number", "") or 
+                          doc.get("metadata", {}).get("special_number", "") or 
+                          doc.get("special_number", ""))
+                
+                # Skip if already seen or is current case
+                if (case_id in seen_case_ids or 
+                    case_id == current_gr or 
+                    case_id == current_special):
+                    continue
+                
+                seen_case_ids.add(case_id)
+                relevant_docs.append(doc)
+                
+                if len(relevant_docs) >= 8:  # Get more candidates for better filtering
+                    break
+            
+            if len(relevant_docs) >= 8:
+                break
+        
+        # Enhanced filtering and scoring
+        good_docs = _filter_and_score_cases(relevant_docs, main_doc, legal_concepts, case_relationships)
+        
+        # Sort by relevance score and return top 3
+        good_docs.sort(key=lambda x: x.get('relevance_score', 0), reverse=True)
+        return good_docs[:3]
+        
+    except Exception as e:
+        print(f"⚠️ Error finding relevant cases: {e}")
+        return []
+
+
+def _extract_enhanced_case_type(main_doc: Dict) -> str:
+    """Extract case type with enhanced legal categorization"""
+    # Try metadata first
     case_type = (main_doc.get("metadata", {}).get("case_type", "") or 
                 main_doc.get("case_type", "") or 
                 main_doc.get("metadata", {}).get("type", ""))
     
-    if not case_type or case_type == "Not available":
-        # Try to extract case type from content or use a generic search
-        content = main_doc.get("content", "") or main_doc.get("text", "")
-        if "contract" in content.lower():
-            case_type = "contract"
-        elif "criminal" in content.lower():
-            case_type = "criminal"
-        elif "administrative" in content.lower():
-            case_type = "administrative"
-        else:
-            case_type = "civil"  # Default fallback
+    if case_type and case_type != "Not available":
+        return case_type.lower()
     
-    # Search for cases with similar case type and legal concepts
-    try:
-        # Try a more specific search for similar cases
-        case_title = main_doc.get("case_title", "") or main_doc.get("metadata", {}).get("case_title", "") or main_doc.get("title", "") or main_doc.get("metadata", {}).get("title", "")
-        search_queries = [
-            f"case type {case_type}",
-            f"similar to {case_title}",
-            f"contract cases",
-            f"civil cases"
-        ]
-        
-        relevant_docs = []
-        for search_query in search_queries:
-            result = _advanced_retrieve(retriever, search_query, k=3, is_case_digest=False, history=history)
-            docs = result[0] if isinstance(result, tuple) else result
-            relevant_docs.extend(docs)
-            if len(relevant_docs) >= 5:
-                break
-        # Filter out the current case
-        current_gr = (main_doc.get("metadata", {}).get("gr_number", "") or 
-                     main_doc.get("gr_number", "") or 
-                     main_doc.get("metadata", {}).get("case_id", ""))
-        current_special = (main_doc.get("metadata", {}).get("special_number", "") or 
-                          main_doc.get("special_number", ""))
-        current_id = current_gr or current_special
-        
-        relevant_docs = [d for d in relevant_docs if 
-                        ((d.get("metadata", {}).get("gr_number", "") or d.get("gr_number", "")) != current_gr and
-                         (d.get("metadata", {}).get("special_number", "") or d.get("special_number", "")) != current_special)]
-        
-        # Filter out bad documents completely before processing
-        good_docs = []
-        for doc in relevant_docs:
-            title = (doc.get("metadata", {}).get("title", "") or 
-                    doc.get("title", "") or 
-                    doc.get("metadata", {}).get("case_title", ""))
-            
-            # Comprehensive list of bad title patterns
-            bad_title_patterns = [
+    # Enhanced content-based detection
+    content = (main_doc.get("content", "") or 
+              main_doc.get("text", "") or "").lower()
+    
+    # Legal area keywords with weights
+    legal_areas = {
+        'criminal': ['criminal', 'penal', 'theft', 'robbery', 'murder', 'homicide', 'assault', 'fraud', 'estafa', 'violation', 'offense', 'crime', 'penalty', 'imprisonment'],
+        'contract': ['contract', 'agreement', 'obligation', 'breach', 'performance', 'consideration', 'parties', 'terms', 'conditions', 'stipulation', 'covenant'],
+        'property': ['property', 'real estate', 'land', 'title', 'ownership', 'possession', 'transfer', 'sale', 'purchase', 'mortgage', 'lease', 'tenancy'],
+        'family': ['marriage', 'divorce', 'annulment', 'custody', 'support', 'alimony', 'adoption', 'inheritance', 'succession', 'spouse', 'children'],
+        'labor': ['labor', 'employment', 'wage', 'salary', 'termination', 'dismissal', 'benefits', 'union', 'strike', 'collective bargaining', 'workplace'],
+        'administrative': ['administrative', 'government', 'public', 'official', 'discipline', 'misconduct', 'duty', 'authority', 'jurisdiction', 'agency'],
+        'constitutional': ['constitutional', 'rights', 'freedom', 'liberty', 'due process', 'equal protection', 'search', 'seizure', 'speech', 'religion'],
+        'commercial': ['commercial', 'business', 'corporation', 'partnership', 'company', 'trade', 'commerce', 'merchant', 'sale', 'goods'],
+        'tort': ['tort', 'negligence', 'damages', 'injury', 'liability', 'compensation', 'tortious', 'wrongful', 'harm', 'loss']
+    }
+    
+    # Score each legal area
+    area_scores = {}
+    for area, keywords in legal_areas.items():
+        score = sum(1 for keyword in keywords if keyword in content)
+        if score > 0:
+            area_scores[area] = score
+    
+    # Return highest scoring area or default to civil
+    if area_scores:
+        return max(area_scores.items(), key=lambda x: x[1])[0]
+    
+    return "civil"  # Default fallback
+
+
+def _extract_legal_concepts(main_doc: Dict) -> List[str]:
+    """Extract key legal concepts and terms from the main document"""
+    content = (main_doc.get("content", "") or 
+              main_doc.get("text", "") or "").lower()
+    
+    # Legal concept patterns
+    legal_concepts = []
+    
+    # Legal doctrines and principles
+    doctrine_patterns = [
+        r'\b(doctrine of [a-z\s]+)\b',
+        r'\b(principle of [a-z\s]+)\b',
+        r'\b(rule of [a-z\s]+)\b',
+        r'\b(test of [a-z\s]+)\b',
+        r'\b(standard of [a-z\s]+)\b'
+    ]
+    
+    for pattern in doctrine_patterns:
+        matches = re.findall(pattern, content)
+        legal_concepts.extend(matches)
+    
+    # Legal terms and phrases
+    legal_terms = [
+        'due process', 'equal protection', 'freedom of speech', 'right to privacy',
+        'separation of powers', 'checks and balances', 'judicial review',
+        'burden of proof', 'preponderance of evidence', 'beyond reasonable doubt',
+        'statute of limitations', 'res judicata', 'stare decisis', 'precedent',
+        'jurisdiction', 'venue', 'standing', 'ripeness', 'mootness',
+        'contractual obligation', 'breach of contract', 'specific performance',
+        'damages', 'injunction', 'restitution', 'rescission'
+    ]
+    
+    for term in legal_terms:
+        if term in content:
+            legal_concepts.append(term)
+    
+    # Extract case citations (G.R. numbers mentioned in content)
+    gr_pattern = r'g\.r\.\s*no\.?\s*(\d+)'
+    gr_matches = re.findall(gr_pattern, content, re.IGNORECASE)
+    legal_concepts.extend([f"G.R. No. {gr}" for gr in gr_matches[:3]])  # Limit to 3 citations
+    
+    return list(set(legal_concepts))  # Remove duplicates
+
+
+def _extract_case_relationships(main_doc: Dict) -> Dict[str, List[str]]:
+    """Extract case relationships including cited cases, similar parties, and legal areas"""
+    content = (main_doc.get("content", "") or 
+              main_doc.get("text", "") or "").lower()
+    
+    relationships = {
+        'cited_cases': [],
+        'similar_parties': [],
+        'legal_areas': [],
+        'key_doctrines': []
+    }
+    
+    # Extract cited cases (G.R. numbers mentioned in content)
+    gr_pattern = r'g\.r\.\s*no\.?\s*(\d+)'
+    gr_matches = re.findall(gr_pattern, content, re.IGNORECASE)
+    relationships['cited_cases'] = [f"G.R. No. {gr}" for gr in gr_matches[:5]]  # Limit to 5 citations
+    
+    # Extract party names (petitioner/respondent patterns)
+    party_patterns = [
+        r'petitioner[s]?\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',
+        r'respondent[s]?\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',
+        r'plaintiff[s]?\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',
+        r'defendant[s]?\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)'
+    ]
+    
+    for pattern in party_patterns:
+        matches = re.findall(pattern, content)
+        relationships['similar_parties'].extend(matches)
+    
+    # Extract legal areas from content
+    legal_area_keywords = {
+        'constitutional': ['constitutional', 'constitution', 'bill of rights', 'fundamental rights'],
+        'criminal': ['criminal', 'penal', 'crime', 'offense', 'violation'],
+        'civil': ['civil', 'contract', 'obligation', 'damages', 'liability'],
+        'administrative': ['administrative', 'government', 'public', 'official'],
+        'labor': ['labor', 'employment', 'worker', 'wage', 'salary'],
+        'family': ['family', 'marriage', 'divorce', 'custody', 'support'],
+        'property': ['property', 'real estate', 'land', 'title', 'ownership'],
+        'commercial': ['commercial', 'business', 'corporation', 'partnership'],
+        'tort': ['tort', 'negligence', 'injury', 'harm', 'wrongful']
+    }
+    
+    for area, keywords in legal_area_keywords.items():
+        if any(keyword in content for keyword in keywords):
+            relationships['legal_areas'].append(area)
+    
+    # Extract key legal doctrines
+    doctrine_patterns = [
+        r'\b(doctrine of [a-z\s]+)\b',
+        r'\b(principle of [a-z\s]+)\b',
+        r'\b(rule of [a-z\s]+)\b'
+    ]
+    
+    for pattern in doctrine_patterns:
+        matches = re.findall(pattern, content)
+        relationships['key_doctrines'].extend(matches)
+    
+    # Remove duplicates
+    for key in relationships:
+        relationships[key] = list(set(relationships[key]))
+    
+    return relationships
+
+
+def _generate_enhanced_search_queries(case_type: str, legal_concepts: List[str], case_title: str, case_relationships: Dict[str, List[str]]) -> List[str]:
+    """Generate diverse search queries for finding related cases using relationships"""
+    queries = []
+    
+    # Case type based queries
+    queries.extend([
+        f"{case_type} cases",
+        f"{case_type} law",
+        f"similar {case_type} cases"
+    ])
+    
+    # Legal concept based queries
+    for concept in legal_concepts[:3]:  # Use top 3 concepts
+        queries.append(f'"{concept}" cases')
+        queries.append(f"cases involving {concept}")
+    
+    # Relationship-based queries
+    # Cited cases queries
+    for cited_case in case_relationships.get('cited_cases', [])[:2]:  # Use top 2 cited cases
+        queries.append(f"cases citing {cited_case}")
+        queries.append(f"similar to {cited_case}")
+    
+    # Legal area queries
+    for legal_area in case_relationships.get('legal_areas', [])[:2]:  # Use top 2 legal areas
+        queries.append(f"{legal_area} cases")
+        queries.append(f"{legal_area} law")
+    
+    # Doctrine-based queries
+    for doctrine in case_relationships.get('key_doctrines', [])[:2]:  # Use top 2 doctrines
+        queries.append(f'"{doctrine}" cases')
+        queries.append(f"cases applying {doctrine}")
+    
+    # Title-based queries
+    if case_title and len(case_title) > 10:
+        # Extract key terms from title
+        title_words = [word for word in case_title.split() 
+                      if len(word) > 3 and word.lower() not in ['case', 'versus', 'against', 'petitioner', 'respondent']]
+        if title_words:
+            queries.append(" ".join(title_words[:3]))
+    
+    # General legal area queries
+    queries.extend([
+        "Supreme Court decisions",
+        "Philippine jurisprudence",
+        "legal precedents"
+    ])
+    
+    return queries[:8]  # Increased limit to 8 queries for better coverage
+
+
+def _filter_and_score_cases(candidates: List[Dict], main_doc: Dict, legal_concepts: List[str], case_relationships: Dict[str, List[str]]) -> List[Dict]:
+    """Filter and score candidate cases for relevance using relationships"""
+    good_docs = []
+    
+    # Enhanced bad title patterns
+    bad_title_patterns = [
                 "docketed as", "against the advice", "ceased reporting", "came back only",
                 "administrative case for", "crim. case no", "people v", "unknown", "third division",
                 "chico-nazario", "honorable", "presiding judge", "just ceased", "came back only",
                 "rommel", "baybay", "presiding judge", "this branch", "starting 6 april",
                 "c-63250", "alex sabayan", "chico-nazario", "third division", "senate and the house",
                 "congress commenced", "regular session", "commission on appointments", "constituted on",
-                "august 2004", "july 2004", "164978", "g.r. no. g.r. no", "g.r. no. unknown"
-            ]
-            
-            # Check if title is bad
-            is_bad_title = any(pattern in title.lower() for pattern in bad_title_patterns)
-            
-            # Skip if bad title or too short
-            if is_bad_title or len(title.strip()) < 20:
-                print(f"⚠️ Skipping document with bad title: '{title[:50]}...'")
-                continue
-            
-            # Try to extract better title from content
-            content = doc.get("content", "") or doc.get("text", "")
-            if content:
-                lines = content.split('\n')
-                for line in lines[:15]:  # Check first 15 lines
-                    line = line.strip()
-                    # Look for proper case titles with v. or vs.
-                    if (len(line) > 30 and 
-                        ('v.' in line or 'vs.' in line or 'versus' in line.lower()) and
-                        not any(bad_word in line.lower() for bad_word in bad_title_patterns) and
-                        not line.startswith(('—', 'Supreme Court', 'E-Library', 'The factual', 'On 02 August'))):
-                        # Update with better title
-                        if 'metadata' not in doc:
-                            doc['metadata'] = {}
-                        doc['metadata']['title'] = line
-                        doc['title'] = line
-                        break
-            
-            # Only add if we have a good title now
-            final_title = doc.get("title", "") or doc.get("metadata", {}).get("title", "")
-            if len(final_title.strip()) >= 20 and not any(pattern in final_title.lower() for pattern in bad_title_patterns):
-                good_docs.append(doc)
-            else:
-                print(f"⚠️ Skipping document after title extraction: '{final_title[:50]}...'")
+        "august 2004", "july 2004", "164978", "g.r. no. g.r. no", "g.r. no. unknown",
+        "e-library", "supreme court", "decision", "resolution", "order"
+    ]
+    
+    for doc in candidates:
+        # Extract and clean title
+        title = (doc.get("metadata", {}).get("title", "") or 
+                doc.get("title", "") or 
+                doc.get("metadata", {}).get("case_title", ""))
         
-        relevant_docs = good_docs
+        # Check for bad titles
+        is_bad_title = any(pattern in title.lower() for pattern in bad_title_patterns)
+        if is_bad_title or len(title.strip()) < 20:
+            continue
         
-        # Return up to 3 good cases, or fewer if we don't have enough
-        return relevant_docs[:3] if relevant_docs else []
-    except Exception as e:
-        print(f"⚠️ Error finding relevant cases: {e}")
-        return []
+        # Try to extract better title from content
+        content = doc.get("content", "") or doc.get("text", "")
+        if content:
+            lines = content.split('\n')
+            for line in lines[:15]:
+                line = line.strip()
+                if (len(line) > 30 and 
+                    ('v.' in line or 'vs.' in line or 'versus' in line.lower()) and
+                    not any(bad_word in line.lower() for bad_word in bad_title_patterns) and
+                    not line.startswith(('—', 'Supreme Court', 'E-Library', 'The factual', 'On 02 August'))):
+                    if 'metadata' not in doc:
+                        doc['metadata'] = {}
+                    doc['metadata']['title'] = line
+                    doc['title'] = line
+                    title = line
+                    break
+            
+        # Calculate enhanced relevance score with relationships
+        relevance_score = _calculate_enhanced_relevance_score(doc, main_doc, legal_concepts, case_relationships)
+        doc['relevance_score'] = relevance_score
+        
+        # Only include cases with decent relevance
+        if relevance_score > 0.3:
+            good_docs.append(doc)
+    
+    return good_docs
+
+
+def _calculate_enhanced_relevance_score(candidate_doc: Dict, main_doc: Dict, legal_concepts: List[str], case_relationships: Dict[str, List[str]]) -> float:
+    """Calculate enhanced relevance score for a candidate case using relationships"""
+    score = 0.0
+    
+    # Base score from vector similarity
+    base_score = candidate_doc.get('score', 0.0)
+    score += base_score * 0.3
+    
+    # Case type similarity
+    main_case_type = _extract_enhanced_case_type(main_doc)
+    candidate_case_type = _extract_enhanced_case_type(candidate_doc)
+    if main_case_type == candidate_case_type:
+        score += 0.25
+    
+    # Legal concept overlap
+    candidate_content = (candidate_doc.get("content", "") or 
+                        candidate_doc.get("text", "") or "").lower()
+    concept_matches = sum(1 for concept in legal_concepts if concept.lower() in candidate_content)
+    if concept_matches > 0:
+        score += min(0.15, concept_matches * 0.03)
+    
+    # Relationship-based scoring
+    candidate_gr = (candidate_doc.get("metadata", {}).get("gr_number", "") or 
+                   candidate_doc.get("gr_number", ""))
+    
+    # Cited cases relationship (high bonus)
+    cited_cases = case_relationships.get('cited_cases', [])
+    if candidate_gr in cited_cases:
+        score += 0.3  # High bonus for cited cases
+    
+    # Legal area overlap
+    main_legal_areas = case_relationships.get('legal_areas', [])
+    candidate_legal_areas = _extract_case_relationships(candidate_doc).get('legal_areas', [])
+    area_overlap = len(set(main_legal_areas) & set(candidate_legal_areas))
+    if area_overlap > 0:
+        score += min(0.2, area_overlap * 0.1)
+    
+    # Doctrine overlap
+    main_doctrines = case_relationships.get('key_doctrines', [])
+    candidate_doctrines = _extract_case_relationships(candidate_doc).get('key_doctrines', [])
+    doctrine_overlap = len(set(main_doctrines) & set(candidate_doctrines))
+    if doctrine_overlap > 0:
+        score += min(0.15, doctrine_overlap * 0.05)
+    
+    # Party name similarity (if available)
+    main_parties = case_relationships.get('similar_parties', [])
+    candidate_parties = _extract_case_relationships(candidate_doc).get('similar_parties', [])
+    party_overlap = len(set(main_parties) & set(candidate_parties))
+    if party_overlap > 0:
+        score += min(0.1, party_overlap * 0.05)
+    
+    # Temporal relevance (recent cases get slight boost)
+    candidate_year = candidate_doc.get("metadata", {}).get("promulgation_year")
+    if candidate_year and isinstance(candidate_year, int):
+        if candidate_year >= 2010:  # Recent cases
+            score += 0.08
+        elif candidate_year >= 2000:  # Moderately recent
+            score += 0.04
+    
+    # Section type bonus (prefer rulings and dispositive sections)
+    section_type = candidate_doc.get("section_type", "")
+    if section_type in ["ruling", "dispositive", "summary"]:
+        score += 0.08
+    
+    return min(1.0, score)  # Cap at 1.0
+
+
+def _calculate_relevance_score(candidate_doc: Dict, main_doc: Dict, legal_concepts: List[str]) -> float:
+    """Calculate relevance score for a candidate case (legacy function for compatibility)"""
+    score = 0.0
+    
+    # Base score from vector similarity
+    base_score = candidate_doc.get('score', 0.0)
+    score += base_score * 0.4
+    
+    # Case type similarity
+    main_case_type = _extract_enhanced_case_type(main_doc)
+    candidate_case_type = _extract_enhanced_case_type(candidate_doc)
+    if main_case_type == candidate_case_type:
+        score += 0.3
+    
+    # Legal concept overlap
+    candidate_content = (candidate_doc.get("content", "") or 
+                        candidate_doc.get("text", "") or "").lower()
+    concept_matches = sum(1 for concept in legal_concepts if concept.lower() in candidate_content)
+    if concept_matches > 0:
+        score += min(0.2, concept_matches * 0.05)
+    
+    # Temporal relevance (recent cases get slight boost)
+    candidate_year = candidate_doc.get("metadata", {}).get("promulgation_year")
+    if candidate_year and isinstance(candidate_year, int):
+        if candidate_year >= 2010:  # Recent cases
+            score += 0.1
+        elif candidate_year >= 2000:  # Moderately recent
+            score += 0.05
+    
+    # Section type bonus (prefer rulings and dispositive sections)
+    section_type = candidate_doc.get("section_type", "")
+    if section_type in ["ruling", "dispositive", "summary"]:
+        score += 0.1
+    
+    return min(1.0, score)  # Cap at 1.0
 
 def _generate_case_summary_from_jsonl(full_case_content: Dict, query: str, retriever, history: List[Dict] = None) -> str:
     """Generate case summary directly from JSONL content using LLM"""
@@ -804,34 +1345,11 @@ Use only information from the provided context. If information is not available,
         print(f"⚠️ LLM generation failed: {e}, using fallback")
         digest_text = f"**Facts**\nNot stated in sources.\n\n**Issues**\nNot stated in sources.\n\n**Ruling**\nNot stated in sources."
     
-    # Find related cases using retriever (if available)
-    relevant_cases = []
-    if retriever:
-        try:
-            # Search for related cases
-            result = _advanced_retrieve(retriever, f"{case_title} similar cases", k=3, history=history)
-            related_docs = result[0] if isinstance(result, tuple) else result
-            relevant_cases = _find_relevant_cases(related_docs, retriever, history)
-        except Exception as e:
-            print(f"⚠️ Error finding related cases: {e}")
+    # NOTE: Related cases removed from GR branching path for cleaner digest response
+    # Users can ask follow-up questions if they want related cases
     
-    # Build response with case digest format
+    # Build response with case digest format (no related cases)
     response_parts = [digest_text]
-    
-    if relevant_cases:
-        response_parts.append("\n**Related Cases:**")
-        for i, case in enumerate(relevant_cases, 1):
-            case_title = (case.get("case_title", "") or 
-                         case.get("metadata", {}).get("case_title", "") or
-                         case.get("title", "") or 
-                         case.get("metadata", {}).get("title", ""))
-            case_gr = (case.get("gr_number", "") or 
-                      case.get("metadata", {}).get("gr_number", "") or 
-                      "Unknown")
-            case_type = (case.get("case_type", "") or 
-                        case.get("metadata", {}).get("case_type", "") or 
-                        "regular")
-            response_parts.append(f"{i}. {case_title} ({case_gr}) - {case_type}")
     
     # response_parts.append("\nWhat would you like to know about this case?")
     # response_parts.append("• Case Digest - Complete structured summary")
@@ -840,7 +1358,24 @@ Use only information from the provided context. If information is not available,
     # response_parts.append("• Issues - Legal questions raised")
     # response_parts.append("• Arguments - Legal reasoning and doctrines")
     
-    return "\n".join(response_parts)
+    final_response = "\n".join(response_parts)
+    
+    # Evaluate response if metrics are available
+    if METRICS_AVAILABLE and full_case_content:
+        try:
+            reference_text = full_case_content.get("clean_text", "") or full_case_content.get("body", "")
+            case_metadata_for_eval = {
+                'case_title': case_title,
+                'gr_number': gr_number,
+                'ponente': ponente,
+                'promulgation_date': date,
+                'case_type': case_type
+            }
+            evaluate_response(query, final_response, reference_text, case_metadata_for_eval)
+        except Exception as e:
+            print(f"⚠️ Evaluation failed: {e}")
+    
+    return final_response
 
 # Removed intent heuristics; simplified flow uses only GR-number vs keyword path
 def _format_history(history: List[Dict]) -> str:
@@ -867,9 +1402,16 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
     if retriever is None:
             try:
                 from .retriever import LegalRetriever
-                base_retriever = LegalRetriever()
+
+                # Try to use Contextual RAG if available, fallback to basic retriever
+                try:
+                    base_retriever = LegalRetriever(use_contextual_rag=True)
+                    print("✅ Using Contextual RAG Legal Retriever")
+                except Exception as e:
+                    print(f"⚠️ Contextual RAG not available, using basic retriever: {e}")
+                    base_retriever = LegalRetriever(use_contextual_rag=False)
+                    print("✅ Using Basic Legal Retriever")
                 retriever = base_retriever
-                print("✅ Using Basic Legal Retriever")
             except ImportError as e:
                 print(f"❌ Failed to load Legal Retriever: {e}")
                 retriever = None
@@ -941,27 +1483,73 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
                 else:
                     print(f"❌ No metadata found for Special {special_num} in vector DB")
             else:
-                # Keyword path: retrieve and return the top 3 unique cases
-                result = _advanced_retrieve(retriever, query, k=12, is_case_digest=False, history=history)
+                # Smart keyword path: prioritize exact case title matches, then find related cases
+                print(f"🎯 Smart keyword path: '{query}'")
+                
+                # Extract case title components for smart matching
+                query_components = _extract_case_title_components(query)
+                print(f"🔍 Query components: {query_components}")
+                
+                # Retrieve more candidates for better matching
+                result = _advanced_retrieve(retriever, query, k=20, is_case_digest=False, history=history)
                 hits = result[0] if isinstance(result, tuple) else result
-                # Pick top 3 unique cases by GR/title
+                
+                # Score and sort by title similarity + original score
+                scored_cases = []
+                for d in hits:
+                    # Get case title
+                    case_title = d.get("title") or d.get("metadata", {}).get("title") or ""
+                    
+                    # Calculate title similarity score
+                    title_score = _calculate_title_similarity(query_components, case_title)
+                    
+                    # Get original retrieval score
+                    original_score = d.get("score", 0.0)
+                    
+                    # Check if this is from Contextual RAG (high scores indicate Contextual RAG)
+                    is_contextual_rag = original_score > 50.0 or d.get('contextual', False)
+                    
+                    if is_contextual_rag:
+                        # For Contextual RAG results, trust the original score more
+                        # Only use title similarity as a tiebreaker
+                        combined_score = original_score + (title_score * 0.1)
+                        print(f"🎯 Contextual RAG case: '{case_title[:30]}...' - Original: {original_score:.2f}, Title: {title_score:.2f}, Combined: {combined_score:.2f}")
+                    else:
+                        # For regular retrieval, use the original scoring logic
+                        combined_score = (title_score * 0.7) + (original_score * 0.3)
+                        print(f"📋 Regular case: '{case_title[:30]}...' - Original: {original_score:.2f}, Title: {title_score:.2f}, Combined: {combined_score:.2f}")
+                    
+                    d['title_similarity_score'] = title_score
+                    d['combined_score'] = combined_score
+                    d['is_contextual_rag'] = is_contextual_rag
+                    scored_cases.append(d)
+                
+                # Sort by combined score (highest first)
+                scored_cases.sort(key=lambda x: x['combined_score'], reverse=True)
+                
+                # Pick top 3-5 unique cases by GR/title
                 picked = []
                 seen_keys = set()
-                for d in hits:
+                for d in scored_cases:
                     # Use GR number, special number, or title as unique key
                     gr_num = d.get("gr_number") or d.get("metadata", {}).get("gr_number")
                     special_num = d.get("special_number") or d.get("metadata", {}).get("special_number")
                     title = d.get("title") or d.get("metadata", {}).get("title")
                     key = gr_num or special_num or title
+                    
                     if key and key not in seen_keys:
                         seen_keys.add(key)
                         picked.append(d)
-                    if len(picked) >= 3:
-                        break
+                        print(f"✅ Picked case: {title[:50]}... (score: {d['combined_score']:.2f})")
+                        print(f"   Title source: title='{d.get('title', 'None')[:30]}', case_title='{d.get('case_title', 'None')[:30]}'")
+                        if len(picked) >= 5:  # Return top 3-5 cases
+                            break
                 if picked:
+                    print(f"🎯 Found {len(picked)} relevant cases")
                     items = []
                     for i, d in enumerate(picked, 1):
                         title = _display_title(d)
+                        print(f"🎯 Display title for case {i}: '{title[:50]}...'")
                             
                         # Get case number (GR or special)
                         gr_raw = d.get("gr_number") or d.get("metadata", {}).get("gr_number") or ""
@@ -994,8 +1582,32 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
                         if case_number != "Unknown" and case_number in title:
                             items.append(f"{i}. {title}{suffix}")
                         else:
-                            items.append(f"{i}. {title} ({case_number}){suffix}")
-                    return "Here are the possible cases:\n" + "\n".join(items)
+                            # Format the case number with clickable links
+                            if case_number != "Unknown":
+                                # Extract just the number part for the link
+                                if "G.R. No." in case_number:
+                                    gr_match = re.search(r'G\.R\.\s+No\.\s+([0-9\-]+)', case_number)
+                                    if gr_match:
+                                        gr_num = gr_match.group(1)
+                                        formatted_case_number = f"**[{case_number}](gr:{gr_num})**"
+                                    else:
+                                        formatted_case_number = f"**({case_number})**"
+                                elif "A.M. No." in case_number:
+                                    am_match = re.search(r'A\.M\.\s+No\.\s+([A-Z0-9\-]+)', case_number)
+                                    if am_match:
+                                        am_num = am_match.group(1)
+                                        formatted_case_number = f"**[{case_number}](am:{am_num})**"
+                                    else:
+                                        formatted_case_number = f"**({case_number})**"
+                                else:
+                                    formatted_case_number = f"**({case_number})**"
+                            else:
+                                formatted_case_number = f"({case_number})"
+                            items.append(f"{i}. {title} {formatted_case_number}{suffix}")
+                    result = "Here are the possible cases:\n" + "\n".join(items)
+                    print(f"🎯 Returning case list with {len(items)} items")
+                    print(f"🎯 First item: {items[0] if items else 'None'}")
+                    return result
                 else:
                     return "I couldn't find matching cases in the current database. Try a different G.R. number or broader keywords."
     except Exception as e:

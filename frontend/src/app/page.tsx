@@ -1,17 +1,18 @@
 "use client";
 
 import type React from "react";
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import RatingComponent from "@/components/RatingComponent";
 import RichText from "@/components/RichText";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardFooter,
+    CardHeader,
+    CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Scale, Send, User } from "lucide-react";
@@ -36,6 +37,7 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+  const [ratedMessages, setRatedMessages] = useState<Set<string>>(new Set());
 
   // 👇 ref for the dummy "end of messages" div
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -90,10 +92,47 @@ export default function Home() {
 
   const handleSend = async () => {
     if (!input.trim()) return;
+    sendQuery(input);
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  };
+
+  const handleRatingSubmitted = (messageId: string) => {
+    setRatedMessages(prev => new Set([...prev, messageId]));
+  };
+
+  const handleCaseNumberClick = (caseNumber: string, caseType: 'gr' | 'am') => {
+    // Format the case number for the query
+    let query = '';
+    if (caseType === 'gr') {
+      query = `G.R. No. ${caseNumber}`;
+    } else if (caseType === 'am') {
+      query = `A.M. No. ${caseNumber}`;
+    }
+    
+    // Send the query directly
+    sendQuery(query);
+  };
+
+  const sendQuery = async (queryText: string) => {
+    if (!queryText.trim()) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
-      content: input,
+      content: queryText,
       role: "user",
       timestamp: new Date(),
     };
@@ -108,7 +147,7 @@ export default function Home() {
       const res = await fetch("http://127.0.0.1:8000/api/chat/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: input }),
+        body: JSON.stringify({ query: queryText }),
       });
 
       const data = await res.json();
@@ -138,19 +177,15 @@ export default function Home() {
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
+  const extractCaseId = (content: string): string | undefined => {
+    // Try to extract GR number or case ID from the response
+    const grMatch = content.match(/G\.R\.?\s*NOS?\.?\s*([0-9\-]+)/i);
+    if (grMatch) return grMatch[0];
+    
+    const spMatch = content.match(/SP\s*No\.?\s*([0-9\-]+)/i);
+    if (spMatch) return spMatch[0];
+    
+    return undefined;
   };
 
   const loadingMessages = [
@@ -162,8 +197,10 @@ export default function Home() {
   ];
 
   return (
-    <div className="flex flex-col items-center justify-center h-screen p-4 bg-white">
-      <Card className="w-full max-w-3xl flex flex-col h-full bg-white border rounded-xl shadow-sm">
+    <div className="flex h-screen bg-white">
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col items-center justify-center p-4">
+        <Card className="w-full max-w-3xl flex flex-col h-full bg-white border rounded-xl shadow-sm">
         <CardHeader className="text-black">
           <CardTitle className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full flex items-center justify-center">
@@ -206,6 +243,7 @@ export default function Home() {
                     <RichText
                       content={message.content}
                       className="text-sm leading-relaxed space-y-2"
+                      onCaseNumberClick={handleCaseNumberClick}
                     />
                   ) : (
                     <p className="text-sm leading-relaxed">{message.content}</p>
@@ -286,7 +324,29 @@ export default function Home() {
             </Button>
           </div>
         </CardFooter>
-      </Card>
+        </Card>
+      </div>
+
+      {/* Rating Sidebar */}
+      {messages.length > 1 && messages[messages.length - 1].role === "assistant" && 
+       !ratedMessages.has(messages[messages.length - 1].id) && (
+        <div className="w-80 bg-gray-50 border-l border-gray-200 p-4 overflow-y-auto">
+          <div className="sticky top-4">
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">Rate Response</h3>
+              <p className="text-sm text-gray-600">
+                Help us improve by rating the latest response
+              </p>
+            </div>
+            <RatingComponent
+              query={messages[messages.length - 2]?.content || ""}
+              response={messages[messages.length - 1].content}
+              caseId={extractCaseId(messages[messages.length - 1].content)}
+              onRatingSubmitted={() => handleRatingSubmitted(messages[messages.length - 1].id)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -6,6 +6,9 @@ from typing import Any, Dict, List, Optional
 from .docker_model_client import (generate_messages_with_fallback,
                                   generate_with_fallback)
 
+# Response cache for deterministic generation
+_response_cache = {}
+
 
 def _clean_response_text(text: str) -> str:
     """Clean up response text by removing instruction tokens and formatting artifacts"""
@@ -39,7 +42,7 @@ def generate_response(prompt: str, _retry_count: int = 0) -> str:
         response = generate_with_fallback(
             prompt,
             max_tokens=2048,
-            temperature=0.3,
+            temperature=0.0,  # Set to 0 for deterministic responses
             top_p=0.85,
             repeat_penalty=1.1,
             stop=["User:", "Human:", "Assistant:", "\n\n\n\n"]
@@ -60,7 +63,7 @@ def generate_response_from_messages(messages: List[Dict[str, str]], _retry_count
         response = generate_messages_with_fallback(
             messages,
             max_tokens=2048,
-            temperature=0.3,
+            temperature=0.0,  # Set to 0 for deterministic responses
             top_p=0.85,
             repeat_penalty=1.1,
             stop=["User:", "Human:", "Assistant:", "\n\n\n\n"]
@@ -94,6 +97,14 @@ def _messages_to_prompt(messages: List[Dict[str, str]]) -> str:
 def generate_legal_response(prompt: str, context: str = "", is_case_digest: bool = False) -> str:
     """Generate legal response with optimized prompt construction for simplified two-path logic"""
     
+    # Create cache key for deterministic responses
+    cache_key = f"{prompt}_{context}_{is_case_digest}"
+    
+    # Check cache first
+    if cache_key in _response_cache:
+        print(f"📋 Response cache hit for prompt: {prompt[:50]}...")
+        return _response_cache[cache_key]
+    
     # For case digests, use the prompt as-is (it already contains the custom format)
     if is_case_digest:
         enhanced_prompt = prompt
@@ -104,11 +115,9 @@ def generate_legal_response(prompt: str, context: str = "", is_case_digest: bool
 For keyword queries, present the top 3 most relevant cases in this format and include the case type when available:
 "Here are the possible cases:
 
-1. [Case Title] (G.R. No. [number]) — [Case type]
-2. [Case Title] (G.R. No. [number]) — [Case type]
-3. [Case Title] (G.R. No. [number]) — [Case type]"
-
-If a case type is not available for a case, omit the "— [Case type]" part for that line.
+1. [Case Title] (G.R. No. [number])
+2. [Case Title] (G.R. No. [number])
+3. [Case Title] (G.R. No. [number])"
 
 Provide complete, accurate responses with proper citations. If the sources contain relevant information, use it to answer the question. If the sources don't contain relevant information, say 'The sources don't contain information about this topic.'"""
         
@@ -121,7 +130,13 @@ Provide complete, accurate responses with proper citations. If the sources conta
     # Use Docker model runner with local LLM fallback
     try:
         response = generate_with_fallback(enhanced_prompt)
-        return response.strip() if response else "I apologize, but I was unable to generate a response."
+        result = response.strip() if response else "I apologize, but I was unable to generate a response."
+        
+        # Cache the response
+        _response_cache[cache_key] = result
+        print(f"💾 Cached response for prompt: {prompt[:50]}...")
+        
+        return result
             
     except Exception as e:
         print(f"❌ LLM generation failed: {e}")
@@ -130,6 +145,19 @@ Provide complete, accurate responses with proper citations. If the sources conta
 def generate_case_digest_response(prompt: str, context: str = "") -> str:
     """Generate case digest response with specialized formatting"""
     return generate_legal_response(prompt, context, is_case_digest=True)
+
+def clear_response_cache():
+    """Clear the response cache"""
+    global _response_cache
+    _response_cache.clear()
+    print("🧹 Response cache cleared")
+
+def get_response_cache_stats():
+    """Get response cache statistics"""
+    return {
+        "cache_size": len(_response_cache),
+        "cache_keys": list(_response_cache.keys())[:10]  # First 10 keys for debugging
+    }
 
 def get_llm_info() -> Dict[str, Any]:
     """Get LLM model information"""

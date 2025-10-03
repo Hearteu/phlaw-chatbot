@@ -169,7 +169,6 @@ def create_points_from_chunks(chunks: List[Dict[str, Any]]) -> List[PointStruct]
             'total_chunks': chunk.get('total_chunks', 1),
             
             # Processing metadata
-            'embedding_model': EMBED_MODEL,
             'chunk_version': 'v1.0',
             'processed_timestamp': int(time.time()),
         }
