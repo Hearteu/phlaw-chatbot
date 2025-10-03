@@ -1,17 +1,16 @@
-from chatbot.generator import clear_response_cache
 from chatbot.model_cache import clear_llm_cache
 from chatbot.retriever import LegalRetriever
 from django.core.management.base import BaseCommand
 
 
 class Command(BaseCommand):
-    help = 'Clear all LLM response caches'
+    help = 'Clear LLM caches'
 
     def add_arguments(self, parser):
         parser.add_argument(
             '--type',
             type=str,
-            choices=['all', 'response', 'retrieval', 'model'],
+            choices=['all', 'retrieval', 'model'],
             default='all',
             help='Type of cache to clear (default: all)'
         )
@@ -21,9 +20,6 @@ class Command(BaseCommand):
         
         self.stdout.write(self.style.SUCCESS('🧹 Starting cache clearing...'))
         
-        if cache_type in ['all', 'response']:
-            clear_response_cache()
-            self.stdout.write(self.style.SUCCESS('✅ Response cache cleared'))
         
         if cache_type in ['all', 'retrieval']:
             # Clear retrieval cache for both collections

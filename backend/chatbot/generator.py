@@ -1,11 +1,10 @@
-# generator.py — Enhanced Law LLM response generator with centralized model management
+# generator.py — Enhanced Law LLM response generator using Docker model
 import re
 from typing import Any, Dict, List, Optional
 
-from .model_cache import get_cached_llm
-
-# Response cache for deterministic generation
-_response_cache = {}
+from .docker_model_client import (generate_messages_with_fallback,
+                                  generate_with_fallback,
+                                  get_docker_model_client)
 
 
 def _clean_response_text(text: str) -> str:
@@ -29,39 +28,48 @@ def _clean_response_text(text: str) -> str:
     
     return text
 
-def _ensure_llm():
-    """Ensure local GGUF LLM is loaded and available."""
-    return get_cached_llm()
+def _ensure_docker_model():
+    """Ensure Docker model client is available."""
+    return get_docker_model_client()
 
 def generate_response(prompt: str, _retry_count: int = 0) -> str:
-    """Generate response using local llama.cpp GGUF model."""
+    """Generate response using Docker model runner."""
     try:
-        llm = _ensure_llm()
-        if llm is None:
-            raise RuntimeError("Local LLM not available")
+        docker_client = _ensure_docker_model()
+        if not docker_client.is_available:
+            raise RuntimeError("Docker model not available")
 
-        generation = llm(
+        result = generate_with_fallback(
             prompt,
             max_tokens=2048,
             temperature=0.3,
             top_p=0.85,
-            repeat_penalty=1.1,
-            stop=["User:", "Human:", "\n\n\n\n"],
+            stop=["User:", "Human:", "\n\n\n\n"]
         )
-        response_text = generation.get("choices", [{}])[0].get("text", "") if isinstance(generation, dict) else str(generation)
-        cleaned_text = _clean_response_text(response_text)
+        cleaned_text = _clean_response_text(result)
         return cleaned_text
     except Exception as e:
-        print(f"❌ Error in LLM generation: {e}")
+        print(f"❌ Error in Docker model generation: {e}")
         return "I apologize, but I encountered a technical error. Please try again later."
 
 def generate_response_from_messages(messages: List[Dict[str, str]], _retry_count: int = 0) -> str:
-    """Generate response from message history using local llama.cpp by converting to a prompt."""
+    """Generate response from message history using Docker model runner."""
     try:
-        prompt = _messages_to_prompt(messages)
-        return generate_response(prompt, _retry_count=_retry_count)
+        docker_client = _ensure_docker_model()
+        if not docker_client.is_available:
+            raise RuntimeError("Docker model not available")
+
+        result = generate_messages_with_fallback(
+            messages,
+            max_tokens=2048,
+            temperature=0.3,
+            top_p=0.85,
+            stop=["User:", "Human:", "\n\n\n\n"]
+        )
+        cleaned_text = _clean_response_text(result)
+        return cleaned_text
     except Exception as e:
-        print(f"❌ Error in LLM generation: {e}")
+        print(f"❌ Error in Docker model generation: {e}")
         return "I apologize, but I encountered a technical error. Please try again later."
 
 def _messages_to_prompt(messages: List[Dict[str, str]]) -> str:
@@ -83,14 +91,6 @@ def _messages_to_prompt(messages: List[Dict[str, str]]) -> str:
 
 def generate_legal_response(prompt: str, context: str = "", is_case_digest: bool = False) -> str:
     """Generate legal response with optimized prompt construction for simplified two-path logic"""
-    
-    # Create cache key for deterministic responses
-    cache_key = f"{prompt}_{context}_{is_case_digest}"
-    
-    # Check cache first
-    if cache_key in _response_cache:
-        print(f"📋 Response cache hit for prompt: {prompt[:50]}...")
-        return _response_cache[cache_key]
     
     # For case digests, use the prompt as-is (it already contains the custom format)
     if is_case_digest:
@@ -118,8 +118,6 @@ Provide complete, accurate responses with proper citations. If the sources conta
     try:
         result = generate_response(enhanced_prompt)
         result = result.strip() if result else "I apologize, but I was unable to generate a response."
-        _response_cache[cache_key] = result
-        print(f"💾 Cached response for prompt: {prompt[:50]}...")
         return result
     except Exception as e:
         print(f"❌ LLM generation failed: {e}")
@@ -129,31 +127,14 @@ def generate_case_digest_response(prompt: str, context: str = "") -> str:
     """Generate case digest response with specialized formatting"""
     return generate_legal_response(prompt, context, is_case_digest=True)
 
-def clear_response_cache():
-    """Clear the response cache"""
-    global _response_cache
-    _response_cache.clear()
-    print("🧹 Response cache cleared")
-
-def get_response_cache_stats():
-    """Get response cache statistics"""
-    return {
-        "cache_size": len(_response_cache),
-        "cache_keys": list(_response_cache.keys())[:10]  # First 10 keys for debugging
-    }
 
 def get_llm_info() -> Dict[str, Any]:
-    """Get LLM model information"""
+    """Get Docker model information"""
     try:
-        llm = _ensure_llm()
-        if llm is None:
-            return {"error": "LLM not available"}
-        return {
-            "model_path": getattr(llm, "model_path", "Unknown"),
-            "context_length": getattr(llm, "n_ctx", "Unknown"),
-            "gpu_layers": getattr(llm, "n_gpu_layers", "Unknown"),
-            "threads": getattr(llm, "n_threads", "Unknown"),
-            "batch_size": getattr(llm, "n_batch", "Unknown"),
-        }
+        docker_client = _ensure_docker_model()
+        if not docker_client.is_available:
+            return {"error": "Docker model not available"}
+        
+        return docker_client.get_model_info()
     except Exception as e:
         return {"error": str(e)}

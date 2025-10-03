@@ -54,7 +54,7 @@ class DockerModelClient:
                 model=self.model_name,
                 messages=messages,
                 max_tokens=kwargs.get('max_tokens', 10000),
-                temperature=kwargs.get('temperature', 0.0),
+                temperature=kwargs.get('temperature', 0.3),  # Use 0.3 as default instead of 0.0
                 top_p=kwargs.get('top_p', 0.85),
                 stop=kwargs.get('stop', ["User:", "Human:", "\n\n\n\n"]),
             )
@@ -75,7 +75,7 @@ class DockerModelClient:
                 model=self.model_name,
                 messages=messages,
                 max_tokens=kwargs.get('max_tokens', 4096),
-                temperature=kwargs.get('temperature', 0.0),
+                temperature=kwargs.get('temperature', 0.3),  # Use 0.3 as default instead of 0.1
                 top_p=kwargs.get('top_p', 0.85),
                 stop=kwargs.get('stop', ["User:", "Human:", "\n\n\n\n"])
             )

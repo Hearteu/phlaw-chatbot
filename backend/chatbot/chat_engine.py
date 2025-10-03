@@ -1110,51 +1110,6 @@ def _generate_case_summary_from_jsonl(full_case_content: Dict, query: str, retri
     except Exception:
         dispositive_text = ""
 
-    def _extract_sc_ruling_summary(text: str) -> str:
-        if not text:
-            return ""
-        cues = [
-            "certiorari", "grave abuse", "res judicata", "People of the Philippines",
-            "special civil action", "not the proper remedy", "final and executory",
-            "identity of parties", "does not bar criminal", "failure to implead"
-        ]
-        cleaned = re.sub(r"\s+", " ", text).strip()
-        parts = re.split(r"(?<=[.!?])\s+", cleaned)
-        picked: List[str] = []
-        for s in parts:
-            ls = s.lower()
-            if any(k in ls for k in cues) and 20 <= len(s) <= 400:
-                picked.append(s)
-            if len(picked) >= 3:
-                break
-        if not picked:
-            for s in parts:
-                if 40 <= len(s) <= 300:
-                    picked.append(s)
-                if len(picked) >= 2:
-                    break
-        return " ".join(picked[:3])
-
-    sc_ruling_summary = _extract_sc_ruling_summary(ruling_content)
-    
-    # Fallback: extract dispositive from body/clean_text when explicit 'ruling' is absent
-    if not ruling_content or not ruling_content.strip():
-        candidate_texts = []
-        # Primary long-form fields
-        for key in ("body", "clean_text"):
-            val = full_case_content.get(key, "")
-            if isinstance(val, str) and val.strip():
-                candidate_texts.append(val)
-        # Try regex extraction on candidates
-        extracted = ""
-        for txt in candidate_texts:
-            extracted = _extract_dispositive(txt)
-            if extracted:
-                break
-        if extracted:
-            ruling_content = extracted
-            print("✅ Extracted dispositive from body/sections as ruling content")
-
     # Debug: Check what content we found
     print(f"🔍 Facts content length: {len(facts_content)}")
     print(f"🔍 Ruling content length: {len(ruling_content)}")
@@ -1183,20 +1138,16 @@ def _generate_case_summary_from_jsonl(full_case_content: Dict, query: str, retri
         meta_line += f"\nType: {meta_type}{(' | Subtypes: ' + st) if st else ''}"
 
     context_parts = [meta_line]
-    # # Put concise summary first to prime the model
-    # if sc_ruling_summary:
-    #     context_parts.append(f"RULING SUMMARY: {_trim_to_sentences(sc_ruling_summary, 1000)}")
-    # # Ruling excerpt (longer budget)
-    # if ruling_content and len(ruling_content.strip()) > 60:
-    #     context_parts.append(f"RULING: {_trim_to_sentences(ruling_content, 3000)}")
-    # # Dispositive verbatim, capped and labeled if truncated
-    # if dispositive_text:
-    #     dispo_excerpt = _trim_to_sentences(dispositive_text, 1400)
-    #     label = " (excerpt)" if len(dispositive_text) > len(dispo_excerpt) else ""
-    #     context_parts.append(f"DISPOSITIVE (verbatim{label}): \"{dispo_excerpt}\"")
-    # # Facts excerpt (smaller budget)
-    # if facts_content and len(facts_content.strip()) > 60:
-    #     context_parts.append(f"FACTS: {_trim_to_sentences(facts_content, 6000)}")
+
+    # Ruling excerpt (longer budget) - reduced threshold to include shorter rulings
+    if ruling_content and len(ruling_content.strip()) > 50:
+        context_parts.append(f"RULING: {_trim_to_sentences(ruling_content, 3000)}")
+    # Dispositive verbatim, capped and labeled if truncated
+    if dispositive_text:
+        dispo_excerpt = _trim_to_sentences(dispositive_text, 1400)
+        label = " (excerpt)" if len(dispositive_text) > len(dispo_excerpt) else ""
+        context_parts.append(f"DISPOSITIVE (verbatim{label}): \"{dispo_excerpt}\"")
+    # Note: Facts content will be added later via the batch-extractive pipeline to avoid duplication
 
     # Batch-extractive pipeline to stay within context limits
     aggregated_facts: List[str] = []
@@ -1251,9 +1202,9 @@ def _generate_case_summary_from_jsonl(full_case_content: Dict, query: str, retri
         except Exception:
             pass
 
-    # Add aggregated facts/issues into context (bounded)
+    # Add aggregated facts/issues into context (bounded) - limit to prevent overwhelming
     if aggregated_facts:
-        facts_block = "\n".join(f"- {s}" for s in aggregated_facts[:8])
+        facts_block = "\n".join(f"- {s}" for s in aggregated_facts[:6])  # Reduced from 8 to 6
         context_parts.append(f"FACTS (extractive):\n{facts_block}")
     if aggregated_issues:
         issues_block = "\n".join(f"- {s}" for s in aggregated_issues[:3])
@@ -1263,12 +1214,12 @@ def _generate_case_summary_from_jsonl(full_case_content: Dict, query: str, retri
     print(f"🔍 Final context length: {len(context)}")
     
     # Create a prompt for case digest format matching the image structure
-    case_digest_prompt = f"""Create a case digest for this Philippine Supreme Court case in the EXACT format shown below:
+    case_digest_prompt = f"""Create a comprehensive and detailed case digest for this Philippine Supreme Court case in the EXACT format shown below. Be thorough and include as much relevant information as possible from the context:
 
 Context:
 {context}
 
-You MUST format your response EXACTLY as follows (use these exact headers and structure):
+You MUST format your response EXACTLY as follows (use these exact headers and structure). IMPORTANT: Use **bold formatting** for ALL headers. CRITICAL: Pay careful attention to who is the PETITIONER (the one filing the case) vs who are the RESPONDENTS (the ones being sued). Provide detailed information for each section:
 
 **{case_title}**
 
@@ -1281,7 +1232,7 @@ You MUST format your response EXACTLY as follows (use these exact headers and st
 **Case Type:** [Type of case, e.g. annulment, estafa, etc.]
 
 **Doctrine:**
-[the doctrine is the crucial legal rule, principle, or "takeaway" that the court established in its ruling. It represents the fundamental legal lesson or standard derived from the case's facts and issues, serving as a concise statement of the applicable law upon which the decision was based. Extract the doctrine from the Context.]
+[the doctrine is the crucial legal rule, principle, or "takeaway" that the court established in its ruling. It represents the fundamental legal lesson or standard derived from the case's facts and issues, serving as a concise statement of the applicable law upon which the decision was based. Extract the doctrine from the Context. Focus on the main legal principle being established, not procedural rules like filing periods.]
 
 **Ticker/Summary:**
 [Brief case summary]
@@ -1289,19 +1240,19 @@ You MUST format your response EXACTLY as follows (use these exact headers and st
 **Petitioner/s:** [Petitioner name] | **Respondent/s:** [Respondent name]
 
 **Facts:**
-1) [First factual point]
-2) [Second factual point]
-3) [Continue with numbered facts]
+1) [First factual point - be detailed and specific, ensure correct roles of petitioner vs respondents]
+2) [Second factual point - be detailed and specific, ensure correct roles of petitioner vs respondents]
+3) [Continue with numbered facts - provide comprehensive factual background with accurate role assignments]
 
 **Petitioner's Contention:**
-1) [First contention]
-2) [Second contention]
-3) [Continue with numbered contention]
+1) [First contention - explain in detail, focus on what the PETITIONER is arguing/claiming]
+2) [Second contention - explain in detail, focus on what the PETITIONER is arguing/claiming]
+3) [Continue with numbered contention - be comprehensive, maintain correct petitioner perspective]
 
 **Respondent's Contention:**
-1) [First contention]
-2) [Second contention]
-3) [Continue with numbered contention]
+1) [First contention - explain in detail, focus on what the RESPONDENTS are arguing/claiming]
+2) [Second contention - explain in detail, focus on what the RESPONDENTS are arguing/claiming]
+3) [Continue with numbered contention - be comprehensive, maintain correct respondent perspective]
 
 **RTC:** [Regional Trial Court decision, e.g., IN FAVOR OF PETITIONER/RESPONDENT]
 - [Explain the Regional Trial Court's reasoning]
@@ -1313,9 +1264,9 @@ You MUST format your response EXACTLY as follows (use these exact headers and st
 - [Answer to the issue, Always answer in YES or NO]
 
 **SC RULING:**
-[Supreme Court's ruling; explain the Supreme Court's reasoning; 3-5 sentences]
+[Supreme Court's ruling - explain the Supreme Court's reasoning in detail. DO NOT just repeat the dispositive. Explain WHY the Court ruled this way, what legal principles were applied, and the reasoning behind the decision. This should be 3-5 sentences of detailed legal analysis.]
 
-**DISPOSITIVE:** [Quote the dispositive, e.g. PETITION is GRANTED]
+**DISPOSITIVE:** [Quote ONLY the final dispositive portion, e.g. "PETITION is GRANTED" or "WHEREFORE, the petition is DISMISSED"]
 
 Use only information from the provided context. If information is not available, write "Not stated in sources."""
 

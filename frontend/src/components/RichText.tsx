@@ -19,7 +19,21 @@ export function RichText({ content, className, onCaseNumberClick }: Props) {
   // Function to render text with bold formatting and clickable links
   const renderTextWithBold = (text: string) => {
     // First, handle clickable links with bold formatting: **[text](gr:123)**
-    const parts = text.split(/(\*\*\[[^\]]+\]\(gr:[^)]+\)\*\*|\*\*\[[^\]]+\]\(am:[^)]+\)\*\*)/g);
+    let parts = text.split(/(\*\*\[[^\]]+\]\(gr:[^)]+\)\*\*|\*\*\[[^\]]+\]\(am:[^)]+\)\*\*)/g);
+    
+    // Then handle regular bold text within each part
+    parts = parts.map(part => {
+      // Handle clickable case number links
+      const grMatch = part.match(/\*\*\[([^\]]+)\]\(gr:([^)]+)\)\*\*/);
+      const amMatch = part.match(/\*\*\[([^\]]+)\]\(am:([^)]+)\)\*\*/);
+      
+      if (grMatch || amMatch) {
+        return part; // Return as-is for clickable links (handled below)
+      }
+      
+      // Handle regular bold text
+      return part.split(/(\*\*[^*]+\*\*)/g);
+    }).flat();
     
     return parts.map((part, index) => {
       // Handle clickable case number links

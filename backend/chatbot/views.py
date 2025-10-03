@@ -9,7 +9,6 @@ from rest_framework.views import APIView
 
 from .chat_engine import chat_with_law_bot
 from .debug_logger import debug_capture
-from .generator import clear_response_cache
 from .model_cache import (clear_llm_cache, get_cached_llm, get_memory_stats,
                           reload_llm)
 from .rating_analyzer import RatingAnalyzer
@@ -248,9 +247,6 @@ class ClearCacheView(APIView):
         try:
             cleared_caches = []
             
-            if cache_type in ['all', 'response']:
-                clear_response_cache()
-                cleared_caches.append('response')
             
             if cache_type in ['all', 'retrieval']:
                 # Clear retrieval cache for both collections
