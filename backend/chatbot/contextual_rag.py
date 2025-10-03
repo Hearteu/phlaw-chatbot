@@ -174,7 +174,7 @@ Provide a brief explanation (1-2 sentences) of what this chunk covers in the doc
                 # Generate context using Docker model runner
                 context = generate_with_fallback(
                     prompt,
-                    max_tokens=150,  # Reduced to stay within limits
+                    max_tokens=150,
                     temperature=0.1,
                     top_p=0.9
                 )
@@ -217,7 +217,7 @@ Focus on the main legal issues, parties, and key points."""
                 if self._estimate_tokens(summary_prompt) <= 3000:  # More aggressive
                     document_summary = generate_with_fallback(
                         summary_prompt,
-                        max_tokens=200,  # Shorter summary
+                        max_tokens=200,
                         temperature=0.1
                     )
                     document_for_context = f"Document Summary: {document_summary}\n\nOriginal Document: {document[:1500]}..."
@@ -262,7 +262,7 @@ Focus on the main legal issues, parties, and key points."""
                 # Generate context using Docker model runner
                 context = generate_with_fallback(
                     prompt,
-                    max_tokens=100,  # Keep it short
+                    max_tokens=100,
                     temperature=0.1,
                     top_p=0.9
                 )

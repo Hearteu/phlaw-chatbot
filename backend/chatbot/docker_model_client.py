@@ -56,7 +56,7 @@ class DockerModelClient:
                 max_tokens=kwargs.get('max_tokens', 10000),
                 temperature=kwargs.get('temperature', 0.0),
                 top_p=kwargs.get('top_p', 0.85),
-                stop=kwargs.get('stop', ["User:", "Human:", "Assistant:", "\n\n\n\n"]),
+                stop=kwargs.get('stop', ["User:", "Human:", "\n\n\n\n"]),
             )
             
             return response.choices[0].message.content.strip()
@@ -77,7 +77,7 @@ class DockerModelClient:
                 max_tokens=kwargs.get('max_tokens', 4096),
                 temperature=kwargs.get('temperature', 0.0),
                 top_p=kwargs.get('top_p', 0.85),
-                stop=kwargs.get('stop', ["User:", "Human:", "Assistant:", "\n\n\n\n"])
+                stop=kwargs.get('stop', ["User:", "Human:", "\n\n\n\n"])
             )
             
             return response.choices[0].message.content.strip()
@@ -88,7 +88,7 @@ class DockerModelClient:
     
     def _prompt_to_messages(self, prompt: str) -> List[Dict[str, str]]:
         """Convert prompt string to messages format"""
-        # Simple heuristic: if prompt contains "System:", "User:", "Assistant:" 
+        # Simple heuristic: if prompt contains "System:", "User:" 
         # then split by those markers, otherwise treat as user message
         if "System:" in prompt and "User:" in prompt:
             messages = []
@@ -98,7 +98,7 @@ class DockerModelClient:
                 if system_part:
                     messages.append({"role": "system", "content": system_part})
                 
-                user_part = parts[1].split("Assistant:")[0].strip()
+                user_part = parts[1].strip()
                 if user_part:
                     messages.append({"role": "user", "content": user_part})
             return messages

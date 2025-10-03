@@ -119,14 +119,14 @@ def get_cached_llm() -> Optional[Llama]:
                 if not os.path.exists(MODEL_PATH):
                     raise FileNotFoundError(f"Model file not found: {MODEL_PATH}")
                 
-                # Enhanced CUDA configuration with memory management
+                # Load-time configuration only; sampling is set at generation time
                 LLM_CONFIG = {
                     "model_path": MODEL_PATH,
                     "n_ctx": 4096,
-                    "n_gpu_layers": -1,  # Use all GPU layers
-                    "n_threads": 8,  # Threads per your config
-                    "n_batch": 512,  # Batch size per your config
-                    "n_ubatch": 16,  # Reduced ubatch for better memory management
+                    "n_gpu_layers": -1,
+                    "n_threads": 8,
+                    "n_batch": 256,
+                    "n_ubatch": 16,
                     "use_mmap": True,
                     "use_mlock": False,
                     "low_vram": True,
@@ -134,15 +134,6 @@ def get_cached_llm() -> Optional[Llama]:
                     "logits_all": False,
                     "embedding": False,
                     "verbose": False,
-                    "tfs_z": 1.0,    # Add tensor fusion for stability
-                    "mirostat": 0,   # Disable mirostat for stability
-                    "mirostat_eta": 0.1,
-                    "mirostat_tau": 5.0,
-                    "repeat_penalty": 1.1,
-                    "repeat_last_n": 64,
-                    "top_k": 40,
-                    "top_p": 0.9,
-                    "temperature": 0.7,
                 }
             
                 try:
@@ -160,12 +151,15 @@ def get_cached_llm() -> Optional[Llama]:
                     # Fallback to CPU-only configuration
                     cpu_config = {
                         "model_path": MODEL_PATH,
-                        "n_ctx": 2048,  # Reduced context for CPU
-                        "n_gpu_layers": 0,  # Force CPU-only
+                        "n_ctx": 2048,
+                        "n_gpu_layers": 0,
                         "n_threads": 4,
-                        "n_batch": 16,  # Smaller batch for CPU
+                        "n_batch": 16,
                         "use_mmap": True,
                         "use_mlock": False,
+                        "f16_kv": True,
+                        "logits_all": False,
+                        "embedding": False,
                         "verbose": False,
                     }
                     

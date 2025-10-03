@@ -2,9 +2,7 @@
 import re
 from typing import Any, Dict, List, Optional
 
-# Import Docker model client with fallback
-from .docker_model_client import (generate_messages_with_fallback,
-                                  generate_with_fallback)
+from .model_cache import get_cached_llm
 
 # Response cache for deterministic generation
 _response_cache = {}
@@ -32,47 +30,36 @@ def _clean_response_text(text: str) -> str:
     return text
 
 def _ensure_llm():
-    """Docker-only mode: no local LLM."""
-    return None
+    """Ensure local GGUF LLM is loaded and available."""
+    return get_cached_llm()
 
 def generate_response(prompt: str, _retry_count: int = 0) -> str:
-    """Generate response using Docker model runner with local LLM fallback"""
+    """Generate response using local llama.cpp GGUF model."""
     try:
-        # Use Docker model runner with local LLM fallback
-        response = generate_with_fallback(
+        llm = _ensure_llm()
+        if llm is None:
+            raise RuntimeError("Local LLM not available")
+
+        generation = llm(
             prompt,
             max_tokens=2048,
-            temperature=0.0,  # Set to 0 for deterministic responses
+            temperature=0.3,
             top_p=0.85,
             repeat_penalty=1.1,
-            stop=["User:", "Human:", "Assistant:", "\n\n\n\n"]
+            stop=["User:", "Human:", "\n\n\n\n"],
         )
-        
-        # Clean the response text
-        cleaned_text = _clean_response_text(response)
+        response_text = generation.get("choices", [{}])[0].get("text", "") if isinstance(generation, dict) else str(generation)
+        cleaned_text = _clean_response_text(response_text)
         return cleaned_text
-        
     except Exception as e:
         print(f"❌ Error in LLM generation: {e}")
         return "I apologize, but I encountered a technical error. Please try again later."
 
 def generate_response_from_messages(messages: List[Dict[str, str]], _retry_count: int = 0) -> str:
-    """Generate response from message history using Docker model runner with local LLM fallback"""
+    """Generate response from message history using local llama.cpp by converting to a prompt."""
     try:
-        # Use Docker model runner with local LLM fallback
-        response = generate_messages_with_fallback(
-            messages,
-            max_tokens=2048,
-            temperature=0.0,  # Set to 0 for deterministic responses
-            top_p=0.85,
-            repeat_penalty=1.1,
-            stop=["User:", "Human:", "Assistant:", "\n\n\n\n"]
-        )
-        
-        # Clean the response text
-        cleaned_text = _clean_response_text(response)
-        return cleaned_text
-        
+        prompt = _messages_to_prompt(messages)
+        return generate_response(prompt, _retry_count=_retry_count)
     except Exception as e:
         print(f"❌ Error in LLM generation: {e}")
         return "I apologize, but I encountered a technical error. Please try again later."
@@ -92,7 +79,7 @@ def _messages_to_prompt(messages: List[Dict[str, str]]) -> str:
         elif role == "assistant":
             prompt_parts.append(f"Assistant: {content}")
     
-    return "\n\n".join(prompt_parts) + "\n\nAssistant:"
+    return "\n\n".join(prompt_parts)
 
 def generate_legal_response(prompt: str, context: str = "", is_case_digest: bool = False) -> str:
     """Generate legal response with optimized prompt construction for simplified two-path logic"""
@@ -123,21 +110,17 @@ Provide complete, accurate responses with proper citations. If the sources conta
         
         if context:
             # Include context in the prompt
-            enhanced_prompt = f"System: {legal_system_prompt}\n\nContext: {context}\n\nUser: {prompt}\n\nAssistant:"
+            enhanced_prompt = f"System: {legal_system_prompt}\n\nContext: {context}\n\nUser: {prompt}"
         else:
-            enhanced_prompt = f"System: {legal_system_prompt}\n\nUser: {prompt}\n\nAssistant:"
+            enhanced_prompt = f"System: {legal_system_prompt}\n\nUser: {prompt}"
     
-    # Use Docker model runner with local LLM fallback
+    # Use local LLM
     try:
-        response = generate_with_fallback(enhanced_prompt)
-        result = response.strip() if response else "I apologize, but I was unable to generate a response."
-        
-        # Cache the response
+        result = generate_response(enhanced_prompt)
+        result = result.strip() if result else "I apologize, but I was unable to generate a response."
         _response_cache[cache_key] = result
         print(f"💾 Cached response for prompt: {prompt[:50]}...")
-        
         return result
-            
     except Exception as e:
         print(f"❌ LLM generation failed: {e}")
         return f"I apologize, but I encountered an error: {str(e)}"
@@ -165,7 +148,6 @@ def get_llm_info() -> Dict[str, Any]:
         llm = _ensure_llm()
         if llm is None:
             return {"error": "LLM not available"}
-        
         return {
             "model_path": getattr(llm, "model_path", "Unknown"),
             "context_length": getattr(llm, "n_ctx", "Unknown"),
