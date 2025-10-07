@@ -108,7 +108,7 @@ def load_case_from_jsonl(case_id: str, jsonl_path: str = DATA_FILE) -> Optional[
 class LegalRetriever:
     """Simplified legal document retriever with structure-aware chunking support"""
     
-    def __init__(self, collection: str = "jurisprudence", use_contextual_rag: bool = True):
+    def __init__(self, collection: str = "jurisprudence_contextual", use_contextual_rag: bool = True):
         self.collection = collection
         self.model = _get_cached_embedding_model()
         self.qdrant = _get_cached_qdrant_client()
@@ -116,14 +116,37 @@ class LegalRetriever:
         # Simple cache for retrieval results to ensure consistency
         self._retrieval_cache = {}
         
-        # Initialize Contextual RAG system - always required
+        # Check if the requested collection exists and has sufficient data
+        collection_has_data = self._check_collection_availability(collection)
+        
+        # If contextual collection is empty or doesn't exist, fall back to original
+        if collection == "jurisprudence_contextual" and not collection_has_data:
+            print(f"⚠️ {collection} is empty or doesn't exist, falling back to 'jurisprudence'")
+            fallback_collection = "jurisprudence"
+            if self.qdrant.collection_exists(fallback_collection):
+                self.collection = fallback_collection
+                collection = fallback_collection
+                print(f"✅ Using fallback collection: {fallback_collection}")
+            else:
+                print(f"❌ Both {self.collection} and {fallback_collection} are unavailable")
+                raise ValueError(f"Neither '{self.collection}' nor '{fallback_collection}' collections are available")
+        
+        # Initialize Optimized Contextual RAG system - always required
         self.contextual_rag = None
         try:
-            self.contextual_rag = create_contextual_rag_system(collection=collection)
-            print(f"Contextual RAG system initialized for collection: {collection}")
+            from .optimized_contextual_rag import \
+                create_optimized_contextual_rag_system
+            self.contextual_rag = create_optimized_contextual_rag_system(collection=collection)
+            print(f"✅ Optimized Contextual RAG system initialized for collection: {collection}")
         except Exception as e:
-            print(f"Failed to initialize Contextual RAG: {e}")
-            raise RuntimeError(f"Contextual RAG is required but failed to initialize: {e}")
+            print(f"⚠️ Failed to initialize Optimized Contextual RAG, falling back to original: {e}")
+            try:
+                from .contextual_rag import create_contextual_rag_system
+                self.contextual_rag = create_contextual_rag_system(collection=collection)
+                print(f"✅ Fallback Contextual RAG system initialized for collection: {collection}")
+            except Exception as e2:
+                print(f"❌ Failed to initialize any Contextual RAG system: {e2}")
+                raise RuntimeError(f"Contextual RAG is required but failed to initialize: {e2}")
         
         # Verify collection exists
         if not self.qdrant.collection_exists(collection):
@@ -170,15 +193,25 @@ class LegalRetriever:
             self._retrieval_cache[cache_key] = results
             return results
         
-        # Path 3: Use Contextual RAG for keyword search (always required)
-        print(f"🧠 Contextual RAG path: {query}")
+        # Path 3: Use Optimized Contextual RAG for keyword search (always required)
+        print(f"🚀 Optimized Contextual RAG path: {query}")
         try:
-            results = self.contextual_rag.retrieve_and_rank(
-                query, 
-                vector_k=150, 
-                bm25_k=150, 
-                final_k=k
-            )
+            # Check if optimized method is available
+            if hasattr(self.contextual_rag, 'retrieve_and_rank_fast'):
+                results = self.contextual_rag.retrieve_and_rank_fast(
+                    query, 
+                    vector_k=50,   # Reduced for speed
+                    bm25_k=50,     # Reduced for speed
+                    final_k=k
+                )
+            else:
+                # Fallback to original method
+                results = self.contextual_rag.retrieve_and_rank(
+                    query, 
+                    vector_k=100,  # Reduced for speed
+                    bm25_k=100,    # Reduced for speed
+                    final_k=k
+                )
             # Cache the results
             self._retrieval_cache[cache_key] = results
             return results
@@ -214,6 +247,20 @@ class LegalRetriever:
                 return normalized
         
         return None
+    
+    def _check_collection_availability(self, collection: str) -> bool:
+        """Check if collection exists and has sufficient data"""
+        try:
+            if not self.qdrant.collection_exists(collection):
+                return False
+            
+            info = self.qdrant.get_collection(collection)
+            # Consider collection available if it has at least 100 points
+            return info.points_count >= 100
+            
+        except Exception as e:
+            print(f"⚠️ Error checking collection {collection}: {e}")
+            return False
     
     def _extract_special_number(self, query: str) -> Optional[str]:
         """Extract special number from query (A.M., OCA, etc.), returns formatted number or None"""

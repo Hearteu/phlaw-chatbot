@@ -1,10 +1,10 @@
-# generator.py — Enhanced Law LLM response generator using Docker model
+# generator.py — Enhanced Law LLM response generator using TogetherAI API
 import re
 from typing import Any, Dict, List, Optional
 
-from .docker_model_client import (generate_messages_with_fallback,
-                                  generate_with_fallback,
-                                  get_docker_model_client)
+from .togetherai_client import (generate_messages_with_togetherai,
+                                generate_with_togetherai,
+                                get_togetherai_client)
 
 
 def _clean_response_text(text: str) -> str:
@@ -28,18 +28,18 @@ def _clean_response_text(text: str) -> str:
     
     return text
 
-def _ensure_docker_model():
-    """Ensure Docker model client is available."""
-    return get_docker_model_client()
+def _ensure_togetherai_client():
+    """Ensure TogetherAI client is available."""
+    return get_togetherai_client()
 
 def generate_response(prompt: str, _retry_count: int = 0) -> str:
-    """Generate response using Docker model runner."""
+    """Generate response using TogetherAI API."""
     try:
-        docker_client = _ensure_docker_model()
-        if not docker_client.is_available:
-            raise RuntimeError("Docker model not available")
+        togetherai_client = _ensure_togetherai_client()
+        if not togetherai_client.is_available:
+            raise RuntimeError("TogetherAI client not available")
 
-        result = generate_with_fallback(
+        result = generate_with_togetherai(
             prompt,
             max_tokens=2048,
             temperature=0.3,
@@ -49,17 +49,17 @@ def generate_response(prompt: str, _retry_count: int = 0) -> str:
         cleaned_text = _clean_response_text(result)
         return cleaned_text
     except Exception as e:
-        print(f"❌ Error in Docker model generation: {e}")
+        print(f"❌ Error in TogetherAI generation: {e}")
         return "I apologize, but I encountered a technical error. Please try again later."
 
 def generate_response_from_messages(messages: List[Dict[str, str]], _retry_count: int = 0) -> str:
-    """Generate response from message history using Docker model runner."""
+    """Generate response from message history using TogetherAI API."""
     try:
-        docker_client = _ensure_docker_model()
-        if not docker_client.is_available:
-            raise RuntimeError("Docker model not available")
+        togetherai_client = _ensure_togetherai_client()
+        if not togetherai_client.is_available:
+            raise RuntimeError("TogetherAI client not available")
 
-        result = generate_messages_with_fallback(
+        result = generate_messages_with_togetherai(
             messages,
             max_tokens=2048,
             temperature=0.3,
@@ -69,7 +69,7 @@ def generate_response_from_messages(messages: List[Dict[str, str]], _retry_count
         cleaned_text = _clean_response_text(result)
         return cleaned_text
     except Exception as e:
-        print(f"❌ Error in Docker model generation: {e}")
+        print(f"❌ Error in TogetherAI generation: {e}")
         return "I apologize, but I encountered a technical error. Please try again later."
 
 def _messages_to_prompt(messages: List[Dict[str, str]]) -> str:
@@ -129,12 +129,12 @@ def generate_case_digest_response(prompt: str, context: str = "") -> str:
 
 
 def get_llm_info() -> Dict[str, Any]:
-    """Get Docker model information"""
+    """Get TogetherAI model information"""
     try:
-        docker_client = _ensure_docker_model()
-        if not docker_client.is_available:
-            return {"error": "Docker model not available"}
+        togetherai_client = _ensure_togetherai_client()
+        if not togetherai_client.is_available:
+            return {"error": "TogetherAI client not available"}
         
-        return docker_client.get_model_info()
+        return togetherai_client.get_model_info()
     except Exception as e:
         return {"error": str(e)}

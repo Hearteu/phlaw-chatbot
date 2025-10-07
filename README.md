@@ -4,7 +4,8 @@ A simplified Philippine legal chatbot that provides case-specific information fr
 
 ### Features
 - **Two-Path Query System**: GR number exact match vs. keyword search
-- **Docker Model Runner**: Primary inference with local LLM fallback
+- **TogetherAI Integration**: Uses Llama-3.3-70B-Instruct-Turbo model via TogetherAI API
+- **Optimized Contextual RAG**: High-performance retrieval with `jurisprudence_contextual` collection
 - **Case Type Detection**: Automatic categorization (annulment, criminal, civil, etc.)
 - **Simplified Architecture**: Streamlined codebase with essential components only
 - **Retrieval-Augmented Generation**: Grounded responses with case citations
@@ -12,16 +13,19 @@ A simplified Philippine legal chatbot that provides case-specific information fr
 ### Requirements
 - Python 3.10+
 - Node 18+ (for Next.js frontend)
-- Docker (for model runner)
-- (Optional) CUDA-capable GPU for local LLM acceleration
+- TogetherAI API key
+- (Optional) CUDA-capable GPU for local embeddings
 
 ### Quick Start
 
-#### Option 1: Docker Model Runner (Recommended)
-1) **Start Docker Model Runner:**
-```bash
-docker run -p 8001:8001 ai/llama3.2
-```
+1) **Get TogetherAI API Key:**
+   - Sign up at [TogetherAI](https://together.ai/)
+   - Get your API key from the dashboard
+   - Copy `.env.example` to `.env` and add your API key:
+   ```bash
+   cp .env.example .env
+   # Edit .env and add your TOGETHERAI_API_KEY
+   ```
 
 2) **Setup Backend:**
 ```bash
@@ -31,16 +35,22 @@ python manage.py migrate
 python manage.py runserver
 ```
 
-#### Option 2: Local LLM Only
-1) **Setup Backend:**
+3) **Setup Frontend:**
 ```bash
-cd backend
-pip install -r requirements.txt
-python manage.py migrate
-python manage.py runserver
+cd frontend
+npm install
+npm run dev
 ```
 
-The system will automatically use local LLM if Docker model runner is unavailable.
+The system uses Llama-3.3-70B-Instruct-Turbo via TogetherAI API for all LLM operations and the optimized `jurisprudence_contextual` collection for fast retrieval.
+
+4) **Check Collection Setup:**
+```bash
+cd backend
+python check_collection_setup.py
+```
+
+This will verify that the `jurisprudence_contextual` collection is properly set up and ready for use.
 
 ### Query Types
 
