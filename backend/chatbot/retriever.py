@@ -108,23 +108,22 @@ def load_case_from_jsonl(case_id: str, jsonl_path: str = DATA_FILE) -> Optional[
 class LegalRetriever:
     """Simplified legal document retriever with structure-aware chunking support"""
     
-    def __init__(self, collection: str = "jurisprudence", use_contextual_rag: bool = False):
+    def __init__(self, collection: str = "jurisprudence", use_contextual_rag: bool = True):
         self.collection = collection
         self.model = _get_cached_embedding_model()
         self.qdrant = _get_cached_qdrant_client()
-        self.use_contextual_rag = use_contextual_rag
+        self.use_contextual_rag = True  # Always use contextual RAG
         # Simple cache for retrieval results to ensure consistency
         self._retrieval_cache = {}
         
-        # Initialize Contextual RAG system if requested
+        # Initialize Contextual RAG system - always required
         self.contextual_rag = None
-        if use_contextual_rag:
-            try:
-                self.contextual_rag = create_contextual_rag_system(collection=collection)
-                print(f"✅ Contextual RAG system initialized for collection: {collection}")
-            except Exception as e:
-                print(f"⚠️ Failed to initialize Contextual RAG: {e}")
-                self.use_contextual_rag = False
+        try:
+            self.contextual_rag = create_contextual_rag_system(collection=collection)
+            print(f"Contextual RAG system initialized for collection: {collection}")
+        except Exception as e:
+            print(f"Failed to initialize Contextual RAG: {e}")
+            raise RuntimeError(f"Contextual RAG is required but failed to initialize: {e}")
         
         # Verify collection exists
         if not self.qdrant.collection_exists(collection):
@@ -134,21 +133,9 @@ class LegalRetriever:
         self.collection_info = _get_collection_info(collection)
         vector_count = self.collection_info['vector_count']
         if vector_count is not None:
-            print(f"📊 Collection: {collection} | Vectors: {vector_count:,}")
+            print(f"Collection: {collection} | Vectors: {vector_count:,}")
         else:
-            print(f"📊 Collection: {collection} | Vectors: Unknown")
-        
-        # Section boost weights for retrieval
-        self.section_boosts = {
-            'summary': 0.3,
-            'ruling': 0.25, 
-            'dispositive': 0.25,
-            'facts': 0.15,
-            'issues': 0.15,
-            'arguments': 0.1,
-            'legal_analysis': 0.1,
-            'body': 0.05
-        }
+            print(f"Collection: {collection} | Vectors: Unknown")
     
     def retrieve(self, query: str, k: int = 8, is_case_digest: bool = False, 
                 conversation_history: Optional[List[Dict]] = None) -> List[Dict[str, Any]]:
@@ -170,7 +157,6 @@ class LegalRetriever:
         if gr_number:
             print(f"📋 GR-number path: {gr_number}")
             results = self._retrieve_by_gr_number(gr_number, k)
-            results = self._apply_section_boosts(results)
             # Cache the results
             self._retrieval_cache[cache_key] = results
             return results
@@ -180,34 +166,25 @@ class LegalRetriever:
         if special_number:
             print(f"📋 Special-number path: {special_number}")
             results = self._retrieve_by_special_number(special_number, k)
-            results = self._apply_section_boosts(results)
             # Cache the results
             self._retrieval_cache[cache_key] = results
             return results
         
-        # Path 3: Use Contextual RAG for keyword search if available
-        if self.use_contextual_rag and self.contextual_rag:
-            print(f"🧠 Contextual RAG path: {query}")
-            try:
-                results = self.contextual_rag.retrieve_and_rank(
-                    query, 
-                    vector_k=150, 
-                    bm25_k=150, 
-                    final_k=k
-                )
-                # Cache the results
-                self._retrieval_cache[cache_key] = results
-                return results
-            except Exception as e:
-                print(f"⚠️ Contextual RAG failed, falling back to standard retrieval: {e}")
-        
-        # Path 4: Standard keyword search with section-aware retrieval (fallback)
-        print(f"📋 Standard keyword path: {query}")
-        results = self._retrieve_by_keywords(query, k, is_case_digest)
-        results = self._apply_section_boosts(results)
-        # Cache the results
-        self._retrieval_cache[cache_key] = results
-        return results
+        # Path 3: Use Contextual RAG for keyword search (always required)
+        print(f"🧠 Contextual RAG path: {query}")
+        try:
+            results = self.contextual_rag.retrieve_and_rank(
+                query, 
+                vector_k=150, 
+                bm25_k=150, 
+                final_k=k
+            )
+            # Cache the results
+            self._retrieval_cache[cache_key] = results
+            return results
+        except Exception as e:
+            print(f"❌ Contextual RAG failed: {e}")
+            raise RuntimeError(f"Contextual RAG retrieval failed: {e}")
     
     def _extract_gr_number(self, query: str) -> Optional[str]:
         """Extract GR number from query, returns normalized number or None"""
@@ -349,40 +326,6 @@ class LegalRetriever:
             print(f"❌ Error searching Special {special_number}: {e}")
             return []
     
-    def _retrieve_by_keywords(self, query: str, k: int, is_case_digest: bool = False) -> List[Dict[str, Any]]:
-        """Vector search with section awareness and deduplication"""
-        # Get more candidates to allow for section diversity
-        vector_results = self._perform_vector_search(query, k=k*2, is_case_digest=is_case_digest)
-        print(f"📋 Vector: {len(vector_results)} candidates")
-        
-        # Apply section diversity and deduplication
-        diverse_results = self._ensure_section_diversity(vector_results, k)
-        return self._dedupe_by_case_and_section(diverse_results)[:k]
-    
-    def _perform_vector_search(self, query: str, k: int, is_case_digest: bool) -> List[Dict[str, Any]]:
-        """Perform vector search using Qdrant"""
-        try:
-            # Encode query to vector
-            query_vector = self.model.encode([query], convert_to_numpy=True, normalize_embeddings=True)[0]
-            
-            # Search Qdrant
-            search_results = self.qdrant.search(
-                collection_name=self.collection,
-                query_vector=query_vector.tolist(),
-                limit=k,
-                with_payload=True
-            )
-            
-            # Convert results to document format
-            results = []
-            for hit in search_results:
-                doc = self._convert_hit_to_doc(hit, 'vector_search')
-                results.append(doc)
-            
-            return results
-        except Exception as e:
-            print(f"Error in vector search: {e}")
-            return []
     
     def _convert_hit_to_doc(self, hit: Any, match_type: str) -> Dict[str, Any]:
         """Convert Qdrant hit to document format"""
@@ -428,105 +371,12 @@ class LegalRetriever:
         doc['metadata'] = metadata
         return doc
     
-    def _apply_section_boosts(self, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Apply section-based score boosts to results"""
-        for result in results:
-            section = result.get('section', 'body')
-            section_type = result.get('section_type', 'general')
-            
-            # Apply boost based on section type
-            boost = self.section_boosts.get(section, 0.05)
-            if section_type == 'dispositive':
-                boost = max(boost, 0.25)
-            elif section_type == 'summary':
-                boost = max(boost, 0.3)
-            
-            result['score'] = result.get('score', 0) * (1 + boost)
-        
-        return results
-    
-    def _ensure_section_diversity(self, results: List[Dict], target_k: int) -> List[Dict]:
-        """Ensure diverse section representation in results with deterministic selection"""
-        if not results:
-            return results
-        
-        # Sort results by score first to ensure deterministic selection
-        results = sorted(results, key=lambda x: (-x.get('score', 0), x.get('metadata', {}).get('case_id', ''), x.get('section', '')))
-        
-        # Group by section type
-        by_section = {}
-        for result in results:
-            section_type = result.get('section_type', 'general')
-            if section_type not in by_section:
-                by_section[section_type] = []
-            by_section[section_type].append(result)
-        
-        # Prioritize sections: summary > dispositive > factual > issues > others
-        section_priority = ['summary', 'dispositive', 'factual', 'issues', 'legal_analysis', 'general']
-        
-        diverse_results = []
-        section_quotas = {
-            'summary': max(1, target_k // 6),      # ~17%
-            'dispositive': max(1, target_k // 4),   # ~25%
-            'factual': max(1, target_k // 5),       # ~20%
-            'issues': max(1, target_k // 6),        # ~17%
-            'legal_analysis': max(1, target_k // 8), # ~12%
-            'general': target_k // 10               # ~10%
-        }
-        
-        # Add results respecting quotas and priority (deterministic order)
-        for section_type in section_priority:
-            if section_type in by_section:
-                quota = section_quotas.get(section_type, 1)
-                # Take first N results (already sorted by score)
-                section_results = by_section[section_type][:quota]
-                diverse_results.extend(section_results)
-                
-                if len(diverse_results) >= target_k:
-                    break
-        
-        # Fill remaining slots with best remaining results (deterministic)
-        used_ids = {r.get('id', '') for r in diverse_results}
-        remaining = [r for r in results if r.get('id', '') not in used_ids]
-        
-        while len(diverse_results) < target_k and remaining:
-            diverse_results.append(remaining.pop(0))
-        
-        return diverse_results
     
     def clear_cache(self):
         """Clear the retrieval cache"""
         self._retrieval_cache.clear()
         print("📋 Retrieval cache cleared")
     
-    def _dedupe_by_case_and_section(self, results: List[Dict]) -> List[Dict]:
-        """Remove duplicates based on case_id and section, keeping highest scoring"""
-        seen = {}
-        deduped = []
-        
-        for result in results:
-            case_id = result.get('metadata', {}).get('case_id', '')
-            section = result.get('section', '')
-            key = f"{case_id}_{section}"
-            
-            if key not in seen:
-                seen[key] = result
-                deduped.append(result)
-            else:
-                # Keep the one with higher score
-                existing_score = seen[key].get('score', 0)
-                new_score = result.get('score', 0)
-                if new_score > existing_score:
-                    seen[key] = result
-                    # Find and replace in deduped
-                    for i, item in enumerate(deduped):
-                        item_case_id = item.get('metadata', {}).get('case_id', '')
-                        item_section = item.get('section', '')
-                        if f"{item_case_id}_{item_section}" == key:
-                            deduped[i] = result
-                            break
-        
-        return deduped
     
     def _create_context_from_chunks(self, chunks: List[Dict[str, Any]], max_tokens: int = 2500) -> str:
         """Create compact context from retrieved chunks"""

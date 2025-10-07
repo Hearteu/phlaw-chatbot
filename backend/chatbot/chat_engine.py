@@ -169,24 +169,6 @@ def _display_title(d: Dict) -> str:
         return f"Case ({spec})"
     return "Untitled case"
 
-def _title_from_query(query: str) -> str:
-    """Create a readable case-like title from user keywords as a fallback."""
-    if not query:
-        return "Untitled case"
-    q = query.strip()
-    # Normalize vs variants
-    q = re.sub(r"\bversus\b", "v.", q, flags=re.IGNORECASE)
-    q = re.sub(r"\bvs\.?\b", "v.", q, flags=re.IGNORECASE)
-    # Title case but keep v. lowercase
-    parts = [p for p in re.split(r"\s+", q) if p]
-    out = []
-    for p in parts:
-        if p.lower() in {"v.", "vs.", "vs", "versus"}:
-            out.append("v.")
-        else:
-            out.append(p[:1].upper() + p[1:])
-    return " ".join(out)
-
 def _extract_case_title_components(query: str) -> Dict[str, str]:
     """Extract case title components for smart matching"""
     query_lower = query.lower().strip()
@@ -399,8 +381,6 @@ def _extract_dispositive(text: str) -> str:
     if m:
         return _normalize_ws(m.group(0), max_chars=2000)
     return ""
-
-# Removed title/intent heuristics for simplified engine
 
 def _generate_case_summary(docs: List[Dict], query: str, retriever=None, history: List[Dict] = None) -> str:
     """Generate a brief summary of the case from retrieved documents"""
@@ -642,80 +622,6 @@ Write exactly 5 complete sentences that tell the story of this case. Start with 
             summary_text = f"This case involves {case_title}. The case was decided by the Supreme Court of the Philippines and involves legal proceedings between the parties."
     
     return f"**{case_title}**\n\n**G.R. No.:** {gr_number}\n**Ponente:** {ponente}\n**Date:** {date}\n**Case Type:** {case_type}\n\n**Brief Summary:**\n{summary_text}"
-
-
-def _find_relevant_cases(docs: List[Dict], retriever, history: List[Dict] = None) -> List[Dict]:
-    """Find relevant cases with enhanced similarity matching and legal concept extraction"""
-    if not docs or not retriever:
-        return []
-    
-    # Get main document (highest scoring)
-    main_doc = max(docs, key=lambda x: x.get("score", 0.0))
-    
-    # Enhanced case type detection with legal categorization
-    case_type = _extract_enhanced_case_type(main_doc)
-    
-    # Extract legal concepts and key terms for better matching
-    legal_concepts = _extract_legal_concepts(main_doc)
-    
-    # Extract case relationships for enhanced matching
-    case_relationships = _extract_case_relationships(main_doc)
-    
-    # Get case metadata for filtering
-    case_title = (main_doc.get("case_title", "") or 
-                 main_doc.get("metadata", {}).get("case_title", "") or 
-                 main_doc.get("title", "") or 
-                 main_doc.get("metadata", {}).get("title", ""))
-    
-    current_gr = (main_doc.get("metadata", {}).get("gr_number", "") or 
-                 main_doc.get("gr_number", "") or 
-                 main_doc.get("metadata", {}).get("case_id", ""))
-    current_special = (main_doc.get("metadata", {}).get("special_number", "") or 
-                      main_doc.get("special_number", ""))
-    
-    try:
-        # Multi-strategy search for related cases
-        search_queries = _generate_enhanced_search_queries(case_type, legal_concepts, case_title, case_relationships)
-        
-        relevant_docs = []
-        seen_case_ids = set()
-        
-        # Search with different strategies
-        for search_query in search_queries:
-            result = _advanced_retrieve(retriever, search_query, k=4, is_case_digest=False, history=history)
-            docs = result[0] if isinstance(result, tuple) else result
-            
-            for doc in docs:
-                case_id = (doc.get("metadata", {}).get("gr_number", "") or 
-                          doc.get("gr_number", "") or 
-                          doc.get("metadata", {}).get("special_number", "") or 
-                          doc.get("special_number", ""))
-                
-                # Skip if already seen or is current case
-                if (case_id in seen_case_ids or 
-                    case_id == current_gr or 
-                    case_id == current_special):
-                    continue
-                
-                seen_case_ids.add(case_id)
-                relevant_docs.append(doc)
-                
-                if len(relevant_docs) >= 8:  # Get more candidates for better filtering
-                    break
-            
-            if len(relevant_docs) >= 8:
-                break
-        
-        # Enhanced filtering and scoring
-        good_docs = _filter_and_score_cases(relevant_docs, main_doc, legal_concepts, case_relationships)
-        
-        # Sort by relevance score and return top 3
-        good_docs.sort(key=lambda x: x.get('relevance_score', 0), reverse=True)
-        return good_docs[:3]
-        
-    except Exception as e:
-        print(f"⚠️ Error finding relevant cases: {e}")
-        return []
 
 
 def _extract_enhanced_case_type(main_doc: Dict) -> str:
@@ -1214,62 +1120,77 @@ def _generate_case_summary_from_jsonl(full_case_content: Dict, query: str, retri
     print(f"🔍 Final context length: {len(context)}")
     
     # Create a prompt for case digest format matching the image structure
-    case_digest_prompt = f"""Create a comprehensive and detailed case digest for this Philippine Supreme Court case in the EXACT format shown below. Be thorough and include as much relevant information as possible from the context:
+    case_digest_prompt = f"""
+        Create a comprehensive and detailed CASE DIGEST for a Philippine Supreme Court case using ONLY the supplied Context.
+        If a detail is missing, write exactly: Not stated in sources.
 
-Context:
-{context}
+        STRICTNESS / GUARDRAILS
+        - Do NOT invent names, dates, GR numbers, courts, or ponente.
+        - Keep PETITIONER(S) vs RESPONDENT(S) roles correct. If unclear, write: Not stated in sources.
+        - Quote the DISPOSITIVE verbatim if present (WHEREFORE/ACCORDINGLY/etc.). Do NOT paraphrase it.
+        - If multiple G.R. numbers or consolidated cases appear, list them all.
+        - Preserve “RE:” or A.M. captions for administrative matters when present.
+        - Do NOT add citations or sources not in Context. Do NOT include your own commentary.
+        - Use bold formatting for ALL headers exactly as shown. Do not add new sections or placeholders.
 
-You MUST format your response EXACTLY as follows (use these exact headers and structure). IMPORTANT: Use **bold formatting** for ALL headers. CRITICAL: Pay careful attention to who is the PETITIONER (the one filing the case) vs who are the RESPONDENTS (the ones being sued). Provide detailed information for each section:
+        Context:
+        {context}
 
-**{case_title}**
+        Case metadata (use when present; else write Not stated in sources):
+        - Case Title: {case_title}
+        - G.R. Number(s): {gr_number}
+        - Date: {date}
+        - Ponente: {ponente}
 
-**{gr_number} | {date} | Ponente: {ponente}**
+        NOW PRODUCE the digest EXACTLY in this format (keep headers bold):
 
-**Nature:** [Nature of case, e.g., Petition for Review on Certiorari]
+        **{case_title}**
 
-**Topic:** [Legal topic, e.g., Original Document Rule]
+        **{gr_number} | {date} | Ponente: {ponente}**
 
-**Case Type:** [Type of case, e.g. annulment, estafa, etc.]
+        **Nature:** [Nature of case, e.g., Petition for Review on Certiorari]
 
-**Doctrine:**
-[the doctrine is the crucial legal rule, principle, or "takeaway" that the court established in its ruling. It represents the fundamental legal lesson or standard derived from the case's facts and issues, serving as a concise statement of the applicable law upon which the decision was based. Extract the doctrine from the Context. Focus on the main legal principle being established, not procedural rules like filing periods.]
+        **Topic:** [Legal topic, e.g., Original Document Rule]
 
-**Ticker/Summary:**
-[Brief case summary]
+        **Case Type:** [e.g., annulment, estafa, administrative matter, etc.]
 
-**Petitioner/s:** [Petitioner name] | **Respondent/s:** [Respondent name]
+        **Doctrine:**
+        [One concise controlling principle derived from the Court’s reasoning in Context. Focus on the main legal rule resolving the dispute; avoid mere procedural trivia unless dispositive.]
 
-**Facts:**
-1) [First factual point - be detailed and specific, ensure correct roles of petitioner vs respondents]
-2) [Second factual point - be detailed and specific, ensure correct roles of petitioner vs respondents]
-3) [Continue with numbered facts - provide comprehensive factual background with accurate role assignments]
+        **Ticker/Summary:**
+        [2–4 sentences: parties, core conflict, key procedural posture if shown, and the outcome direction.]
 
-**Petitioner's Contention:**
-1) [First contention - explain in detail, focus on what the PETITIONER is arguing/claiming]
-2) [Second contention - explain in detail, focus on what the PETITIONER is arguing/claiming]
-3) [Continue with numbered contention - be comprehensive, maintain correct petitioner perspective]
+        **Petitioner/s:** [Exact name(s) as in Context] | **Respondent/s:** [Exact name(s) as in Context]
 
-**Respondent's Contention:**
-1) [First contention - explain in detail, focus on what the RESPONDENTS are arguing/claiming]
-2) [Second contention - explain in detail, focus on what the RESPONDENTS are arguing/claiming]
-3) [Continue with numbered contention - be comprehensive, maintain correct respondent perspective]
+        **Facts:**
+        1) [Detailed, role-accurate fact]
+        2) [Detailed, role-accurate fact]
+        3) [Continue as needed; only from Context]
 
-**RTC:** [Regional Trial Court decision, e.g., IN FAVOR OF PETITIONER/RESPONDENT]
-- [Explain the Regional Trial Court's reasoning]
+        **Petitioner's Contention:**
+        1) [What the PETITIONER claims/argues]
+        2) [...]
+        3) [...]
 
-**CA:** [Court of Appeals decision if applicable, e.g., REVERSED THE RTC'S RULING]
-- Explain the Court of Appeals' reasoning]
+        **Respondent's Contention:**
+        1) [What the RESPONDENT(S) claim/argue]
+        2) [...]
+        3) [...]
 
-**ISSUE/S:** [Legal issue/s, the format should start with "WHETHER OR NOT", e.g., WHETHER OR NOT...]
-- [Answer to the issue, Always answer in YES or NO]
+        **RTC:** [e.g., IN FAVOR OF PETITIONER/RESPONDENT or Not stated in sources]
+        - [Key reasoning if stated; else Not stated in sources]
 
-**SC RULING:**
-[Supreme Court's ruling - explain the Supreme Court's reasoning in detail. DO NOT just repeat the dispositive. Explain WHY the Court ruled this way, what legal principles were applied, and the reasoning behind the decision. This should be 3-5 sentences of detailed legal analysis.]
+        **CA:** [e.g., AFFIRMED/REVERSED or Not stated in sources]
+        - [Key reasoning if stated; else Not stated in sources]
 
-**DISPOSITIVE:** [Quote ONLY the final dispositive portion, e.g. "PETITION is GRANTED" or "WHEREFORE, the petition is DISMISSED"]
+        **ISSUE/S:** [Each starts with WHETHER OR NOT ...]
+        - [Give a clear YES or NO answer to each issue.]
 
-Use only information from the provided context. If information is not available, write "Not stated in sources."""
+        **SC RULING:**
+        [3–5 sentences of analysis: what legal tests/rules were applied and why they led to the result. Do NOT restate the dispositive. No invented citations.]
 
+        **DISPOSITIVE:** ["…verbatim final dispositive text from Context…" or Not stated in sources]
+        """
     try:
         from .generator import generate_legal_response
         print(f"🔍 Calling LLM with prompt length: {len(case_digest_prompt)}")
@@ -1296,10 +1217,6 @@ Use only information from the provided context. If information is not available,
         print(f"⚠️ LLM generation failed: {e}, using fallback")
         digest_text = f"**Facts**\nNot stated in sources.\n\n**Issues**\nNot stated in sources.\n\n**Ruling**\nNot stated in sources."
     
-    # NOTE: Related cases removed from GR branching path for cleaner digest response
-    # Users can ask follow-up questions if they want related cases
-    
-    # Build response with case digest format (no related cases)
     response_parts = [digest_text]
     
     # response_parts.append("\nWhat would you like to know about this case?")
@@ -1328,22 +1245,6 @@ Use only information from the provided context. If information is not available,
     
     return final_response
 
-# Removed intent heuristics; simplified flow uses only GR-number vs keyword path
-def _format_history(history: List[Dict]) -> str:
-    if not history:
-        return ""
-    lines = []
-    for msg in history[-8:]:  # cap to last 8 turns for brevity
-        role = (msg.get("role") or "user").lower()
-        content = (msg.get("content") or "").strip()
-        if not content:
-            continue
-        if role not in ("system", "user", "assistant"):
-            role = "user"
-        lines.append(f"{role.capitalize()}: {content}")
-    return "\n".join(lines)
-
-
 def chat_with_law_bot(query: str, history: List[Dict] = None):
     global retriever
     
@@ -1354,17 +1255,12 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
             try:
                 from .retriever import LegalRetriever
 
-                # Try to use Contextual RAG if available, fallback to basic retriever
-                try:
-                    base_retriever = LegalRetriever(use_contextual_rag=True)
-                    print("✅ Using Contextual RAG Legal Retriever")
-                except Exception as e:
-                    print(f"⚠️ Contextual RAG not available, using basic retriever: {e}")
-                    base_retriever = LegalRetriever(use_contextual_rag=False)
-                    print("✅ Using Basic Legal Retriever")
+                # Always use Contextual RAG - no fallback to basic retriever
+                base_retriever = LegalRetriever(use_contextual_rag=True)
+                print("✅ Using Contextual RAG Legal Retriever")
                 retriever = base_retriever
-            except ImportError as e:
-                print(f"❌ Failed to load Legal Retriever: {e}")
+            except Exception as e:
+                print(f"❌ Failed to load Contextual RAG Legal Retriever: {e}")
                 retriever = None
 
     try:

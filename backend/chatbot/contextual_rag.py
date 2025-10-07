@@ -71,7 +71,7 @@ Provide a brief explanation (1-2 sentences) of what this chunk covers in the doc
                 # Get collection info to see if it has data
                 collection_info = self.qdrant.get_collection(contextual_collection)
                 if collection_info.points_count > 0:
-                    print(f"✅ Found existing contextual collection with {collection_info.points_count} points")
+                    print(f"Found existing contextual collection with {collection_info.points_count} points")
                     
                     # Load contextual chunks from Qdrant
                     self._load_contextual_chunks_from_qdrant(contextual_collection)
@@ -83,7 +83,7 @@ Provide a brief explanation (1-2 sentences) of what this chunk covers in the doc
             else:
                 print(f"⚠️ No existing contextual collection found")
         except Exception as e:
-            print(f"⚠️ Could not check for existing indexes: {e}")
+            print(f"Could not check for existing indexes: {e}")
     
     def _load_contextual_chunks_from_qdrant(self, collection_name: str) -> None:
         """Load contextual chunks from Qdrant collection"""
@@ -133,10 +133,10 @@ Provide a brief explanation (1-2 sentences) of what this chunk covers in the doc
             self.contextual_chunks = contextual_chunks
             self.chunk_metadata = chunk_metadata
             
-            print(f"✅ Loaded {len(contextual_chunks)} contextual chunks from Qdrant")
+            print(f"Loaded {len(contextual_chunks)} contextual chunks from Qdrant")
             
         except Exception as e:
-            print(f"❌ Failed to load contextual chunks from Qdrant: {e}")
+            print(f"Failed to load contextual chunks from Qdrant: {e}")
             self.contextual_chunks = []
             self.chunk_metadata = []
     

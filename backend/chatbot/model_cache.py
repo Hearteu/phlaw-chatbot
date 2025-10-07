@@ -72,7 +72,7 @@ def _force_cleanup():
         _MEMORY_STATS["last_cleanup"] = time.time()
         print("🧹 Memory cleanup completed")
     except Exception as e:
-        print(f"⚠️ Memory cleanup failed: {e}")
+        print(f"Memory cleanup failed: {e}")
 
 @contextmanager
 def memory_managed_operation():
@@ -83,7 +83,7 @@ def memory_managed_operation():
     finally:
         memory_after = _monitor_memory()
         if _check_memory_pressure():
-            print("⚠️ High memory usage detected, forcing cleanup...")
+            print("High memory usage detected, forcing cleanup...")
             _force_cleanup()
 
 def get_cached_llm() -> Optional[Llama]:
@@ -98,7 +98,7 @@ def get_cached_llm() -> Optional[Llama]:
                 return _LLM_INSTANCE
             except Exception:
                 # If the instance is corrupted, clear it and reload
-                print("🔄 LLM instance corrupted, clearing cache...")
+                print("LLM instance corrupted, clearing cache...")
                 clear_llm_cache()
     
     if not _LLM_LOADED:
@@ -109,7 +109,7 @@ def get_cached_llm() -> Optional[Llama]:
                 
                 # Check memory before loading
                 memory_before = _monitor_memory()
-                print(f"📊 Memory before LLM load: {memory_before.get('used_percent', 0):.1f}%")
+                print(f"Memory before LLM load: {memory_before.get('used_percent', 0):.1f}%")
                 
                 # LLM Configuration
                 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -141,12 +141,12 @@ def get_cached_llm() -> Optional[Llama]:
                     load_time = time.time() - start_time
                     memory_after = _monitor_memory()
                     print(f"[SUCCESS] LLM model loaded in {load_time:.2f}s")
-                    print(f"📊 Memory after LLM load: {memory_after.get('used_percent', 0):.1f}%")
+                    print(f"Memory after LLM load: {memory_after.get('used_percent', 0):.1f}%")
                     _MEMORY_STATS["llm_loads"] += 1
                     _LLM_LOADED = True
                 except Exception as e:
                     print(f"[ERROR] CUDA configuration failed: {e}")
-                    print("🔄 Trying CPU-only fallback...")
+                    print("Trying CPU-only fallback...")
                     
                     # Fallback to CPU-only configuration
                     cpu_config = {
@@ -168,7 +168,7 @@ def get_cached_llm() -> Optional[Llama]:
                         load_time = time.time() - start_time
                         memory_after = _monitor_memory()
                         print(f"[SUCCESS] LLM model loaded in CPU-only mode in {load_time:.2f}s")
-                        print(f"📊 Memory after LLM load: {memory_after.get('used_percent', 0):.1f}%")
+                        print(f"Memory after LLM load: {memory_after.get('used_percent', 0):.1f}%")
                         _MEMORY_STATS["llm_loads"] += 1
                         _LLM_LOADED = True
                     except Exception as e2:
@@ -228,7 +228,7 @@ def clear_llm_cache():
     
     with _CACHE_LOCK:
         memory_before = _monitor_memory()
-        print(f"📊 Memory before LLM cache clear: {memory_before.get('used_percent', 0):.1f}%")
+        print(f"Memory before LLM cache clear: {memory_before.get('used_percent', 0):.1f}%")
         
         if _LLM_INSTANCE is not None:
             try:
@@ -237,13 +237,13 @@ def clear_llm_cache():
                     _LLM_INSTANCE.close()
             except Exception as e:
                 # Ignore errors during cleanup, especially sampler attribute errors
-                print(f"⚠️ Warning during LLM close: {e}")
+                print(f"Warning during LLM close: {e}")
             try:
                 # Try to free the model from memory
                 del _LLM_INSTANCE
             except Exception as e:
                 # Ignore errors during deletion
-                print(f"⚠️ Warning during LLM deletion: {e}")
+                print(f"Warning during LLM deletion: {e}")
         
         _LLM_INSTANCE = None
         _LLM_LOADED = False
@@ -252,7 +252,7 @@ def clear_llm_cache():
         _force_cleanup()
         
         memory_after = _monitor_memory()
-        print(f"📊 Memory after LLM cache clear: {memory_after.get('used_percent', 0):.1f}%")
+        print(f"Memory after LLM cache clear: {memory_after.get('used_percent', 0):.1f}%")
         print("[CLEARED] LLM cache cleared with memory management")
 
 def reload_llm():
@@ -293,7 +293,7 @@ def get_cached_embedding_model() -> Optional[SentenceTransformer]:
     global _EMBEDDING_MODEL, _EMBEDDING_MODEL_LOADED
     
     if _EMBEDDING_MODEL is None and not _EMBEDDING_MODEL_LOADED:
-        print("🔄 Loading SentenceTransformer model...")
+        print("Loading SentenceTransformer model...")
         start_time = time.time()
         
         # Use optimized model path
@@ -373,7 +373,7 @@ def get_memory_stats() -> Dict[str, Any]:
 def auto_cleanup_if_needed():
     """Automatically cleanup if memory pressure is high"""
     if _check_memory_pressure():
-        print("⚠️ High memory pressure detected, performing automatic cleanup...")
+        print("High memory pressure detected, performing automatic cleanup...")
         clear_all_model_caches()
         return True
     return False

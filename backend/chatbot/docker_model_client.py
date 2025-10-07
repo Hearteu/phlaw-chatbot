@@ -34,10 +34,10 @@ class DockerModelClient:
                 max_tokens=1
             )
             self.is_available = True
-            print("✅ Docker model runner is available")
+            print("Docker model runner is available")
             return True
         except Exception as e:
-            print(f"⚠️ Docker model runner not available: {e}")
+            print(f"Docker model runner not available: {e}")
             self.is_available = False
             return False
     
