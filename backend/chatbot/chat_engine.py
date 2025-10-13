@@ -20,6 +20,14 @@ except ImportError:
     TOGETHERAI_AVAILABLE = False
     print("⚠️ TogetherAI client not available")
 
+# Import web search functionality
+try:
+    from .web_search import get_web_searcher
+    WEB_SEARCH_AVAILABLE = True
+except ImportError:
+    WEB_SEARCH_AVAILABLE = False
+    print("⚠️ Web search not available")
+
 
 def _is_follow_up_question(query: str) -> bool:
     """Check if query is asking for more details about a previously discussed case"""
@@ -121,6 +129,107 @@ Provide a detailed, well-structured response that directly addresses what the us
         # Fallback to regular case summary
         return _generate_case_summary_from_jsonl(full_case, query, None, history)
 
+def _handle_web_search_query(query: str, history: Optional[List[Dict]] = None) -> str:
+    """Handle web search queries using external search APIs"""
+    
+    if not WEB_SEARCH_AVAILABLE:
+        return "Web search is currently unavailable. Please try searching for specific cases in our database or rephrase your question."
+    
+    try:
+        searcher = get_web_searcher()
+        
+        if not searcher.is_available():
+            return "Web search is not configured. Please check API credentials or try searching for specific cases in our database."
+        
+        print(f"🌐 Performing web search for: '{query}'")
+        
+        # Perform web search
+        web_results = searcher.search_legal_content(query, num_results=5)
+        
+        if not web_results:
+            return "I couldn't find current information on that topic. Please try rephrasing your question or asking about specific cases in our database."
+        
+        print(f"✅ Web search found {len(web_results)} results")
+        
+        # Generate response using web results
+        return _generate_web_search_response(query, web_results, history)
+        
+    except Exception as e:
+        print(f"❌ Web search failed: {e}")
+        return "I encountered an error while searching for current information. Please try again later or ask about specific cases in our database."
+
+def _generate_web_search_response(query: str, web_results: List[Dict], history: Optional[List[Dict]] = None) -> str:
+    """Generate response based on web search results"""
+    
+    if not TOGETHERAI_AVAILABLE:
+        return _generate_simple_web_response(web_results)
+    
+    try:
+        # Prepare web search context
+        search_context = ""
+        for i, result in enumerate(web_results[:3], 1):  # Use top 3 results
+            search_context += f"""
+{i}. **{result['title']}**
+   Source: {result['source']}
+   Content: {result['snippet']}
+   URL: {result['url']}
+"""
+        
+        web_search_prompt = f"""You are a Philippine Law expert. The user asked: "{query}"
+
+Based on the following web search results, provide a comprehensive answer:
+
+{search_context}
+
+Task: 
+1. Synthesize the information from multiple sources
+2. Focus on Philippine legal context
+3. Provide accurate, up-to-date information
+4. If information conflicts, note the discrepancies
+5. Structure your response with clear headings
+6. Do NOT include inline references like [1], [2], etc.
+7. Do NOT include a "References" or "Sources" section
+
+Provide a well-structured response with clear sections. Focus on delivering comprehensive information without citation formatting."""
+
+        messages = [
+            {"role": "system", "content": "You are a Philippine Law expert providing current legal information based on web search results."},
+            {"role": "user", "content": web_search_prompt}
+        ]
+        
+        print(f"🤖 Generating web search response with TogetherAI...")
+        response = generate_messages_with_togetherai(
+            messages,
+            max_tokens=1024,
+            temperature=0.3,
+            top_p=0.9
+        )
+        
+        # Return the response without additional sources section
+        print(f"✅ Generated web search response")
+        
+        return response.strip()
+        
+    except Exception as e:
+        print(f"⚠️ Web search response generation failed: {e}")
+        # Fallback to simple response
+        return _generate_simple_web_response(web_results)
+
+def _generate_simple_web_response(web_results: List[Dict]) -> str:
+    """Generate a simple response when TogetherAI is not available"""
+    
+    if not web_results:
+        return "No current information found on this topic."
+    
+    response_parts = ["Based on current web sources, here's what I found:\n"]
+    
+    for i, result in enumerate(web_results[:3], 1):
+        response_parts.append(f"**{i}. {result['title']}**")
+        response_parts.append(f"Summary: {result['snippet']}")
+        response_parts.append("")
+    
+    return "\n".join(response_parts)
+
 def _extract_case_from_history(history: Optional[List[Dict]] = None) -> Optional[Dict]:
     """Extract the most recent case information from conversation history"""
     if not history:
@@ -178,7 +287,17 @@ Your task is to classify the user's query and respond appropriately:
    
    Then respond with EXACTLY: "[SEARCH_CASES]"
    
-4. **SPECIFIC LEGAL QUERIES**: If the query is:
+4. **WEB SEARCH QUERIES**: If the query is asking for:
+   - Recent legal developments ("recent Supreme Court decisions", "latest legal updates")
+   - Current legal information ("current tax law", "latest labor law changes")
+   - Constitutional provisions not in local database
+   - Statutory laws, codes, or recent amendments
+   - Legal news, current events, or recent court decisions
+   - Legal procedures, requirements, or how-to information
+   
+   Then respond with EXACTLY: "[WEB_SEARCH]"
+
+5. **SPECIFIC LEGAL QUERIES**: If the query is:
    - Looking up a specific case (mentions G.R. number, case names, parties)
    - Searching for cases on a specific legal topic
    - Asking about specific legal issues or doctrines in context
@@ -192,6 +311,10 @@ Examples:
 - "what are doctrines" → Ask to be more specific
 - "delve deeper into the facts of this case" → [SEARCH_CASES] (follow-up question)
 - "tell me more about the ruling" → [SEARCH_CASES] (follow-up question)
+- "recent Supreme Court decisions on labor law" → [WEB_SEARCH]
+- "current tax law provisions" → [WEB_SEARCH]
+- "latest legal news" → [WEB_SEARCH]
+- "how to file a petition for certiorari" → [WEB_SEARCH]
 - "G.R. No. 123456" → [SEARCH_CASES]
 - "cases about illegal dismissal" → [SEARCH_CASES]
 - "People v. Sanchez ruling" → [SEARCH_CASES]
@@ -1494,8 +1617,13 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
     # Step 1: Use TogetherAI to classify and potentially handle the query directly
     ai_response = _classify_and_handle_query(query, history)
     if ai_response is not None:
-        # Query was handled directly (greeting, general question, etc.)
-        return ai_response
+        # Check if it's a web search request
+        if ai_response == "[WEB_SEARCH]":
+            print(f"[WEB_SEARCH] Proceeding with web search for: '{query}'")
+            return _handle_web_search_query(query, history)
+        else:
+            # Regular greeting/general response
+            return ai_response
     
     # Step 2: Query needs case search - proceed with RAG retrieval
     print(f"[SEARCH] Proceeding with case retrieval for: '{query}'")

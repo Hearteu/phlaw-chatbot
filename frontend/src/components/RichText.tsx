@@ -11,11 +11,16 @@ type Props = {
 // - Paragraphs split by blank lines
 // - Lines starting with "- " become bullet items
 // - **text** becomes bold text
+// - ## text becomes headings
 // - Single newlines preserved within paragraphs
 // - [text](gr:123) and [text](am:123) become clickable case number links
 // - [text](url) becomes clickable external links
 export function RichText({ content, className, onCaseNumberClick }: Props) {
-  const paragraphs = (content || "").split(/\n\n+/);
+  // Split content into lines and process each line
+  const lines = (content || "").split(/\n/);
+  const elements: JSX.Element[] = [];
+  let currentParagraph: string[] = [];
+  let elementIndex = 0;
 
   // Function to render text with bold formatting and clickable links
   const renderTextWithBold = (text: string) => {
@@ -99,34 +104,64 @@ export function RichText({ content, className, onCaseNumberClick }: Props) {
     });
   };
 
-  return (
-    <div className={className}>
-      {paragraphs.map((para, idx) => {
-        const lines = para.split(/\n/);
-        const bulletLines = lines.filter((l) => /^\s*-\s+/.test(l));
-        const isList = bulletLines.length > 0 && bulletLines.length === lines.length;
-
-        if (isList) {
-          return (
-            <ul key={idx} className="list-disc pl-5 space-y-1">
-              {lines.map((line, i) => (
-                <li key={i}>{renderTextWithBold(line.replace(/^\s*-\s+/, ""))}</li>
-              ))}
-            </ul>
-          );
-        }
-
-        // Not a pure list: render as a paragraph preserving soft line breaks
-        return (
-          <p key={idx} className="whitespace-pre-line">
-            {renderTextWithBold(para)}
+  // Process lines
+  const flushParagraph = () => {
+    if (currentParagraph.length > 0) {
+      const paragraphText = currentParagraph.join('\n');
+      
+      // Check if this is a bullet list
+      const bulletLines = currentParagraph.filter(line => /^\s*-\s+/.test(line));
+      const isList = bulletLines.length > 0 && bulletLines.length === currentParagraph.length;
+      
+      if (isList) {
+        elements.push(
+          <ul key={elementIndex++} className="list-disc pl-5 space-y-1">
+            {currentParagraph.map((line, i) => (
+              <li key={i}>{renderTextWithBold(line.replace(/^\s*-\s+/, ""))}</li>
+            ))}
+          </ul>
+        );
+      } else {
+        elements.push(
+          <p key={elementIndex++} className="whitespace-pre-line">
+            {renderTextWithBold(paragraphText)}
           </p>
         );
-      })}
+      }
+      currentParagraph = [];
+    }
+  };
+
+  for (const line of lines) {
+    // Check if this line is a heading
+    const headingMatch = line.match(/^##\s+(.+)$/);
+    if (headingMatch) {
+      // Flush current paragraph before adding heading
+      flushParagraph();
+      
+      // Add the heading
+      elements.push(
+        <h2 key={elementIndex++} className="text-xl font-bold mt-6 mb-3 text-gray-800">
+          {headingMatch[1]}
+        </h2>
+      );
+    } else if (line.trim() === '') {
+      // Empty line - flush current paragraph
+      flushParagraph();
+    } else {
+      // Regular line - add to current paragraph
+      currentParagraph.push(line);
+    }
+  }
+
+  // Flush any remaining paragraph
+  flushParagraph();
+
+  return (
+    <div className={className}>
+      {elements}
     </div>
   );
 }
 
 export default RichText;
-
-
