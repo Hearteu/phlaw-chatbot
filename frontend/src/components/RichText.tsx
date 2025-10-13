@@ -13,21 +13,23 @@ type Props = {
 // - **text** becomes bold text
 // - Single newlines preserved within paragraphs
 // - [text](gr:123) and [text](am:123) become clickable case number links
+// - [text](url) becomes clickable external links
 export function RichText({ content, className, onCaseNumberClick }: Props) {
   const paragraphs = (content || "").split(/\n\n+/);
 
   // Function to render text with bold formatting and clickable links
   const renderTextWithBold = (text: string) => {
     // First, handle clickable links with bold formatting: **[text](gr:123)**
-    let parts = text.split(/(\*\*\[[^\]]+\]\(gr:[^)]+\)\*\*|\*\*\[[^\]]+\]\(am:[^)]+\)\*\*)/g);
+    let parts = text.split(/(\*\*\[[^\]]+\]\(gr:[^)]+\)\*\*|\*\*\[[^\]]+\]\(am:[^)]+\)\*\*|\*\*\[[^\]]+\]\(https?:[^)]+\)\*\*)/g);
     
     // Then handle regular bold text within each part
     parts = parts.map(part => {
       // Handle clickable case number links
       const grMatch = part.match(/\*\*\[([^\]]+)\]\(gr:([^)]+)\)\*\*/);
       const amMatch = part.match(/\*\*\[([^\]]+)\]\(am:([^)]+)\)\*\*/);
+      const urlMatch = part.match(/\*\*\[([^\]]+)\]\((https?:[^)]+)\)\*\*/);
       
-      if (grMatch || amMatch) {
+      if (grMatch || amMatch || urlMatch) {
         return part; // Return as-is for clickable links (handled below)
       }
       
@@ -39,6 +41,7 @@ export function RichText({ content, className, onCaseNumberClick }: Props) {
       // Handle clickable case number links
       const grMatch = part.match(/\*\*\[([^\]]+)\]\(gr:([^)]+)\)\*\*/);
       const amMatch = part.match(/\*\*\[([^\]]+)\]\(am:([^)]+)\)\*\*/);
+      const urlMatch = part.match(/\*\*\[([^\]]+)\]\((https?:[^)]+)\)\*\*/);
       
       if (grMatch) {
         const [, linkText, caseNumber] = grMatch;
@@ -66,6 +69,23 @@ export function RichText({ content, className, onCaseNumberClick }: Props) {
             >
               {linkText}
             </button>
+          </strong>
+        );
+      }
+      
+      if (urlMatch) {
+        const [, linkText, url] = urlMatch;
+        return (
+          <strong key={index}>
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer font-bold"
+              title={`Open ${linkText} in new tab`}
+            >
+              {linkText}
+            </a>
           </strong>
         );
       }

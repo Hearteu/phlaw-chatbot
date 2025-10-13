@@ -131,22 +131,15 @@ class LegalRetriever:
                 print(f"❌ Both {self.collection} and {fallback_collection} are unavailable")
                 raise ValueError(f"Neither '{self.collection}' nor '{fallback_collection}' collections are available")
         
-        # Initialize Optimized Contextual RAG system - always required
+        # Initialize Contextual RAG system - always required
         self.contextual_rag = None
         try:
-            from .optimized_contextual_rag import \
-                create_optimized_contextual_rag_system
-            self.contextual_rag = create_optimized_contextual_rag_system(collection=collection)
-            print(f"✅ Optimized Contextual RAG system initialized for collection: {collection}")
+            from .contextual_rag import create_contextual_rag_system
+            self.contextual_rag = create_contextual_rag_system(collection=collection)
+            print(f"✅ Contextual RAG system initialized for collection: {collection}")
         except Exception as e:
-            print(f"⚠️ Failed to initialize Optimized Contextual RAG, falling back to original: {e}")
-            try:
-                from .contextual_rag import create_contextual_rag_system
-                self.contextual_rag = create_contextual_rag_system(collection=collection)
-                print(f"✅ Fallback Contextual RAG system initialized for collection: {collection}")
-            except Exception as e2:
-                print(f"❌ Failed to initialize any Contextual RAG system: {e2}")
-                raise RuntimeError(f"Contextual RAG is required but failed to initialize: {e2}")
+            print(f"❌ Failed to initialize Contextual RAG system: {e}")
+            raise RuntimeError(f"Contextual RAG is required but failed to initialize: {e}")
         
         # Verify collection exists
         if not self.qdrant.collection_exists(collection):

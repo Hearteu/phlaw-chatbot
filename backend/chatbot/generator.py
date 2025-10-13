@@ -128,6 +128,60 @@ def generate_case_digest_response(prompt: str, context: str = "") -> str:
     return generate_legal_response(prompt, context, is_case_digest=True)
 
 
+def generate_conversational_response(query: str, history: List[Dict[str, str]] = None, 
+                                    context: str = "", is_case_digest: bool = False) -> str:
+    """Generate conversational response with full context awareness and Philippine Law focus"""
+    togetherai_client = _ensure_togetherai_client()
+    if not togetherai_client.is_available:
+        raise RuntimeError("TogetherAI client not available")
+    
+    if history is None:
+        history = []
+    
+    # Build conversational messages
+    messages = [
+        {
+            "role": "system",
+            "content": """You are a knowledgeable Philippine Law expert assistant. Your role is to:
+- Provide accurate information about Philippine jurisprudence and legal principles
+- Remember and reference previous parts of the conversation
+- Ask clarifying questions when needed
+- Offer proactive suggestions about related legal topics
+- Explain complex legal concepts in clear, accessible language
+- Always cite relevant Supreme Court cases and legal provisions
+- Maintain a helpful, professional tone
+
+Focus exclusively on Philippine Law. If asked about other jurisdictions, politely redirect to Philippine legal context."""
+        }
+    ]
+    
+    # Add conversation history (keep last 5 exchanges for context)
+    for msg in history[-5:]:
+        messages.append({"role": msg.get("role", "user"), "content": msg.get("content", "")})
+    
+    # Add current query with context
+    if context:
+        user_message = f"Based on this legal context:\n\n{context}\n\nUser question: {query}"
+    else:
+        user_message = query
+    
+    messages.append({"role": "user", "content": user_message})
+    
+    # Generate response
+    try:
+        response = togetherai_client.generate_response_from_messages(
+            messages,
+            max_tokens=2048,
+            temperature=0.3,
+            top_p=0.85
+        )
+        
+        return _clean_response_text(response)
+    except Exception as e:
+        print(f"❌ Error in conversational generation: {e}")
+        return "I apologize, but I encountered a technical error. Please try again later."
+
+
 def get_llm_info() -> Dict[str, Any]:
     """Get TogetherAI model information"""
     try:

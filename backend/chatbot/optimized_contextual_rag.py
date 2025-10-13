@@ -17,11 +17,10 @@ from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
 
 from .chunker import LegalDocumentChunker
-from .model_cache import get_cached_embedding_model
-from .togetherai_client import generate_with_togetherai
+from .model_cache import get_cached_embedding_model, get_cached_llm
 
 
-class OptimizedContextualRAG:
+class ContextualRAG:
     """Performance-optimized Contextual RAG with caching and parallel processing"""
     
     def __init__(self, 
@@ -49,8 +48,17 @@ class OptimizedContextualRAG:
         
         # BM25 index for keyword search
         self.bm25_index = None
+        
+        # ID-based storage instead of list-based (critical fix for correctness)
+        self.id_to_contextual_chunk = {}  # id -> contextual_chunk_text
+        self.id_to_metadata = {}          # id -> metadata
+        self.id_to_payload = {}           # id -> full_payload (for Qdrant compatibility)
+        self.id_to_embedding = {}         # id -> embedding (optional, for reranking)
+        
+        # Legacy lists for backward compatibility (will be populated from maps)
         self.contextual_chunks = []
         self.chunk_metadata = []
+        
         
         # Cache for contextual chunks
         self.contextual_cache = {}
@@ -130,7 +138,7 @@ Explanation:"""
             print(f"Could not check for existing indexes: {e}")
     
     def _load_contextual_chunks_from_qdrant(self, collection_name: str) -> None:
-        """Load contextual chunks from Qdrant collection"""
+        """Load contextual chunks from Qdrant collection using ID-based storage"""
         try:
             print("🔄 Loading contextual chunks from Qdrant...")
             
@@ -145,41 +153,53 @@ Explanation:"""
                 print("⚠️ No points found in contextual collection")
                 return
             
-            # Extract chunks and metadata
-            contextual_chunks = []
-            chunk_metadata = []
+            # Clear existing maps
+            self.id_to_contextual_chunk.clear()
+            self.id_to_metadata.clear()
+            self.id_to_payload.clear()
             
+            # Load chunks using stable IDs
             for point in points:
                 payload = point.payload
-                if payload:
-                    contextual_chunks.append(payload.get('content', ''))
-                    
-                    metadata = {
-                        'content': payload.get('original_content', ''),
-                        'section': payload.get('section', ''),
-                        'section_type': payload.get('section_type', 'general'),
-                        'chunk_type': payload.get('chunk_type', 'content'),
-                        'token_count': payload.get('token_count', 0),
-                        'metadata': {
-                            'gr_number': payload.get('gr_number', ''),
-                            'special_number': payload.get('special_number', ''),
-                            'title': payload.get('title', ''),
-                            'ponente': payload.get('ponente', ''),
-                            'case_type': payload.get('case_type', ''),
-                            'date': payload.get('date', '')
-                        }
+                if not payload:
+                    continue
+                
+                chunk_id = str(point.id)  # Use Qdrant's ID as the stable ID
+                contextual_text = payload.get('content', '')
+                
+                # Reconstruct metadata from payload
+                metadata = {
+                    'content': payload.get('original_content', ''),
+                    'section': payload.get('section', ''),
+                    'section_type': payload.get('section_type', 'general'),
+                    'chunk_type': payload.get('chunk_type', 'content'),
+                    'token_count': payload.get('token_count', 0),
+                    'metadata': {
+                        'gr_number': payload.get('gr_number', ''),
+                        'special_number': payload.get('special_number', ''),
+                        'title': payload.get('title', ''),
+                        'ponente': payload.get('ponente', ''),
+                        'case_type': payload.get('case_type', ''),
+                        'date': payload.get('date', '')
                     }
-                    chunk_metadata.append(metadata)
+                }
+                
+                # Store in ID-based maps
+                self.id_to_contextual_chunk[chunk_id] = contextual_text
+                self.id_to_metadata[chunk_id] = metadata
+                self.id_to_payload[chunk_id] = payload
             
-            self.contextual_chunks = contextual_chunks
-            self.chunk_metadata = chunk_metadata
+            # Rebuild legacy lists for backward compatibility
+            self._rebuild_legacy_lists()
             
-            print(f"Loaded {len(contextual_chunks)} contextual chunks from Qdrant")
+            print(f"Loaded {len(self.id_to_contextual_chunk)} contextual chunks from Qdrant")
             
         except Exception as e:
             print(f"Failed to load contextual chunks from Qdrant: {e}")
-            self.contextual_chunks = []
-            self.chunk_metadata = []
+            self.id_to_contextual_chunk.clear()
+            self.id_to_metadata.clear()
+            self.id_to_payload.clear()
+            self._rebuild_legacy_lists()
     
     def generate_contextual_chunks_fast(self, document: str, chunks: List[Dict[str, Any]]) -> List[str]:
         """Fast contextual chunk generation with caching and rule-based fallbacks"""
@@ -318,14 +338,27 @@ Explanation:"""
         return contextual_chunks
     
     def _generate_context_for_chunk(self, prompt: str, chunk_content: str, chunk_hash: str) -> str:
-        """Generate context for a single chunk using LLM"""
+        """Generate context for a single chunk using local GGUF LLM"""
         try:
-            context = generate_with_togetherai(
+            llm = get_cached_llm()
+            if not llm:
+                print(f"⚠️ Local LLM not available, using rule-based context")
+                return chunk_content
+            
+            # Generate context using local LLM
+            result = llm(
                 prompt,
-                max_tokens=50,  # Much shorter response
+                max_tokens=50,
                 temperature=0.1,
-                top_p=0.9
+                top_p=0.9,
+                stop=["User:", "Human:", "\n\n"]
             )
+            
+            # Extract text from result
+            if isinstance(result, dict):
+                context = result.get('choices', [{}])[0].get('text', '')
+            else:
+                context = str(result)
             
             # Clean up context
             context = context.strip()
@@ -340,7 +373,7 @@ Explanation:"""
                 return chunk_content
                 
         except Exception as e:
-            print(f"⚠️ LLM generation failed: {e}")
+            print(f"⚠️ Local LLM generation failed: {e}")
             return chunk_content
     
     def build_hybrid_indexes_fast(self, cases: List[Dict[str, Any]]) -> None:
@@ -368,7 +401,14 @@ Explanation:"""
                 contextual_chunks = [chunk.get('content', '') for chunk in chunks]
                 all_contextual_chunks.extend(contextual_chunks)
         
-        # Store chunks and metadata
+        # Store chunks and metadata using ID-based approach
+        # Clear existing ID-based maps
+        self.id_to_contextual_chunk.clear()
+        self.id_to_metadata.clear()
+        self.id_to_payload.clear()
+        
+        # Store in ID-based maps (will be populated during embedding generation)
+        # For now, just store the lists for backward compatibility
         self.contextual_chunks = all_contextual_chunks
         self.chunk_metadata = all_chunks
         
@@ -392,28 +432,110 @@ Explanation:"""
         return [word for word in text.split() if len(word) > 1]
     
     def _build_vector_embeddings(self, contextual_chunks: List[str], chunk_metadata: List[Dict]) -> None:
-        """Build vector embeddings with batch processing"""
+        """Build vector embeddings with batch processing using stable IDs"""
         print(f"🔄 Generating embeddings for {len(contextual_chunks)} chunks...")
         
         # Generate embeddings in larger batches for better performance
         batch_size = 64  # Increased batch size
         embeddings = []
+        chunk_ids = []
         
         for i in range(0, len(contextual_chunks), batch_size):
             batch = contextual_chunks[i:i + batch_size]
+            batch_metadata = chunk_metadata[i:i + batch_size]
+            
             batch_embeddings = self.embedding_model.encode(
                 batch, 
                 convert_to_numpy=True, 
                 normalize_embeddings=True,
                 show_progress_bar=False  # Disable progress bar for cleaner output
             )
+            
+            # Generate stable IDs for this batch
+            for j, (chunk_text, metadata) in enumerate(zip(batch, batch_metadata)):
+                stable_id = self._generate_stable_id(metadata, chunk_text)
+                chunk_ids.append(stable_id)
+                
+                # Store in ID-based maps
+                self.id_to_contextual_chunk[stable_id] = chunk_text
+                self.id_to_metadata[stable_id] = metadata
+                self.id_to_embedding[stable_id] = batch_embeddings[j]
+            
             embeddings.extend(batch_embeddings)
             
             if (i // batch_size + 1) % 5 == 0:
                 print(f"  Processed {i + len(batch)}/{len(contextual_chunks)} chunks")
         
-        # Store embeddings in Qdrant
-        self._store_embeddings_in_qdrant(embeddings, contextual_chunks, chunk_metadata)
+        # Store embeddings in Qdrant with stable IDs
+        self._store_embeddings_in_qdrant_with_stable_ids(embeddings, chunk_ids)
+    
+    def _store_embeddings_in_qdrant_with_stable_ids(self, embeddings: List[np.ndarray], chunk_ids: List[str]) -> None:
+        """Store embeddings in Qdrant using stable IDs"""
+        print("🔄 Storing embeddings in Qdrant with stable IDs...")
+        
+        # Prepare points for Qdrant using stable IDs
+        points = []
+        for embedding, chunk_id in zip(embeddings, chunk_ids):
+            if chunk_id not in self.id_to_metadata:
+                continue
+                
+            metadata = self.id_to_metadata[chunk_id]
+            contextual_text = self.id_to_contextual_chunk[chunk_id]
+            
+            point = PointStruct(
+                id=chunk_id,  # Use stable ID instead of loop index
+                vector=embedding.tolist(),
+                payload={
+                    "content": contextual_text,
+                    "original_content": metadata.get('content', ''),
+                    "section": metadata.get('section', ''),
+                    "section_type": metadata.get('section_type', 'general'),
+                    "gr_number": metadata.get('metadata', {}).get('gr_number', ''),
+                    "special_number": metadata.get('metadata', {}).get('special_number', ''),
+                    "title": metadata.get('metadata', {}).get('title', ''),
+                    "ponente": metadata.get('metadata', {}).get('ponente', ''),
+                    "case_type": metadata.get('metadata', {}).get('case_type', ''),
+                    "date": metadata.get('metadata', {}).get('date', ''),
+                    "chunk_type": metadata.get('chunk_type', 'content'),
+                    "token_count": metadata.get('token_count', 0),
+                    "contextual": True,
+                    "stable_id": chunk_id  # Store the stable ID for verification
+                }
+            )
+            points.append(point)
+        
+        # Create collection and upsert with optimized settings
+        try:
+            # Use the collection name directly if it already ends with "_contextual"
+            collection_name = self.collection
+            if not self.collection.endswith("_contextual"):
+                collection_name = f"{self.collection}_contextual"
+            
+            if not self.qdrant.collection_exists(collection_name):
+                print(f"🔄 Creating collection: {collection_name}")
+                vector_size = len(embeddings[0]) if embeddings else 768
+                
+                self.qdrant.create_collection(
+                    collection_name=collection_name,
+                    vectors_config=VectorParams(
+                        size=vector_size,
+                        distance=Distance.COSINE
+                    )
+                )
+                print(f"✅ Created collection: {collection_name}")
+            
+            # Upsert in smaller batches for better performance
+            batch_size = 1000
+            for i in range(0, len(points), batch_size):
+                batch_points = points[i:i + batch_size]
+                self.qdrant.upsert(
+                    collection_name=collection_name,
+                    points=batch_points
+                )
+            
+            print(f"✅ Stored {len(points)} embeddings in Qdrant with stable IDs")
+        except Exception as e:
+            print(f"❌ Error storing embeddings: {e}")
     
     def _store_embeddings_in_qdrant(self, embeddings: List[np.ndarray], 
                                    contextual_chunks: List[str], 
@@ -478,7 +600,7 @@ Explanation:"""
         except Exception as e:
             print(f"❌ Error storing embeddings: {e}")
     
-    def vector_retrieval(self, query: str, top_k: int = 50) -> List[int]:
+    def vector_retrieval(self, query: str, top_k: int = 50) -> List[str]:
         """Optimized vector search with reduced top_k"""
         try:
             # Encode query
@@ -497,16 +619,16 @@ Explanation:"""
                 with_payload=True
             )
             
-            # Extract chunk indices
-            chunk_indices = [hit.id for hit in results]
-            return chunk_indices
+            # Extract chunk IDs (not indices!)
+            chunk_ids = [str(hit.id) for hit in results]
+            return chunk_ids
             
         except Exception as e:
             print(f"❌ Vector retrieval failed: {e}")
             return []
     
-    def bm25_retrieval(self, query: str, k: int = 50) -> List[int]:
-        """Optimized BM25 search with reduced k"""
+    def bm25_retrieval(self, query: str, k: int = 50) -> List[str]:
+        """BM25 search returning chunk IDs"""
         if not self.bm25_index:
             print("⚠️ BM25 index not built")
             return []
@@ -515,13 +637,16 @@ Explanation:"""
             query_tokens = self._tokenize(query)
             scores = self.bm25_index.get_scores(query_tokens)
             top_indices = np.argsort(scores)[::-1][:k]
-            return top_indices.tolist()
+            
+            # Convert indices to chunk IDs
+            chunk_ids = list(self.id_to_contextual_chunk.keys())
+            return [chunk_ids[i] for i in top_indices if i < len(chunk_ids)]
             
         except Exception as e:
             print(f"❌ BM25 retrieval failed: {e}")
             return []
     
-    def reciprocal_rank_fusion(self, *ranked_lists: List[int], k: int = 60) -> Tuple[List[Tuple[int, float]], List[int]]:
+    def reciprocal_rank_fusion(self, *ranked_lists: List[str], k: int = 60) -> Tuple[List[Tuple[str, float]], List[str]]:
         """Optimized RRF with reduced k value"""
         rrf_map = defaultdict(float)
         
@@ -561,27 +686,33 @@ Explanation:"""
         final_results = hybrid_results[:final_k]
         print(f"✅ Final results: {len(final_results)} chunks")
         
-        # Step 4: Return formatted results
+        # Step 4: Return formatted results using ID-based lookup (CRITICAL FIX)
         results = []
-        for idx in final_results:
-            if self.contextual_chunks and idx < len(self.contextual_chunks) and idx < len(self.chunk_metadata):
-                metadata = self.chunk_metadata[idx].get('metadata', {})
+        for chunk_id in final_results:
+            # Use ID-based lookup instead of index arithmetic
+            if chunk_id in self.id_to_contextual_chunk and chunk_id in self.id_to_metadata:
+                contextual_text = self.id_to_contextual_chunk[chunk_id]
+                metadata = self.id_to_metadata[chunk_id]
+                
                 result = {
-                    'content': self.contextual_chunks[idx],
-                    'original_content': self.chunk_metadata[idx].get('content', ''),
-                    'metadata': metadata,
-                    'section': self.chunk_metadata[idx].get('section', ''),
-                    'section_type': self.chunk_metadata[idx].get('section_type', 'general'),
-                    'chunk_type': self.chunk_metadata[idx].get('chunk_type', 'content'),
-                    'token_count': self.chunk_metadata[idx].get('token_count', 0),
+                    'content': contextual_text,
+                    'original_content': metadata.get('content', ''),
+                    'metadata': metadata.get('metadata', {}),
+                    'section': metadata.get('section', ''),
+                    'section_type': metadata.get('section_type', 'general'),
+                    'chunk_type': metadata.get('chunk_type', 'content'),
+                    'token_count': metadata.get('token_count', 0),
                     'contextual': True,
                     'score': 1.0,
-                    'title': metadata.get('title', ''),
-                    'case_title': metadata.get('title', ''),
-                    'gr_number': metadata.get('gr_number', ''),
-                    'special_number': metadata.get('special_number', '')
+                    'title': metadata.get('metadata', {}).get('title', ''),
+                    'case_title': metadata.get('metadata', {}).get('title', ''),
+                    'gr_number': metadata.get('metadata', {}).get('gr_number', ''),
+                    'special_number': metadata.get('metadata', {}).get('special_number', ''),
+                    'chunk_id': chunk_id  # Include the stable ID for debugging
                 }
                 results.append(result)
+            else:
+                print(f"⚠️ Chunk ID {chunk_id} not found in ID-based maps")
         
         return results
     
@@ -593,16 +724,43 @@ Explanation:"""
             vector_collection = f"{self.collection}_contextual"
             
         return {
-            "total_chunks": len(self.contextual_chunks),
+            "total_chunks": len(self.id_to_contextual_chunk),
             "cached_contexts": len(self.contextual_cache),
             "bm25_available": self.bm25_index is not None,
             "vector_collection": vector_collection,
             "chunk_size": self.chunk_size,
             "overlap_ratio": self.overlap_ratio,
-            "cache_file": self.cache_file
+            "cache_file": self.cache_file,
+            "id_based_storage": True,  # Indicate that ID-based storage is being used
+            "unique_ids": len(self.id_to_contextual_chunk)
         }
 
 
-def create_optimized_contextual_rag_system(collection: str = "jurisprudence") -> OptimizedContextualRAG:
-    """Create and initialize an optimized Contextual RAG system"""
-    return OptimizedContextualRAG(collection=collection)
+    def _generate_stable_id(self, metadata: Dict[str, Any], chunk_text: str) -> str:
+        """Generate a stable, content-derived ID for a chunk"""
+        gr = metadata.get('metadata', {}).get('gr_number', '')
+        special = metadata.get('metadata', {}).get('special_number', '')
+        section = metadata.get('section', '')
+        section_type = metadata.get('section_type', '')
+        char_start = str(metadata.get('char_start', 0))
+        
+        # Create a stable identifier based on content and metadata
+        content_hash = hashlib.sha256(chunk_text.encode('utf-8')).hexdigest()[:16]
+        stable_key = f"{gr}|{special}|{section}|{section_type}|{char_start}|{content_hash}"
+        
+        return hashlib.sha256(stable_key.encode('utf-8')).hexdigest()
+    
+    def _rebuild_legacy_lists(self):
+        """Rebuild legacy lists from ID-based maps for backward compatibility"""
+        self.contextual_chunks = list(self.id_to_contextual_chunk.values())
+        self.chunk_metadata = list(self.id_to_metadata.values())
+        
+        # Rebuild BM25 index from contextual chunks
+        if self.contextual_chunks:
+            tokenized_chunks = [self._tokenize(chunk) for chunk in self.contextual_chunks]
+            self.bm25_index = BM25Okapi(tokenized_chunks)
+
+
+def create_contextual_rag_system(collection: str = "jurisprudence") -> ContextualRAG:
+    """Create and initialize a Contextual RAG system"""
+    return ContextualRAG(collection=collection)

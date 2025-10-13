@@ -15,7 +15,7 @@ import {
     CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Scale, Send, User } from "lucide-react";
+import { RotateCcw, Scale, Send, User } from "lucide-react";
 
 interface Message {
   id: string;
@@ -114,6 +114,22 @@ export default function Home() {
     setRatedMessages(prev => new Set([...prev, messageId]));
   };
 
+  const handleClearChat = () => {
+    // Reset to initial welcome message
+    setMessages([
+      {
+        id: "welcome",
+        content:
+          "Hello! I'm LegalBot PH, your Philippine Jurisprudence Assistant. What case would you like me to digest for you?",
+        role: "assistant",
+        timestamp: new Date(),
+      },
+    ]);
+    setInput("");
+    setRatedMessages(new Set());
+    console.log("🔄 Chat history cleared - starting new session");
+  };
+
   const handleCaseNumberClick = (caseNumber: string, caseType: 'gr' | 'am') => {
     // Format the case number for the query
     let query = '';
@@ -143,11 +159,24 @@ export default function Home() {
     setLoadingMessageIndex(0);
 
     try {
-      console.log("📡 Sending POST to Django backend...");
+      // Build conversation history for context (exclude welcome message)
+      const history = messages
+        .filter(msg => msg.id !== "welcome") // Exclude welcome message
+        .map(msg => ({
+          role: msg.role,
+          content: msg.content
+        }));
+
+      console.log("📡 Sending POST to Django backend with history...");
+      console.log(`📜 History length: ${history.length} messages`);
+      
       const res = await fetch("http://127.0.0.1:8000/api/chat/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: queryText }),
+        body: JSON.stringify({ 
+          query: queryText,
+          history: history 
+        }),
       });
 
       const data = await res.json();
@@ -202,16 +231,29 @@ export default function Home() {
       <div className="flex-1 flex flex-col items-center justify-center p-4">
         <Card className="w-full max-w-3xl flex flex-col h-full bg-white border rounded-xl shadow-sm">
         <CardHeader className="text-black">
-          <CardTitle className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full flex items-center justify-center">
-              <Scale className="w-5 h-5" />
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full flex items-center justify-center">
+                <Scale className="w-5 h-5" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xl font-bold">LegalBot PH</span>
+                <span className="text-sm font-normal">
+                  Philippine Jurisprudence Assistant
+                </span>
+              </div>
             </div>
-            <div className="flex flex-col">
-              <span className="text-xl font-bold">LegalBot PH</span>
-              <span className="text-sm font-normal">
-                Philippine Jurisprudence Assistant
-              </span>
-            </div>
+            {messages.length > 1 && (
+              <Button
+                onClick={handleClearChat}
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span className="hidden sm:inline">New Chat</span>
+              </Button>
+            )}
           </CardTitle>
         </CardHeader>
 

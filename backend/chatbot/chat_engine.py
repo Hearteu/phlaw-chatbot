@@ -12,6 +12,235 @@ except ImportError:
     METRICS_AVAILABLE = False
     print("⚠️ Evaluation metrics not available")
 
+# Import TogetherAI client
+try:
+    from .togetherai_client import generate_messages_with_togetherai
+    TOGETHERAI_AVAILABLE = True
+except ImportError:
+    TOGETHERAI_AVAILABLE = False
+    print("⚠️ TogetherAI client not available")
+
+
+def _is_follow_up_question(query: str) -> bool:
+    """Check if query is asking for more details about a previously discussed case"""
+    q = query.strip().lower()
+    
+    follow_up_patterns = [
+        r"delve\s+deeper",
+        r"tell\s+me\s+more",
+        r"explain\s+more",
+        r"give\s+me\s+more\s+details",
+        r"what\s+were\s+the\s+(facts|issues|ruling)",
+        r"explain\s+the\s+(facts|issues|ruling|principles)",
+        r"more\s+about\s+this\s+case",
+        r"expand\s+on",
+        r"elaborate\s+on",
+        r"can\s+you\s+explain\s+(further|more)",
+    ]
+    
+    for pattern in follow_up_patterns:
+        if re.search(pattern, q):
+            return True
+    
+    return False
+
+def _generate_detailed_case_response(full_case: Dict, query: str, history: Optional[List[Dict]] = None) -> str:
+    """Generate a detailed response for follow-up questions about a specific case"""
+    if not TOGETHERAI_AVAILABLE:
+        return _generate_case_summary_from_jsonl(full_case, query, None, history)
+    
+    try:
+        # Extract case metadata
+        case_title = full_case.get("case_title", "Unknown Case")
+        gr_number = full_case.get("gr_number", "Unknown")
+        ponente = full_case.get("ponente", "Unknown")
+        date = full_case.get("promulgation_date", "Unknown")
+        clean_text = full_case.get("clean_text", "")
+        
+        # Build a more detailed prompt based on the query
+        q = query.lower()
+        
+        if "facts" in q or "factual" in q:
+            focus = "facts and factual background"
+            instruction = "Focus specifically on the factual background, events, and circumstances of the case."
+        elif "issues" in q or "issue" in q:
+            focus = "legal issues and questions"
+            instruction = "Focus specifically on the legal issues, questions, and problems raised in the case."
+        elif "ruling" in q or "decision" in q or "hold" in q:
+            focus = "ruling and decision"
+            instruction = "Focus specifically on the court's ruling, decision, and legal reasoning."
+        elif "principles" in q or "doctrine" in q or "law" in q:
+            focus = "legal principles and doctrines"
+            instruction = "Focus specifically on the legal principles, doctrines, and precedents established."
+        else:
+            focus = "detailed information"
+            instruction = "Provide comprehensive details about the case."
+        
+        detailed_prompt = f"""You are a Philippine Law expert. The user is asking for more details about a specific case they previously discussed.
+
+Case Information:
+- Title: {case_title}
+- G.R. Number: {gr_number}
+- Ponente: {ponente}
+- Date: {date}
+
+User Query: "{query}"
+
+Task: Provide detailed information focusing on {focus}.
+
+{instruction}
+
+Context from case text:
+{clean_text[:4000]}
+
+Provide a detailed, well-structured response that directly addresses what the user is asking for. Use clear headings and organize the information logically."""
+
+        messages = [
+            {"role": "system", "content": "You are a Philippine Law expert providing detailed case analysis."},
+            {"role": "user", "content": detailed_prompt}
+        ]
+        
+        print(f"🤖 Generating detailed response for follow-up question...")
+        response = generate_messages_with_togetherai(
+            messages,
+            max_tokens=1024,
+            temperature=0.3,
+            top_p=0.9
+        )
+        
+        # Add source URL if available
+        source_url = full_case.get("source_url")
+        if source_url:
+            response += f"\n\n---\n📚 **Source Reference:**\nView the complete case text: [Supreme Court E-Library]({source_url})"
+        
+        print(f"✅ Generated detailed follow-up response")
+        return response.strip()
+        
+    except Exception as e:
+        print(f"⚠️ Detailed response generation failed: {e}")
+        # Fallback to regular case summary
+        return _generate_case_summary_from_jsonl(full_case, query, None, history)
+
+def _extract_case_from_history(history: Optional[List[Dict]] = None) -> Optional[Dict]:
+    """Extract the most recent case information from conversation history"""
+    if not history:
+        return None
+    
+    # Look for the most recent assistant message that contains case information
+    for msg in reversed(history):
+        if msg.get("role") == "assistant":
+            content = msg.get("content", "")
+            
+            # Extract GR number from the content
+            gr_match = re.search(r'G\.R\.\s*No\.\s*([0-9\-]+)', content)
+            if gr_match:
+                gr_number = gr_match.group(1)
+                return {"gr_number": gr_number, "content": content}
+            
+            # Extract case title (look for bold titles)
+            title_match = re.search(r'\*\*([^*]+)\*\*', content)
+            if title_match:
+                return {"case_title": title_match.group(1), "content": content}
+    
+    return None
+
+def _classify_and_handle_query(query: str, history: Optional[List[Dict]] = None) -> Optional[str]:
+    """
+    Use TogetherAI to classify query intent and handle simple queries directly.
+    Returns:
+        - None if query needs RAG retrieval (case search)
+        - String response if query can be handled directly (greetings, general questions, definitions)
+    """
+    if not TOGETHERAI_AVAILABLE:
+        return None
+    
+    try:
+        # Build classification prompt
+        classification_system = """You are a Philippine Law Chatbot specializing in Philippine Supreme Court jurisprudence.
+
+Your task is to classify the user's query and respond appropriately:
+
+1. **GREETINGS/CASUAL**: If it's a greeting (hi, hello, etc.) or casual conversation (thanks, bye, how are you):
+   - Respond with a friendly welcome message explaining what you can help with
+   - Mention: case lookups by G.R. number, legal definitions, and jurisprudence research
+
+2. **GENERAL/VAGUE QUESTIONS**: If asking general questions like "what are doctrines", "what is law", "how does court work":
+   - Politely ask them to be more specific
+   - Give examples of specific queries you can handle
+
+3. **FOLLOW-UP QUESTIONS**: If the query is asking for more details about a previously discussed case:
+   - "delve deeper into the facts"
+   - "tell me more about the ruling"
+   - "what were the issues raised"
+   - "explain the legal principles"
+   - "give me more details about this case"
+   - Any question referring to "this case", "the case", or asking for elaboration
+   
+   Then respond with EXACTLY: "[SEARCH_CASES]"
+   
+4. **SPECIFIC LEGAL QUERIES**: If the query is:
+   - Looking up a specific case (mentions G.R. number, case names, parties)
+   - Searching for cases on a specific legal topic
+   - Asking about specific legal issues or doctrines in context
+   
+   Then respond with EXACTLY: "[SEARCH_CASES]"
+   
+   Do NOT add any other text, just "[SEARCH_CASES]"
+
+Examples:
+- "hi" → Give greeting
+- "what are doctrines" → Ask to be more specific
+- "delve deeper into the facts of this case" → [SEARCH_CASES] (follow-up question)
+- "tell me more about the ruling" → [SEARCH_CASES] (follow-up question)
+- "G.R. No. 123456" → [SEARCH_CASES]
+- "cases about illegal dismissal" → [SEARCH_CASES]
+- "People v. Sanchez ruling" → [SEARCH_CASES]
+- "what is certiorari" → [SEARCH_CASES] (specific legal term needs case context)
+- "negligence in tort law" → [SEARCH_CASES]
+
+IMPORTANT: Pay attention to conversation history to maintain context. If the user is asking for more details about a previously discussed case, treat it as a follow-up question and respond with [SEARCH_CASES]."""
+
+        # Build messages with conversation history
+        messages = [{"role": "system", "content": classification_system}]
+        
+        # Add conversation history if available
+        if history:
+            print(f"📜 Including {len(history)} messages from conversation history")
+            for msg in history:
+                role = msg.get("role", "user")
+                content = msg.get("content", "")
+                if content:
+                    messages.append({"role": role, "content": content})
+        else:
+            print("📜 No conversation history available")
+        
+        # Add current query
+        messages.append({"role": "user", "content": query})
+        
+        print(f"🤖 Classifying query with TogetherAI (total messages: {len(messages)})...")
+        response = generate_messages_with_togetherai(
+            messages,
+            max_tokens=512,
+            temperature=0.2,
+            top_p=0.9
+        )
+        
+        print(f"🤖 Classification response: '{response[:100]}...'")
+        
+        # Check if we need to search cases
+        if "[SEARCH_CASES]" in response:
+            print("🔍 Query requires case search - proceeding with RAG retrieval")
+            return None
+        
+        # Otherwise, return the AI's direct response
+        print("✅ Query handled directly by AI")
+        return response.strip()
+        
+    except Exception as e:
+        print(f"⚠️ Query classification failed: {e}")
+        # On error, default to RAG retrieval
+        return None
+
 
 def _extract_gr_number(query: str) -> str:
     """Extract G.R. number from query, returns numeric part or empty string."""
@@ -536,10 +765,10 @@ Context:
 Write exactly 5 complete sentences that tell the story of this case. Start with who the parties are, then what happened, what the legal question was, how the court decided, and what the outcome was. Do not include any numbered lists or questions - just write the 5 sentences directly."""
 
         try:
-            from .generator import generate_legal_response
+            from .generator import generate_conversational_response
             print(f"[SEARCH] Calling LLM with prompt length: {len(storytelling_prompt)} characters")
             print(f"[SEARCH] Context length: {len(context)} characters")
-            raw_summary = generate_legal_response(storytelling_prompt, context="", is_case_digest=False)
+            raw_summary = generate_conversational_response(storytelling_prompt, history=history, context="", is_case_digest=False)
             print(f"[SEARCH] Raw LLM output: '{raw_summary[:200]}...' (length: {len(raw_summary)})")
             
             # Clean up the LLM output
@@ -1074,7 +1303,7 @@ def _generate_case_summary_from_jsonl(full_case_content: Dict, query: str, retri
     if facts_content and len(facts_content.strip()) > 0:
         chunks = _chunk(facts_content)
         try:
-            from .generator import generate_legal_response
+            from .generator import generate_conversational_response
             for idx, ch in enumerate(chunks[:6]):  # cap chunks per case to control calls
                 extract_prompt = (
                     "Extract up to 3 short factual sentences and up to 1 issue from the text.\n"
@@ -1083,7 +1312,7 @@ def _generate_case_summary_from_jsonl(full_case_content: Dict, query: str, retri
                     "Text:\n" + ch
                 )
                 try:
-                    resp = generate_legal_response(extract_prompt, context="", is_case_digest=False)
+                    resp = generate_conversational_response(extract_prompt, history=history, context="", is_case_digest=False)
                     # naive JSON parse with fallback
                     import json as _json
                     data = None
@@ -1192,11 +1421,11 @@ def _generate_case_summary_from_jsonl(full_case_content: Dict, query: str, retri
         **DISPOSITIVE:** ["…verbatim final dispositive text from Context…" or Not stated in sources]
         """
     try:
-        from .generator import generate_legal_response
+        from .generator import generate_conversational_response
         print(f"🔍 Calling LLM with prompt length: {len(case_digest_prompt)}")
         print(f"🔍 Prompt preview: {case_digest_prompt[:200]}...")
         
-        raw_digest = generate_legal_response(case_digest_prompt, context="", is_case_digest=True)
+        raw_digest = generate_conversational_response(case_digest_prompt, history=history, context="", is_case_digest=True)
         print(f"🔍 Raw LLM response length: {len(raw_digest) if raw_digest else 0}")
         print(f"🔍 Raw LLM response: '{raw_digest[:200] if raw_digest else 'None'}...'")
         
@@ -1218,6 +1447,18 @@ def _generate_case_summary_from_jsonl(full_case_content: Dict, query: str, retri
         digest_text = f"**Facts**\nNot stated in sources.\n\n**Issues**\nNot stated in sources.\n\n**Ruling**\nNot stated in sources."
     
     response_parts = [digest_text]
+    
+    # Add reference link to specific case source URL
+    source_url = full_case_content.get("source_url") if full_case_content else None
+    if source_url:
+        response_parts.append("\n---")
+        response_parts.append("📚 **Source Reference:**")
+        response_parts.append(f"View the complete case text: [Supreme Court E-Library]({source_url})")
+    else:
+        # Fallback to generic link if no specific URL available
+        response_parts.append("\n---")
+        response_parts.append("📚 **Source Reference:**")
+        response_parts.append("For the complete case text and additional legal resources, visit the [Supreme Court E-Library](https://elibrary.judiciary.gov.ph/)")
     
     # response_parts.append("\nWhat would you like to know about this case?")
     # response_parts.append("• Case Digest - Complete structured summary")
@@ -1248,8 +1489,36 @@ def _generate_case_summary_from_jsonl(full_case_content: Dict, query: str, retri
 def chat_with_law_bot(query: str, history: List[Dict] = None):
     global retriever
     
-    # Simplified routing: always treat as jurisprudence; branch GR vs keywords
-    print(f"[SEARCH] Query: '{query}'")
+    print(f"[QUERY] '{query}'")
+    
+    # Step 1: Use TogetherAI to classify and potentially handle the query directly
+    ai_response = _classify_and_handle_query(query, history)
+    if ai_response is not None:
+        # Query was handled directly (greeting, general question, etc.)
+        return ai_response
+    
+    # Step 2: Query needs case search - proceed with RAG retrieval
+    print(f"[SEARCH] Proceeding with case retrieval for: '{query}'")
+    
+    # Check if this is a follow-up question and extract case context
+    if _is_follow_up_question(query):
+        print(f"🔄 Follow-up question detected: '{query}'")
+        case_info = _extract_case_from_history(history)
+        if case_info:
+            print(f"🎯 Found case context: {case_info}")
+            # If we found a GR number, try to get more detailed information
+            if "gr_number" in case_info:
+                gr_num = case_info["gr_number"]
+                print(f"🔍 Loading detailed case for follow-up: G.R. No. {gr_num}")
+                try:
+                    from .retriever import load_case_from_jsonl
+                    full_case = load_case_from_jsonl(gr_num)
+                    if full_case:
+                        # Generate more detailed response for follow-up question
+                        result = _generate_detailed_case_response(full_case, query, history)
+                        return result
+                except Exception as e:
+                    print(f"⚠️ Failed to load case for follow-up: {e}")
 
     if retriever is None:
             try:
@@ -1452,11 +1721,20 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
                                 formatted_case_number = f"({case_number})"
                             items.append(f"{i}. {title} {formatted_case_number}{suffix}")
                     result = "Here are the possible cases:\n" + "\n".join(items)
+                    
                     print(f"🎯 Returning case list with {len(items)} items")
                     print(f"🎯 First item: {items[0] if items else 'None'}")
                     return result
                 else:
-                    return "I couldn't find matching cases in the current database. Try a different G.R. number or broader keywords."
+                    result = "I couldn't find matching cases in the current database. Try a different G.R. number or broader keywords."
+                    result += "\n\n---\n"
+                    result += "📚 **Source Reference:**\n"
+                    result += "For additional case search options, visit the [Supreme Court E-Library](https://elibrary.judiciary.gov.ph/)"
+                    return result
     except Exception as e:
         print(f"[WARNING] Jurisprudence retrieval failed: {e}")
-        return "I encountered a retrieval error. Please try again."
+        result = "I encountered a retrieval error. Please try again."
+        result += "\n\n---\n"
+        result += "📚 **Source Reference:**\n"
+        result += "For manual case search, visit the [Supreme Court E-Library](https://elibrary.judiciary.gov.ph/)"
+        return result

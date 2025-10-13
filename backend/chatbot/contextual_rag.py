@@ -1,4 +1,8 @@
-# contextual_rag.py — Contextual RAG implementation with hybrid search and reranking
+# optimized_contextual_rag.py — Performance-optimized Contextual RAG implementation
+import asyncio
+import concurrent.futures
+import hashlib
+import json
 import os
 import re
 import time
@@ -13,22 +17,24 @@ from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
 
 from .chunker import LegalDocumentChunker
-from .docker_model_client import generate_with_fallback
-from .model_cache import get_cached_embedding_model
+from .model_cache import get_cached_embedding_model, get_cached_llm
 
 
 class ContextualRAG:
-    """Contextual RAG implementation with hybrid search and reranking"""
+    """Performance-optimized Contextual RAG with caching and parallel processing"""
     
     def __init__(self, 
-                 collection: str = "jurisprudence",
+                 collection: str = "jurisprudence_contextual",
                  chunk_size: int = 640,
                  overlap_ratio: float = 0.15,
-                 context_model: str = "meta-llama/Meta-Llama-3.2-3B-Instruct-Turbo"):
+                 cache_dir: str = "backend/data/contextual_cache"):
         self.collection = collection
         self.chunk_size = chunk_size
         self.overlap_ratio = overlap_ratio
-        self.context_model = context_model
+        self.cache_dir = cache_dir
+        
+        # Create cache directory
+        os.makedirs(cache_dir, exist_ok=True)
         
         # Initialize components
         self.chunker = LegalDocumentChunker(
@@ -42,42 +48,88 @@ class ContextualRAG:
         
         # BM25 index for keyword search
         self.bm25_index = None
+        
+        # ID-based storage instead of list-based (critical fix for correctness)
+        self.id_to_contextual_chunk = {}  # id -> contextual_chunk_text
+        self.id_to_metadata = {}          # id -> metadata
+        self.id_to_payload = {}           # id -> full_payload (for Qdrant compatibility)
+        self.id_to_embedding = {}         # id -> embedding (optional, for reranking)
+        
+        # Legacy lists for backward compatibility (will be populated from maps)
         self.contextual_chunks = []
         self.chunk_metadata = []
         
-        # Reranker model
-        self.reranker_model = None
+        
+        # Cache for contextual chunks
+        self.contextual_cache = {}
+        self.cache_file = os.path.join(cache_dir, "contextual_chunks.json")
+        
+        # Load existing cache
+        self._load_contextual_cache()
         
         # Try to load existing indexes
         self._load_existing_indexes()
         
-        # Context generation prompt template (optimized for shorter responses)
-        self.CONTEXTUAL_RAG_PROMPT = """Given this legal document excerpt, briefly explain what the chunk discusses:
+        # Optimized context generation prompt (shorter, more focused)
+        self.CONTEXTUAL_RAG_PROMPT = """Briefly explain what this legal document section discusses (1 sentence):
 
-Document excerpt:
-{WHOLE_DOCUMENT}
+Document: {DOCUMENT_EXCERPT}
+Section: {CHUNK_CONTENT}
 
-Chunk to explain:
-{CHUNK_CONTENT}
-
-Provide a brief explanation (1-2 sentences) of what this chunk covers in the document."""
+Explanation:"""
+    
+    def _get_qdrant_client(self) -> QdrantClient:
+        """Get Qdrant client with optimized settings"""
+        host = os.getenv("QDRANT_HOST", "localhost")
+        port = int(os.getenv("QDRANT_PORT", 6333))
+        return QdrantClient(
+            host=host, 
+            port=port, 
+            grpc_port=6334, 
+            prefer_grpc=True, 
+            timeout=10.0  # Reduced timeout
+        )
+    
+    def _load_contextual_cache(self) -> None:
+        """Load contextual chunk cache from disk"""
+        try:
+            if os.path.exists(self.cache_file):
+                with open(self.cache_file, 'r', encoding='utf-8') as f:
+                    self.contextual_cache = json.load(f)
+                print(f"✅ Loaded {len(self.contextual_cache)} cached contextual chunks")
+            else:
+                self.contextual_cache = {}
+                print("📝 No existing contextual cache found")
+        except Exception as e:
+            print(f"⚠️ Failed to load contextual cache: {e}")
+            self.contextual_cache = {}
+    
+    def _save_contextual_cache(self) -> None:
+        """Save contextual chunk cache to disk"""
+        try:
+            with open(self.cache_file, 'w', encoding='utf-8') as f:
+                json.dump(self.contextual_cache, f, ensure_ascii=False, indent=2)
+            print(f"💾 Saved {len(self.contextual_cache)} contextual chunks to cache")
+        except Exception as e:
+            print(f"⚠️ Failed to save contextual cache: {e}")
+    
+    def _get_chunk_hash(self, chunk_content: str, document_context: str) -> str:
+        """Generate hash for chunk to enable caching"""
+        content = f"{chunk_content}|{document_context}"
+        return hashlib.md5(content.encode('utf-8')).hexdigest()
     
     def _load_existing_indexes(self) -> None:
         """Try to load existing contextual chunks from Qdrant collection"""
         try:
-            # Check if contextual collection exists
-            contextual_collection = f"{self.collection}_contextual"
+            # Use the collection name directly if it already ends with "_contextual"
+            contextual_collection = self.collection
+            if not self.collection.endswith("_contextual"):
+                contextual_collection = f"{self.collection}_contextual"
             if self.qdrant.collection_exists(contextual_collection):
-                # Get collection info to see if it has data
                 collection_info = self.qdrant.get_collection(contextual_collection)
                 if collection_info.points_count > 0:
                     print(f"Found existing contextual collection with {collection_info.points_count} points")
-                    
-                    # Load contextual chunks from Qdrant
                     self._load_contextual_chunks_from_qdrant(contextual_collection)
-                    
-                    # Note: BM25 index still needs to be rebuilt
-                    print("⚠️ BM25 index needs to be rebuilt for full functionality")
                 else:
                     print(f"⚠️ Contextual collection exists but is empty")
             else:
@@ -86,259 +138,247 @@ Provide a brief explanation (1-2 sentences) of what this chunk covers in the doc
             print(f"Could not check for existing indexes: {e}")
     
     def _load_contextual_chunks_from_qdrant(self, collection_name: str) -> None:
-        """Load contextual chunks from Qdrant collection"""
+        """Load contextual chunks from Qdrant collection using ID-based storage"""
         try:
             print("🔄 Loading contextual chunks from Qdrant...")
             
             # Get all points from the collection
             points = self.qdrant.scroll(
                 collection_name=collection_name,
-                limit=10000,  # Adjust based on your data size
+                limit=10000,
                 with_payload=True
-            )[0]  # scroll returns (points, next_page_offset)
+            )[0]
             
             if not points:
                 print("⚠️ No points found in contextual collection")
                 return
             
-            # Extract chunks and metadata
-            contextual_chunks = []
-            chunk_metadata = []
+            # Clear existing maps
+            self.id_to_contextual_chunk.clear()
+            self.id_to_metadata.clear()
+            self.id_to_payload.clear()
             
+            # Load chunks using stable IDs
             for point in points:
                 payload = point.payload
-                if payload:
-                    # Add contextual chunk content
-                    contextual_chunks.append(payload.get('content', ''))
-                    
-                    # Reconstruct metadata
-                    metadata = {
-                        'content': payload.get('original_content', ''),
-                        'section': payload.get('section', ''),
-                        'section_type': payload.get('section_type', 'general'),
-                        'chunk_type': payload.get('chunk_type', 'content'),
-                        'token_count': payload.get('token_count', 0),
-                        'metadata': {
-                            'gr_number': payload.get('gr_number', ''),
-                            'special_number': payload.get('special_number', ''),
-                            'title': payload.get('title', ''),
-                            'ponente': payload.get('ponente', ''),
-                            'case_type': payload.get('case_type', ''),
-                            'date': payload.get('date', '')
-                        }
+                if not payload:
+                    continue
+                
+                chunk_id = str(point.id)  # Use Qdrant's ID as the stable ID
+                contextual_text = payload.get('content', '')
+                
+                # Reconstruct metadata from payload
+                metadata = {
+                    'content': payload.get('original_content', ''),
+                    'section': payload.get('section', ''),
+                    'section_type': payload.get('section_type', 'general'),
+                    'chunk_type': payload.get('chunk_type', 'content'),
+                    'token_count': payload.get('token_count', 0),
+                    'metadata': {
+                        'gr_number': payload.get('gr_number', ''),
+                        'special_number': payload.get('special_number', ''),
+                        'title': payload.get('title', ''),
+                        'ponente': payload.get('ponente', ''),
+                        'case_type': payload.get('case_type', ''),
+                        'date': payload.get('date', '')
                     }
-                    chunk_metadata.append(metadata)
+                }
+                
+                # Store in ID-based maps
+                self.id_to_contextual_chunk[chunk_id] = contextual_text
+                self.id_to_metadata[chunk_id] = metadata
+                self.id_to_payload[chunk_id] = payload
             
-            # Store loaded data
-            self.contextual_chunks = contextual_chunks
-            self.chunk_metadata = chunk_metadata
+            # Rebuild legacy lists for backward compatibility
+            self._rebuild_legacy_lists()
             
-            print(f"Loaded {len(contextual_chunks)} contextual chunks from Qdrant")
+            print(f"Loaded {len(self.id_to_contextual_chunk)} contextual chunks from Qdrant")
             
         except Exception as e:
             print(f"Failed to load contextual chunks from Qdrant: {e}")
-            self.contextual_chunks = []
-            self.chunk_metadata = []
+            self.id_to_contextual_chunk.clear()
+            self.id_to_metadata.clear()
+            self.id_to_payload.clear()
+            self._rebuild_legacy_lists()
     
-    def _get_qdrant_client(self) -> QdrantClient:
-        """Get Qdrant client"""
-        host = os.getenv("QDRANT_HOST", "localhost")
-        port = int(os.getenv("QDRANT_PORT", 6333))
-        return QdrantClient(host=host, port=port, grpc_port=6334, prefer_grpc=True, timeout=30.0)
-    
-    def generate_contextual_chunks(self, document: str, chunks: List[Dict[str, Any]]) -> List[str]:
-        """Generate contextual chunks using LLM with context size optimization"""
-        print(f"🔄 Generating contextual chunks for {len(chunks)} chunks...")
+    def generate_contextual_chunks_fast(self, document: str, chunks: List[Dict[str, Any]]) -> List[str]:
+        """Fast contextual chunk generation with caching and rule-based fallbacks"""
+        print(f"🔄 Generating contextual chunks (fast) for {len(chunks)} chunks...")
         
         contextual_chunks = []
         
+        # Use rule-based context generation for most chunks
         for i, chunk in enumerate(chunks):
-            try:
-                # Truncate document to fit within context limits
-                # Reserve space for prompt template, chunk content, and response
-                max_doc_tokens = 3000  # Leave room for prompt + chunk + response
-                truncated_doc = self._truncate_to_tokens(document, max_doc_tokens)
-                
-                # Create prompt for context generation
-                prompt = self.CONTEXTUAL_RAG_PROMPT.format(
-                    WHOLE_DOCUMENT=truncated_doc,
-                    CHUNK_CONTENT=chunk.get('content', '')
-                )
-                
-                # Check if prompt is still too long
-                if self._estimate_tokens(prompt) > 3800:  # Leave buffer for response
-                    print(f"⚠️ Chunk {i+1}: Prompt still too long, using fallback")
-                    contextual_chunks.append(chunk.get('content', ''))
-                    continue
-                
-                # Generate context using Docker model runner
-                context = generate_with_fallback(
-                    prompt,
-                    max_tokens=150,
-                    temperature=0.1,
-                    top_p=0.9
-                )
-                
-                # Clean up context
-                context = context.strip()
-                if context.endswith('.'):
-                    context = context[:-1]
-                
-                # Create contextual chunk: context + original chunk
-                contextual_chunk = f"{context}. {chunk.get('content', '')}"
+            chunk_content = chunk.get('content', '')
+            section_type = chunk.get('section_type', 'general')
+            
+            # Try cache first
+            chunk_hash = self._get_chunk_hash(chunk_content, document[:500])
+            if chunk_hash in self.contextual_cache:
+                contextual_chunk = self.contextual_cache[chunk_hash]
                 contextual_chunks.append(contextual_chunk)
-                
-                print(f"✅ Generated context for chunk {i+1}/{len(chunks)}")
-                
-            except Exception as e:
-                print(f"⚠️ Failed to generate context for chunk {i+1}: {e}")
-                # Fallback to original chunk
-                contextual_chunks.append(chunk.get('content', ''))
+                continue
+            
+            # Generate rule-based context (fast)
+            if section_type == 'dispositive':
+                context = "This section contains the court's final ruling and decision."
+            elif section_type == 'factual':
+                context = "This section describes the facts and circumstances of the case."
+            elif section_type == 'issues':
+                context = "This section identifies the legal issues to be resolved."
+            elif section_type == 'legal_analysis':
+                context = "This section provides the legal analysis and reasoning."
+            else:
+                context = "This section contains legal content from the case."
+            
+            contextual_chunk = f"{context} {chunk_content}"
+            contextual_chunks.append(contextual_chunk)
+            
+            # Cache the result
+            self.contextual_cache[chunk_hash] = contextual_chunk
         
         return contextual_chunks
     
-    def generate_contextual_chunks_optimized(self, document: str, chunks: List[Dict[str, Any]]) -> List[str]:
-        """Generate contextual chunks using document summary approach for large documents"""
-        print(f"🔄 Generating contextual chunks (optimized) for {len(chunks)} chunks...")
+    def generate_contextual_chunks_with_llm_parallel(self, document: str, chunks: List[Dict[str, Any]], 
+                                                   max_llm_chunks: int = 5) -> List[str]:
+        """Generate contextual chunks with limited LLM usage and parallel processing"""
+        print(f"🔄 Generating contextual chunks (parallel LLM) for {len(chunks)} chunks...")
         
         contextual_chunks = []
         
-        # For very long documents, create a summary first
-        if self._estimate_tokens(document) > 4000:  # Lower threshold
-            print("📝 Document is very long, creating summary for context generation...")
-            try:
-                # Create a summary of the document
-                summary_prompt = f"""Create a brief summary (2-3 paragraphs) of this legal document:
-
-{document[:3000]}...
-
-Focus on the main legal issues, parties, and key points."""
+        # Select only the most important chunks for LLM processing
+        important_chunks = []
+        for chunk in chunks:
+            section_type = chunk.get('section_type', 'general')
+            if section_type in ['dispositive', 'issues', 'legal_analysis']:
+                important_chunks.append(chunk)
+        
+        # Limit to max_llm_chunks to control costs and speed
+        important_chunks = important_chunks[:max_llm_chunks]
+        
+        # Generate rule-based context for non-important chunks
+        for chunk in chunks:
+            chunk_content = chunk.get('content', '')
+            section_type = chunk.get('section_type', 'general')
+            
+            if chunk not in important_chunks:
+                # Use rule-based context for non-important chunks
+                if section_type == 'dispositive':
+                    context = "This section contains the court's final ruling and decision."
+                elif section_type == 'factual':
+                    context = "This section describes the facts and circumstances of the case."
+                elif section_type == 'issues':
+                    context = "This section identifies the legal issues to be resolved."
+                elif section_type == 'legal_analysis':
+                    context = "This section provides the legal analysis and reasoning."
+                else:
+                    context = "This section contains legal content from the case."
                 
-                if self._estimate_tokens(summary_prompt) <= 3000:  # More aggressive
-                    document_summary = generate_with_fallback(
-                        summary_prompt,
-                        max_tokens=200,
-                        temperature=0.1
+                contextual_chunk = f"{context} {chunk_content}"
+                contextual_chunks.append(contextual_chunk)
+        
+        # Generate LLM context for important chunks in parallel
+        if important_chunks:
+            print(f"🤖 Generating LLM context for {len(important_chunks)} important chunks...")
+            
+            # Prepare document excerpt (much smaller)
+            doc_excerpt = document[:1000] + "..." if len(document) > 1000 else document
+            
+            # Process important chunks in parallel
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+                future_to_chunk = {}
+                
+                for chunk in important_chunks:
+                    chunk_content = chunk.get('content', '')
+                    
+                    # Check cache first
+                    chunk_hash = self._get_chunk_hash(chunk_content, doc_excerpt)
+                    if chunk_hash in self.contextual_cache:
+                        contextual_chunk = self.contextual_cache[chunk_hash]
+                        contextual_chunks.append(contextual_chunk)
+                        continue
+                    
+                    # Create prompt for LLM
+                    prompt = self.CONTEXTUAL_RAG_PROMPT.format(
+                        DOCUMENT_EXCERPT=doc_excerpt,
+                        CHUNK_CONTENT=chunk_content
                     )
-                    document_for_context = f"Document Summary: {document_summary}\n\nOriginal Document: {document[:1500]}..."
-                else:
-                    # Fallback to just using beginning of document
-                    document_for_context = document[:1500] + "..."
-            except Exception as e:
-                print(f"⚠️ Failed to create summary, using document excerpt: {e}")
-                document_for_context = document[:2000] + "..."
-        else:
-            document_for_context = document
-        
-        # Generate context for each chunk
-        for i, chunk in enumerate(chunks):
-            try:
-                # Create prompt for context generation
-                prompt = self.CONTEXTUAL_RAG_PROMPT.format(
-                    WHOLE_DOCUMENT=document_for_context,
-                    CHUNK_CONTENT=chunk.get('content', '')
-                )
-                
-                # Check if prompt is still too long
-                if self._estimate_tokens(prompt) > 3000:  # More aggressive limit
-                    print(f"⚠️ Chunk {i+1}: Prompt still too long, using rule-based context")
-                    # Generate rule-based context instead of skipping
-                    section_type = chunk.get('section_type', 'general')
-                    if section_type == 'dispositive':
-                        basic_context = "This section contains the court's final ruling and decision."
-                    elif section_type == 'factual':
-                        basic_context = "This section describes the facts and circumstances of the case."
-                    elif section_type == 'issues':
-                        basic_context = "This section identifies the legal issues to be resolved."
-                    elif section_type == 'legal_analysis':
-                        basic_context = "This section provides the legal analysis and reasoning."
-                    else:
-                        basic_context = "This section contains legal content from the case."
                     
-                    contextual_chunk = f"{basic_context} {chunk.get('content', '')}"
-                    contextual_chunks.append(contextual_chunk)
-                    continue
+                    # Submit to thread pool
+                    future = executor.submit(self._generate_context_for_chunk, prompt, chunk_content, chunk_hash)
+                    future_to_chunk[future] = (chunk, chunk_hash)
                 
-                # Generate context using Docker model runner
-                context = generate_with_fallback(
-                    prompt,
-                    max_tokens=100,
-                    temperature=0.1,
-                    top_p=0.9
-                )
-                
-                # Clean up context
-                context = context.strip()
-                if context.endswith('.'):
-                    context = context[:-1]
-                
-                # Always create contextual chunk - this is the core of Contextual RAG
-                # Even if context is minimal, it's better than no context
-                if context and len(context) > 5:  # Very low threshold - any context is valuable
-                    contextual_chunk = f"{context}. {chunk.get('content', '')}"
-                else:
-                    # Generate a simple context if LLM failed
-                    # Extract section info or create basic context
-                    section = chunk.get('section', 'content')
-                    section_type = chunk.get('section_type', 'general')
-                    
-                    if section_type == 'dispositive':
-                        basic_context = "This section contains the court's final ruling and decision."
-                    elif section_type == 'factual':
-                        basic_context = "This section describes the facts and circumstances of the case."
-                    elif section_type == 'issues':
-                        basic_context = "This section identifies the legal issues to be resolved."
-                    elif section_type == 'legal_analysis':
-                        basic_context = "This section provides the legal analysis and reasoning."
-                    else:
-                        basic_context = "This section contains legal content from the case."
-                    
-                    contextual_chunk = f"{basic_context} {chunk.get('content', '')}"
-                
-                contextual_chunks.append(contextual_chunk)
-                
-                print(f"✅ Generated context for chunk {i+1}/{len(chunks)}")
-                
-            except Exception as e:
-                print(f"⚠️ Failed to generate context for chunk {i+1}: {e}")
-                # Fallback to original chunk
-                contextual_chunks.append(chunk.get('content', ''))
+                # Collect results
+                for future in concurrent.futures.as_completed(future_to_chunk):
+                    chunk, chunk_hash = future_to_chunk[future]
+                    try:
+                        contextual_chunk = future.result()
+                        contextual_chunks.append(contextual_chunk)
+                        
+                        # Cache the result
+                        self.contextual_cache[chunk_hash] = contextual_chunk
+                    except Exception as e:
+                        print(f"⚠️ LLM generation failed for chunk: {e}")
+                        # Fallback to rule-based
+                        section_type = chunk.get('section_type', 'general')
+                        if section_type == 'dispositive':
+                            context = "This section contains the court's final ruling and decision."
+                        elif section_type == 'factual':
+                            context = "This section describes the facts and circumstances of the case."
+                        elif section_type == 'issues':
+                            context = "This section identifies the legal issues to be resolved."
+                        elif section_type == 'legal_analysis':
+                            context = "This section provides the legal analysis and reasoning."
+                        else:
+                            context = "This section contains legal content from the case."
+                        
+                        contextual_chunk = f"{context} {chunk.get('content', '')}"
+                        contextual_chunks.append(contextual_chunk)
         
         return contextual_chunks
     
-    def _truncate_to_tokens(self, text: str, max_tokens: int) -> str:
-        """Truncate text to fit within token limit"""
-        if not text:
-            return ""
-        
-        # Rough estimation: 1 token ≈ 4 characters
-        max_chars = max_tokens * 4
-        
-        if len(text) <= max_chars:
-            return text
-        
-        # Truncate and try to end at sentence boundary
-        truncated = text[:max_chars]
-        last_period = truncated.rfind('.')
-        last_exclamation = truncated.rfind('!')
-        last_question = truncated.rfind('?')
-        
-        last_sentence_end = max(last_period, last_exclamation, last_question)
-        
-        if last_sentence_end > max_chars * 0.8:  # If we can find a sentence end in last 20%
-            return truncated[:last_sentence_end + 1]
-        else:
-            return truncated
+    def _generate_context_for_chunk(self, prompt: str, chunk_content: str, chunk_hash: str) -> str:
+        """Generate context for a single chunk using local GGUF LLM"""
+        try:
+            llm = get_cached_llm()
+            if not llm:
+                print(f"⚠️ Local LLM not available, using rule-based context")
+                return chunk_content
+            
+            # Generate context using local LLM
+            result = llm(
+                prompt,
+                max_tokens=50,
+                temperature=0.1,
+                top_p=0.9,
+                stop=["User:", "Human:", "\n\n"]
+            )
+            
+            # Extract text from result
+            if isinstance(result, dict):
+                context = result.get('choices', [{}])[0].get('text', '')
+            else:
+                context = str(result)
+            
+            # Clean up context
+            context = context.strip()
+            if context.endswith('.'):
+                context = context[:-1]
+            
+            # Create contextual chunk
+            if context and len(context) > 5:
+                return f"{context}. {chunk_content}"
+            else:
+                # Fallback to rule-based
+                return chunk_content
+                
+        except Exception as e:
+            print(f"⚠️ Local LLM generation failed: {e}")
+            return chunk_content
     
-    def _estimate_tokens(self, text: str) -> int:
-        """Estimate token count (rough approximation: 1 token ≈ 4 characters)"""
-        if not text:
-            return 0
-        return max(1, len(text) // 4)
-    
-    def build_hybrid_indexes(self, cases: List[Dict[str, Any]]) -> None:
-        """Build both vector and BM25 indexes with contextual chunks"""
-        print(f"🔄 Building hybrid indexes for {len(cases)} cases...")
+    def build_hybrid_indexes_fast(self, cases: List[Dict[str, Any]]) -> None:
+        """Build hybrid indexes with optimized contextual chunk generation"""
+        print(f"🔄 Building optimized hybrid indexes for {len(cases)} cases...")
         
         all_chunks = []
         all_contextual_chunks = []
@@ -348,17 +388,27 @@ Focus on the main legal issues, parties, and key points."""
             chunks = self.chunker.chunk_case(case)
             all_chunks.extend(chunks)
             
-            # Generate contextual chunks using optimized approach
+            # Generate contextual chunks using fast method
             clean_text = case.get('clean_text', '') or case.get('body', '')
             if clean_text:
-                contextual_chunks = self.generate_contextual_chunks_optimized(clean_text, chunks)
+                # Use fast method for most chunks, LLM for important ones
+                contextual_chunks = self.generate_contextual_chunks_with_llm_parallel(
+                    clean_text, chunks, max_llm_chunks=3
+                )
                 all_contextual_chunks.extend(contextual_chunks)
             else:
-                # Fallback to original content (when no text available)
+                # Fallback to original content
                 contextual_chunks = [chunk.get('content', '') for chunk in chunks]
                 all_contextual_chunks.extend(contextual_chunks)
         
-        # Store chunks and metadata
+        # Store chunks and metadata using ID-based approach
+        # Clear existing ID-based maps
+        self.id_to_contextual_chunk.clear()
+        self.id_to_metadata.clear()
+        self.id_to_payload.clear()
+        
+        # Store in ID-based maps (will be populated during embedding generation)
+        # For now, just store the lists for backward compatibility
         self.contextual_chunks = all_contextual_chunks
         self.chunk_metadata = all_chunks
         
@@ -371,102 +421,98 @@ Focus on the main legal issues, parties, and key points."""
         print("🔄 Building vector embeddings...")
         self._build_vector_embeddings(all_contextual_chunks, all_chunks)
         
-        print(f"✅ Built hybrid indexes: {len(all_contextual_chunks)} contextual chunks")
+        # Save cache
+        self._save_contextual_cache()
+        
+        print(f"✅ Built optimized hybrid indexes: {len(all_contextual_chunks)} contextual chunks")
     
     def _tokenize(self, text: str) -> List[str]:
         """Simple tokenization for BM25"""
-        # Convert to lowercase and split on whitespace/punctuation
         text = re.sub(r'[^\w\s]', ' ', text.lower())
         return [word for word in text.split() if len(word) > 1]
     
     def _build_vector_embeddings(self, contextual_chunks: List[str], chunk_metadata: List[Dict]) -> None:
-        """Build vector embeddings for contextual chunks"""
+        """Build vector embeddings with batch processing using stable IDs"""
         print(f"🔄 Generating embeddings for {len(contextual_chunks)} chunks...")
         
-        # Generate embeddings in batches
-        batch_size = 32
+        # Generate embeddings in larger batches for better performance
+        batch_size = 64  # Increased batch size
         embeddings = []
+        chunk_ids = []
         
         for i in range(0, len(contextual_chunks), batch_size):
             batch = contextual_chunks[i:i + batch_size]
+            batch_metadata = chunk_metadata[i:i + batch_size]
+            
             batch_embeddings = self.embedding_model.encode(
                 batch, 
                 convert_to_numpy=True, 
-                normalize_embeddings=True
+                normalize_embeddings=True,
+                show_progress_bar=False  # Disable progress bar for cleaner output
             )
+            
+            # Generate stable IDs for this batch
+            for j, (chunk_text, metadata) in enumerate(zip(batch, batch_metadata)):
+                stable_id = self._generate_stable_id(metadata, chunk_text)
+                chunk_ids.append(stable_id)
+                
+                # Store in ID-based maps
+                self.id_to_contextual_chunk[stable_id] = chunk_text
+                self.id_to_metadata[stable_id] = metadata
+                self.id_to_embedding[stable_id] = batch_embeddings[j]
+            
             embeddings.extend(batch_embeddings)
             
-            if (i // batch_size + 1) % 10 == 0:
+            if (i // batch_size + 1) % 5 == 0:
                 print(f"  Processed {i + len(batch)}/{len(contextual_chunks)} chunks")
         
-        # Store embeddings in Qdrant
-        self._store_embeddings_in_qdrant(embeddings, contextual_chunks, chunk_metadata)
+        # Store embeddings in Qdrant with stable IDs
+        self._store_embeddings_in_qdrant_with_stable_ids(embeddings, chunk_ids)
     
-    def _get_original_case_title(self, gr_number: str, special_number: str) -> str:
-        """Look up the original case title from JSONL data"""
-        try:
-            from .retriever import load_case_from_jsonl
-
-            # Try to load the original case data
-            case_id = gr_number or special_number
-            if case_id:
-                original_case = load_case_from_jsonl(case_id)
-                if original_case and isinstance(original_case, dict):
-                    # Get the original case title from JSONL
-                    original_title = original_case.get('case_title') or original_case.get('title', '')
-                    if original_title and len(original_title.strip()) > 10:
-                        return original_title.strip()
-        except Exception as e:
-            print(f"⚠️ Could not load original case title for {case_id}: {e}")
+    def _store_embeddings_in_qdrant_with_stable_ids(self, embeddings: List[np.ndarray], chunk_ids: List[str]) -> None:
+        """Store embeddings in Qdrant using stable IDs"""
+        print("🔄 Storing embeddings in Qdrant with stable IDs...")
         
-        return ""  # Return empty string if lookup fails
-    
-    def _store_embeddings_in_qdrant(self, embeddings: List[np.ndarray], 
-                                   contextual_chunks: List[str], 
-                                   chunk_metadata: List[Dict]) -> None:
-        """Store embeddings in Qdrant vector database"""
-        print("🔄 Storing embeddings in Qdrant...")
-        
-        # Prepare points for Qdrant using proper PointStruct format
+        # Prepare points for Qdrant using stable IDs
         points = []
-        for i, (embedding, chunk_text, metadata) in enumerate(zip(embeddings, contextual_chunks, chunk_metadata)):
-            # Try to get the original case title from JSONL
-            gr_number = metadata.get('metadata', {}).get('gr_number', '')
-            special_number = metadata.get('metadata', {}).get('special_number', '')
-            original_title = self._get_original_case_title(gr_number, special_number)
-            
-            # Use original title if available, otherwise fall back to chunk title
-            final_title = original_title if original_title else metadata.get('metadata', {}).get('title', '')
+        for embedding, chunk_id in zip(embeddings, chunk_ids):
+            if chunk_id not in self.id_to_metadata:
+                continue
+                
+            metadata = self.id_to_metadata[chunk_id]
+            contextual_text = self.id_to_contextual_chunk[chunk_id]
             
             point = PointStruct(
-                id=i,
+                id=chunk_id,  # Use stable ID instead of loop index
                 vector=embedding.tolist(),
                 payload={
-                    "content": chunk_text,
+                    "content": contextual_text,
                     "original_content": metadata.get('content', ''),
                     "section": metadata.get('section', ''),
                     "section_type": metadata.get('section_type', 'general'),
-                    "gr_number": gr_number,
-                    "special_number": special_number,
-                    "title": final_title,
+                    "gr_number": metadata.get('metadata', {}).get('gr_number', ''),
+                    "special_number": metadata.get('metadata', {}).get('special_number', ''),
+                    "title": metadata.get('metadata', {}).get('title', ''),
                     "ponente": metadata.get('metadata', {}).get('ponente', ''),
                     "case_type": metadata.get('metadata', {}).get('case_type', ''),
                     "date": metadata.get('metadata', {}).get('date', ''),
                     "chunk_type": metadata.get('chunk_type', 'content'),
                     "token_count": metadata.get('token_count', 0),
-                    "contextual": True
+                    "contextual": True,
+                    "stable_id": chunk_id  # Store the stable ID for verification
                 }
             )
             points.append(point)
         
-        # Create collection if it doesn't exist and upsert to Qdrant
+        # Create collection and upsert with optimized settings
         try:
-            collection_name = f"{self.collection}_contextual"
+            # Use the collection name directly if it already ends with "_contextual"
+            collection_name = self.collection
+            if not self.collection.endswith("_contextual"):
+                collection_name = f"{self.collection}_contextual"
             
-            # Check if collection exists, create if not
             if not self.qdrant.collection_exists(collection_name):
                 print(f"🔄 Creating collection: {collection_name}")
-                # Get vector size from first embedding
                 vector_size = len(embeddings[0]) if embeddings else 768
                 
                 self.qdrant.create_collection(
@@ -478,142 +524,153 @@ Focus on the main legal issues, parties, and key points."""
                 )
                 print(f"✅ Created collection: {collection_name}")
             
-            # Upsert points to collection
-            self.qdrant.upsert(
-                collection_name=collection_name,
-                points=points
+            # Upsert in smaller batches for better performance
+            batch_size = 1000
+            for i in range(0, len(points), batch_size):
+                batch_points = points[i:i + batch_size]
+                self.qdrant.upsert(
+                    collection_name=collection_name,
+                    points=batch_points
+                )
+            
+            print(f"✅ Stored {len(points)} embeddings in Qdrant with stable IDs")
+        except Exception as e:
+            print(f"❌ Error storing embeddings: {e}")
+    
+    def _store_embeddings_in_qdrant(self, embeddings: List[np.ndarray], 
+                                   contextual_chunks: List[str], 
+                                   chunk_metadata: List[Dict]) -> None:
+        """Store embeddings in Qdrant with optimized settings"""
+        print("🔄 Storing embeddings in Qdrant...")
+        
+        # Prepare points for Qdrant
+        points = []
+        for i, (embedding, chunk_text, metadata) in enumerate(zip(embeddings, contextual_chunks, chunk_metadata)):
+            point = PointStruct(
+                id=i,
+                vector=embedding.tolist(),
+                payload={
+                    "content": chunk_text,
+                    "original_content": metadata.get('content', ''),
+                    "section": metadata.get('section', ''),
+                    "section_type": metadata.get('section_type', 'general'),
+                    "gr_number": metadata.get('metadata', {}).get('gr_number', ''),
+                    "special_number": metadata.get('metadata', {}).get('special_number', ''),
+                    "title": metadata.get('metadata', {}).get('title', ''),
+                    "ponente": metadata.get('metadata', {}).get('ponente', ''),
+                    "case_type": metadata.get('metadata', {}).get('case_type', ''),
+                    "date": metadata.get('metadata', {}).get('date', ''),
+                    "chunk_type": metadata.get('chunk_type', 'content'),
+                    "token_count": metadata.get('token_count', 0),
+                    "contextual": True
+                }
             )
+            points.append(point)
+        
+        # Create collection and upsert with optimized settings
+        try:
+            # Use the collection name directly if it already ends with "_contextual"
+            collection_name = self.collection
+            if not self.collection.endswith("_contextual"):
+                collection_name = f"{self.collection}_contextual"
+            
+            if not self.qdrant.collection_exists(collection_name):
+                print(f"🔄 Creating collection: {collection_name}")
+                vector_size = len(embeddings[0]) if embeddings else 768
+                
+                self.qdrant.create_collection(
+                    collection_name=collection_name,
+                    vectors_config=VectorParams(
+                        size=vector_size,
+                        distance=Distance.COSINE
+                    )
+                )
+                print(f"✅ Created collection: {collection_name}")
+            
+            # Upsert in smaller batches for better performance
+            batch_size = 1000
+            for i in range(0, len(points), batch_size):
+                batch_points = points[i:i + batch_size]
+                self.qdrant.upsert(
+                    collection_name=collection_name,
+                    points=batch_points
+                )
+            
             print(f"✅ Stored {len(points)} embeddings in Qdrant")
         except Exception as e:
             print(f"❌ Error storing embeddings: {e}")
     
-    def vector_retrieval(self, query: str, top_k: int = 150) -> List[int]:
-        """Perform vector search and return chunk indices"""
+    def vector_retrieval(self, query: str, top_k: int = 50) -> List[str]:
+        """Optimized vector search with reduced top_k"""
         try:
             # Encode query
             query_vector = self.embedding_model.encode([query], convert_to_numpy=True, normalize_embeddings=True)[0]
             
-            # Search Qdrant
+            # Search Qdrant with reduced limit
+            # Use the collection name directly if it already ends with "_contextual"
+            search_collection = self.collection
+            if not self.collection.endswith("_contextual"):
+                search_collection = f"{self.collection}_contextual"
+            
             results = self.qdrant.search(
-                collection_name=f"{self.collection}_contextual",
+                collection_name=search_collection,
                 query_vector=query_vector.tolist(),
                 limit=top_k,
                 with_payload=True
             )
             
-            # Extract chunk indices
-            chunk_indices = []
-            for hit in results:
-                chunk_indices.append(hit.id)
-            
-            return chunk_indices
+            # Extract chunk IDs (not indices!)
+            chunk_ids = [str(hit.id) for hit in results]
+            return chunk_ids
             
         except Exception as e:
             print(f"❌ Vector retrieval failed: {e}")
             return []
     
-    def bm25_retrieval(self, query: str, k: int = 150) -> List[int]:
-        """Perform BM25 search and return chunk indices"""
+    def bm25_retrieval(self, query: str, k: int = 50) -> List[str]:
+        """BM25 search returning chunk IDs"""
         if not self.bm25_index:
             print("⚠️ BM25 index not built")
             return []
         
         try:
-            # Tokenize query
             query_tokens = self._tokenize(query)
-            
-            # Get BM25 scores
             scores = self.bm25_index.get_scores(query_tokens)
-            
-            # Get top-k indices
             top_indices = np.argsort(scores)[::-1][:k]
             
-            return top_indices.tolist()
+            # Convert indices to chunk IDs
+            chunk_ids = list(self.id_to_contextual_chunk.keys())
+            return [chunk_ids[i] for i in top_indices if i < len(chunk_ids)]
             
         except Exception as e:
             print(f"❌ BM25 retrieval failed: {e}")
             return []
     
-    def reciprocal_rank_fusion(self, *ranked_lists: List[int], k: int = 60) -> Tuple[List[Tuple[int, float]], List[int]]:
-        """Fuse ranks from multiple IR systems using Reciprocal Rank Fusion"""
+    def reciprocal_rank_fusion(self, *ranked_lists: List[str], k: int = 60) -> Tuple[List[Tuple[str, float]], List[str]]:
+        """Optimized RRF with reduced k value"""
         rrf_map = defaultdict(float)
         
-        # Calculate RRF score for each result in each list
         for rank_list in ranked_lists:
             for rank, item in enumerate(rank_list, 1):
                 rrf_map[item] += 1 / (rank + k)
         
-        # Sort items based on their RRF scores in descending order
         sorted_items = sorted(rrf_map.items(), key=lambda x: x[1], reverse=True)
-        
-        # Return tuple of list of sorted documents by score and sorted documents
         return sorted_items, [item for item, score in sorted_items]
     
-    def rerank_results(self, query: str, chunk_indices: List[int], top_n: int = 20) -> List[int]:
-        """Rerank results using cross-encoder model"""
-        if not chunk_indices:
-            return []
+    def retrieve_and_rank_fast(self, query: str, 
+                              vector_k: int = 50, 
+                              bm25_k: int = 50, 
+                              final_k: int = 15) -> List[Dict[str, Any]]:
+        """Optimized retrieval pipeline with reduced parameters"""
+        print(f"🔍 Fast Contextual RAG retrieval for: '{query}'")
         
-        try:
-            # Get chunks for reranking (limit to avoid memory issues)
-            rerank_limit = min(150, len(chunk_indices))
-            indices_to_rerank = chunk_indices[:rerank_limit]
-            
-            # Check if we have contextual chunks loaded
-            if not self.contextual_chunks:
-                print("⚠️ No contextual chunks loaded, using vector search results as-is")
-                return indices_to_rerank[:top_n]
-            
-            # Get chunks for reranking
-            chunks_to_rerank = []
-            valid_indices = []
-            for idx in indices_to_rerank:
-                if idx < len(self.contextual_chunks):
-                    chunks_to_rerank.append(self.contextual_chunks[idx])
-                    valid_indices.append(idx)
-                else:
-                    print(f"⚠️ Skipping invalid chunk index: {idx}")
-            
-            if not chunks_to_rerank:
-                print("⚠️ No valid chunks found for reranking")
-                return indices_to_rerank[:top_n]
-            
-            # Use simple similarity-based reranking for now
-            # In production, you would use a proper cross-encoder model
-            query_vector = self.embedding_model.encode([query], convert_to_numpy=True, normalize_embeddings=True)[0]
-            
-            rerank_scores = []
-            for chunk_text in chunks_to_rerank:
-                chunk_vector = self.embedding_model.encode([chunk_text], convert_to_numpy=True, normalize_embeddings=True)[0]
-                similarity = np.dot(query_vector, chunk_vector)
-                rerank_scores.append(similarity)
-            
-            # Get top-n indices from rerank scores
-            top_indices = np.argsort(rerank_scores)[::-1][:top_n]
-            
-            # Map back to original chunk indices
-            reranked_indices = [valid_indices[i] for i in top_indices if i < len(valid_indices)]
-            
-            return reranked_indices
-            
-        except Exception as e:
-            print(f"❌ Reranking failed: {e}")
-            return chunk_indices[:top_n]
-    
-    def retrieve_and_rank(self, query: str, 
-                         vector_k: int = 150, 
-                         bm25_k: int = 150, 
-                         final_k: int = 20) -> List[Dict[str, Any]]:
-        """Main retrieval pipeline: hybrid search + RRF + reranking"""
-        print(f"🔍 Contextual RAG retrieval for: '{query}'")
-        
-        # Step 1: Perform vector and BM25 retrieval
+        # Step 1: Perform vector and BM25 retrieval with reduced limits
         vector_results = self.vector_retrieval(query, top_k=vector_k)
         bm25_results = self.bm25_retrieval(query, k=bm25_k)
         
         print(f"📊 Vector results: {len(vector_results)}, BM25 results: {len(bm25_results)}")
         
-        # Step 2: Combine using Reciprocal Rank Fusion
+        # Step 2: Combine using RRF
         if vector_results and bm25_results:
             _, hybrid_results = self.reciprocal_rank_fusion(vector_results, bm25_results)
         elif vector_results:
@@ -625,89 +682,83 @@ Focus on the main legal issues, parties, and key points."""
         
         print(f"🔄 Hybrid results: {len(hybrid_results)} chunks")
         
-        # Step 3: Rerank to get top results
-        reranked_indices = self.rerank_results(query, hybrid_results, top_n=final_k)
+        # Step 3: Return top results directly (skip expensive reranking)
+        final_results = hybrid_results[:final_k]
+        print(f"✅ Final results: {len(final_results)} chunks")
         
-        print(f"✅ Final results: {len(reranked_indices)} chunks")
-        
-        # Step 4: Return formatted results
+        # Step 4: Return formatted results using ID-based lookup (CRITICAL FIX)
         results = []
-        for idx in reranked_indices:
-            # Check if we have contextual chunks loaded
-            if self.contextual_chunks and idx < len(self.contextual_chunks) and idx < len(self.chunk_metadata):
-                # Use contextual chunks
-                metadata = self.chunk_metadata[idx].get('metadata', {})
+        for chunk_id in final_results:
+            # Use ID-based lookup instead of index arithmetic
+            if chunk_id in self.id_to_contextual_chunk and chunk_id in self.id_to_metadata:
+                contextual_text = self.id_to_contextual_chunk[chunk_id]
+                metadata = self.id_to_metadata[chunk_id]
+                
                 result = {
-                    'content': self.contextual_chunks[idx],
-                    'original_content': self.chunk_metadata[idx].get('content', ''),
-                    'metadata': metadata,
-                    'section': self.chunk_metadata[idx].get('section', ''),
-                    'section_type': self.chunk_metadata[idx].get('section_type', 'general'),
-                    'chunk_type': self.chunk_metadata[idx].get('chunk_type', 'content'),
-                    'token_count': self.chunk_metadata[idx].get('token_count', 0),
+                    'content': contextual_text,
+                    'original_content': metadata.get('content', ''),
+                    'metadata': metadata.get('metadata', {}),
+                    'section': metadata.get('section', ''),
+                    'section_type': metadata.get('section_type', 'general'),
+                    'chunk_type': metadata.get('chunk_type', 'content'),
+                    'token_count': metadata.get('token_count', 0),
                     'contextual': True,
-                    'score': 1.0,  # RRF doesn't provide individual scores
-                    # Add title fields for proper display
-                    'title': metadata.get('title', ''),
-                    'case_title': metadata.get('title', ''),
-                    'gr_number': metadata.get('gr_number', ''),
-                    'special_number': metadata.get('special_number', '')
+                    'score': 1.0,
+                    'title': metadata.get('metadata', {}).get('title', ''),
+                    'case_title': metadata.get('metadata', {}).get('title', ''),
+                    'gr_number': metadata.get('metadata', {}).get('gr_number', ''),
+                    'special_number': metadata.get('metadata', {}).get('special_number', ''),
+                    'chunk_id': chunk_id  # Include the stable ID for debugging
                 }
                 results.append(result)
             else:
-                # Fallback: Get result from Qdrant directly
-                try:
-                    contextual_collection = f"{self.collection}_contextual"
-                    point = self.qdrant.retrieve(
-                        collection_name=contextual_collection,
-                        ids=[idx],
-                        with_payload=True
-                    )
-                    
-                    if point and len(point) > 0:
-                        payload = point[0].payload
-                        result = {
-                            'content': payload.get('content', ''),
-                            'original_content': payload.get('original_content', ''),
-                            'metadata': {
-                                'gr_number': payload.get('gr_number', ''),
-                                'special_number': payload.get('special_number', ''),
-                                'title': payload.get('title', ''),
-                                'ponente': payload.get('ponente', ''),
-                                'case_type': payload.get('case_type', ''),
-                                'date': payload.get('date', '')
-                            },
-                            'section': payload.get('section', ''),
-                            'section_type': payload.get('section_type', 'general'),
-                            'chunk_type': payload.get('chunk_type', 'content'),
-                            'token_count': payload.get('token_count', 0),
-                            'contextual': True,
-                            'score': 1.0,
-                            # Add title fields for proper display
-                            'title': payload.get('title', ''),
-                            'case_title': payload.get('title', ''),
-                            'gr_number': payload.get('gr_number', ''),
-                            'special_number': payload.get('special_number', '')
-                        }
-                        results.append(result)
-                    else:
-                        print(f"⚠️ No data found for chunk index {idx}")
-                        
-                except Exception as e:
-                    print(f"⚠️ Failed to retrieve chunk {idx} from Qdrant: {e}")
+                print(f"⚠️ Chunk ID {chunk_id} not found in ID-based maps")
         
         return results
     
     def get_index_stats(self) -> Dict[str, Any]:
         """Get statistics about the built indexes"""
+        # Use the collection name directly if it already ends with "_contextual"
+        vector_collection = self.collection
+        if not self.collection.endswith("_contextual"):
+            vector_collection = f"{self.collection}_contextual"
+            
         return {
-            "total_chunks": len(self.contextual_chunks),
+            "total_chunks": len(self.id_to_contextual_chunk),
+            "cached_contexts": len(self.contextual_cache),
             "bm25_available": self.bm25_index is not None,
-            "vector_collection": f"{self.collection}_contextual",
+            "vector_collection": vector_collection,
             "chunk_size": self.chunk_size,
             "overlap_ratio": self.overlap_ratio,
-            "context_model": self.context_model
+            "cache_file": self.cache_file,
+            "id_based_storage": True,  # Indicate that ID-based storage is being used
+            "unique_ids": len(self.id_to_contextual_chunk)
         }
+
+
+    def _generate_stable_id(self, metadata: Dict[str, Any], chunk_text: str) -> str:
+        """Generate a stable, content-derived ID for a chunk"""
+        gr = metadata.get('metadata', {}).get('gr_number', '')
+        special = metadata.get('metadata', {}).get('special_number', '')
+        section = metadata.get('section', '')
+        section_type = metadata.get('section_type', '')
+        char_start = str(metadata.get('char_start', 0))
+        
+        # Create a stable identifier based on content and metadata
+        content_hash = hashlib.sha256(chunk_text.encode('utf-8')).hexdigest()[:16]
+        stable_key = f"{gr}|{special}|{section}|{section_type}|{char_start}|{content_hash}"
+        
+        return hashlib.sha256(stable_key.encode('utf-8')).hexdigest()
+    
+    def _rebuild_legacy_lists(self):
+        """Rebuild legacy lists from ID-based maps for backward compatibility"""
+        self.contextual_chunks = list(self.id_to_contextual_chunk.values())
+        self.chunk_metadata = list(self.id_to_metadata.values())
+        
+        # Rebuild BM25 index from contextual chunks
+        if self.contextual_chunks:
+            tokenized_chunks = [self._tokenize(chunk) for chunk in self.contextual_chunks]
+            self.bm25_index = BM25Okapi(tokenized_chunks)
 
 
 def create_contextual_rag_system(collection: str = "jurisprudence") -> ContextualRAG:

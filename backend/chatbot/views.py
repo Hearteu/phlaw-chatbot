@@ -9,8 +9,7 @@ from rest_framework.views import APIView
 
 from .chat_engine import chat_with_law_bot
 from .debug_logger import debug_capture
-from .model_cache import (clear_llm_cache, get_cached_llm, get_memory_stats,
-                          reload_llm)
+from .model_cache import clear_llm_cache, get_memory_stats, reload_llm
 from .rating_analyzer import RatingAnalyzer
 from .retriever import LegalRetriever
 from .serializers import ChatRequestSerializer, RatingSerializer
@@ -32,11 +31,8 @@ class ChatView(APIView):
         query = serializer.validated_data["query"]
         history = serializer.validated_data.get("history") or []
         
-        # Use centralized LLM model cache
-        try:
-            get_cached_llm()
-        except Exception as e:
-            logger.warning(f"LLM loading failed: {e}")
+        # Note: Local GGUF LLM is NOT loaded here - chatbot uses TogetherAI for generation
+        # The GGUF model is only used for contextual chunking (lazy-loaded when needed)
         
         try:
             # Use proper logging-based debug capture
