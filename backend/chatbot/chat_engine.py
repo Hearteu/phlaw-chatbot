@@ -1333,6 +1333,123 @@ def _calculate_relevance_score(candidate_doc: Dict, main_doc: Dict, legal_concep
     
     return min(1.0, score)  # Cap at 1.0
 
+def _generate_case_listing_summary(full_case: Dict) -> str:
+    """Generate a brief 3-5 sentence summary for case listings"""
+    if not TOGETHERAI_AVAILABLE:
+        return _generate_simple_case_summary(full_case)
+    
+    try:
+        # Extract key information from the case
+        case_title = full_case.get("case_title", "Unknown Case")
+        gr_number = full_case.get("gr_number", "")
+        ponente = full_case.get("ponente", "")
+        date = full_case.get("promulgation_date", "")
+        
+        # Get case content sections
+        facts = full_case.get("facts", "")
+        issues = full_case.get("issues", "")
+        ruling = full_case.get("ruling", "")
+        disposition = full_case.get("disposition", "")
+        
+        # Combine relevant content (limit to avoid token limits)
+        content_parts = []
+        if facts and len(facts) > 100:
+            content_parts.append(f"Facts: {facts[:500]}...")
+        if issues and len(issues) > 50:
+            content_parts.append(f"Issues: {issues[:300]}...")
+        if ruling and len(ruling) > 100:
+            content_parts.append(f"Ruling: {ruling[:500]}...")
+        elif disposition and len(disposition) > 100:
+            content_parts.append(f"Disposition: {disposition[:500]}...")
+        
+        if not content_parts:
+            return _generate_simple_case_summary(full_case)
+        
+        case_content = "\n\n".join(content_parts)
+        
+        summary_prompt = f"""You are a Philippine Law expert. Generate a brief 3-5 sentence summary of this Supreme Court case for a case listing.
+
+Case Information:
+- Title: {case_title}
+- G.R. Number: {gr_number}
+- Ponente: {ponente}
+- Date: {date}
+
+Case Content:
+{case_content}
+
+Task: Write a concise 3-5 sentence summary that:
+1. Briefly describes what the case is about
+2. Mentions the key legal issue or controversy
+3. States the main ruling or outcome
+4. Keep it informative but concise for a case listing
+
+Format: Write only the summary sentences, no additional text or formatting."""
+
+        response = generate_messages_with_togetherai(
+            messages=[{"role": "user", "content": summary_prompt}],
+            max_tokens=200,
+            temperature=0.3
+        )
+        
+        if response and len(response.strip()) > 20:
+            return response.strip()
+        else:
+            return _generate_simple_case_summary(full_case)
+            
+    except Exception as e:
+        print(f"⚠️ Failed to generate AI case summary: {e}")
+        return _generate_simple_case_summary(full_case)
+
+def _generate_simple_case_summary(full_case: Dict) -> str:
+    """Generate a simple 3-5 sentence summary from available case data"""
+    case_title = full_case.get("case_title", "")
+    facts = full_case.get("facts", "")
+    issues = full_case.get("issues", "")
+    ruling = full_case.get("ruling", "")
+    disposition = full_case.get("disposition", "")
+    ponente = full_case.get("ponente", "")
+    
+    summary_parts = []
+    
+    # Sentence 1: What the case is about (from facts)
+    if facts:
+        facts_clean = facts.replace('\n', ' ').strip()
+        # Try to get first sentence or first 150 chars
+        first_sentence = facts_clean.split('.')[0] if '.' in facts_clean[:150] else facts_clean[:150]
+        if len(first_sentence) > 30:
+            summary_parts.append(f"{first_sentence.strip()}.")
+    
+    # Sentence 2: Key legal issue (from issues)
+    if issues:
+        issues_clean = issues.replace('\n', ' ').strip()
+        first_issue = issues_clean.split('.')[0] if '.' in issues_clean[:150] else issues_clean[:150]
+        if len(first_issue) > 30:
+            summary_parts.append(f"The key issue is {first_issue.strip().lower()}.")
+    
+    # Sentence 3-4: The Court's ruling (from ruling or disposition)
+    ruling_text = ruling or disposition
+    if ruling_text:
+        ruling_clean = ruling_text.replace('\n', ' ').strip()
+        # Get first 1-2 sentences from ruling
+        sentences = [s.strip() + '.' for s in ruling_clean.split('.') if len(s.strip()) > 30][:2]
+        summary_parts.extend(sentences)
+    
+    # Add ponente if available and summary is not too long
+    if ponente and len(summary_parts) < 4:
+        summary_parts.append(f"The decision was penned by Justice {ponente}.")
+    
+    # Fallback to case title if no other content
+    if not summary_parts and case_title:
+        summary_parts.append(f"This case deals with {case_title}.")
+        summary_parts.append("Click the case number for more details.")
+    
+    if summary_parts:
+        # Return 3-5 sentences
+        return " ".join(summary_parts[:5])
+    else:
+        return "Case details available upon request. Click the case number to view the full digest."
+
 def _generate_case_summary_from_jsonl(full_case_content: Dict, query: str, retriever, history: List[Dict] = None) -> str:
     """Generate case summary directly from JSONL content using LLM"""
     print("🔍 Generating case summary from JSONL content using LLM...")
@@ -1809,45 +1926,62 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
                         case_type = (d.get("case_subtype") or d.get("metadata", {}).get("case_subtype") or "").strip()
                         suffix = f" — {case_type}" if case_type else ""
 
-                        # Lazy JSONL lookup to improve missing/generic titles
-                        if (title in {"Untitled case", ""} or title.startswith("Case (")) and (gr_raw or special_raw):
+                        # Load full case content for summary generation
+                        case_summary = ""
+                        if gr_raw or special_raw:
                             try:
                                 from .retriever import load_case_from_jsonl
                                 lookup_id = str(gr_raw) if gr_raw else str(special_raw)
                                 full_case = load_case_from_jsonl(lookup_id)
+                                
                                 if full_case and isinstance(full_case, dict):
-                                    t2 = full_case.get("case_title") or full_case.get("title")
-                                    if t2 and isinstance(t2, str) and len(t2.strip()) >= 10:
-                                        title = t2.strip()[:120]
-                            except Exception as _e:
-                                pass
+                                    # Improve title if needed
+                                    if title in {"Untitled case", ""} or title.startswith("Case ("):
+                                        t2 = full_case.get("case_title") or full_case.get("title")
+                                        if t2 and isinstance(t2, str) and len(t2.strip()) >= 10:
+                                            title = t2.strip()[:120]
+                                    
+                                    # Generate case summary
+                                    case_summary = _generate_case_listing_summary(full_case)
+                            except Exception as e:
+                                print(f"⚠️ Failed to load case summary for {lookup_id}: {e}")
 
-                        # Avoid duplicating case number if already present in title
-                        if case_number != "Unknown" and case_number in title:
-                            items.append(f"{i}. {title}{suffix}")
-                        else:
-                            # Format the case number with clickable links
-                            if case_number != "Unknown":
-                                # Extract just the number part for the link
-                                if "G.R. No." in case_number:
-                                    gr_match = re.search(r'G\.R\.\s+No\.\s+([0-9\-]+)', case_number)
-                                    if gr_match:
-                                        gr_num = gr_match.group(1)
-                                        formatted_case_number = f"**[{case_number}](gr:{gr_num})**"
-                                    else:
-                                        formatted_case_number = f"**({case_number})**"
-                                elif "A.M. No." in case_number:
-                                    am_match = re.search(r'A\.M\.\s+No\.\s+([A-Z0-9\-]+)', case_number)
-                                    if am_match:
-                                        am_num = am_match.group(1)
-                                        formatted_case_number = f"**[{case_number}](am:{am_num})**"
-                                    else:
-                                        formatted_case_number = f"**({case_number})**"
+                        # Format the case number with clickable links
+                        formatted_case_number = ""
+                        if case_number != "Unknown":
+                            # Extract just the number part for the link
+                            if "G.R. No." in case_number:
+                                gr_match = re.search(r'G\.R\.\s+No\.\s+([0-9\-]+)', case_number)
+                                if gr_match:
+                                    gr_num = gr_match.group(1)
+                                    formatted_case_number = f"**[{case_number}](gr:{gr_num})**"
+                                else:
+                                    formatted_case_number = f"**({case_number})**"
+                            elif "A.M. No." in case_number:
+                                am_match = re.search(r'A\.M\.\s+No\.\s+([A-Z0-9\-]+)', case_number)
+                                if am_match:
+                                    am_num = am_match.group(1)
+                                    formatted_case_number = f"**[{case_number}](am:{am_num})**"
                                 else:
                                     formatted_case_number = f"**({case_number})**"
                             else:
-                                formatted_case_number = f"({case_number})"
-                            items.append(f"{i}. {title} {formatted_case_number}{suffix}")
+                                formatted_case_number = f"**({case_number})**"
+                        else:
+                            formatted_case_number = f"({case_number})"
+
+                        # Build the case listing item
+                        if case_number != "Unknown" and case_number in title:
+                            # Case number already in title
+                            item = f"{i}. **{title}**{suffix}"
+                        else:
+                            # Separate case number
+                            item = f"{i}. **{title}** {formatted_case_number}{suffix}"
+                        
+                        # Add case summary if available
+                        if case_summary:
+                            item += f"\n{case_summary}"
+                        
+                        items.append(item)
                     result = "Here are the possible cases:\n" + "\n".join(items)
                     
                     print(f"🎯 Returning case list with {len(items)} items")
