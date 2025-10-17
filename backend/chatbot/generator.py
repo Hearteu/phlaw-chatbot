@@ -72,22 +72,6 @@ def generate_response_from_messages(messages: List[Dict[str, str]], _retry_count
         print(f"❌ Error in TogetherAI generation: {e}")
         return "I apologize, but I encountered a technical error. Please try again later."
 
-def _messages_to_prompt(messages: List[Dict[str, str]]) -> str:
-    """Convert message history to prompt format"""
-    prompt_parts = []
-    
-    for message in messages:
-        role = message.get("role", "user")
-        content = message.get("content", "")
-        
-        if role == "system":
-            prompt_parts.append(f"System: {content}")
-        elif role == "user":
-            prompt_parts.append(f"User: {content}")
-        elif role == "assistant":
-            prompt_parts.append(f"Assistant: {content}")
-    
-    return "\n\n".join(prompt_parts)
 
 def generate_legal_response(prompt: str, context: str = "", is_case_digest: bool = False) -> str:
     """Generate legal response with optimized prompt construction for simplified two-path logic"""

@@ -286,6 +286,49 @@ def clear_bm25_cache():
     print("ℹ️ BM25 cache clear skipped (disabled)")
 
 # =============================================================================
+# LEGAL DOCUMENT CLASSIFIER CACHING
+# =============================================================================
+_LEGAL_CLASSIFIER = None
+_LEGAL_CLASSIFIER_LOADED = False
+
+def get_cached_legal_classifier():
+    """Get cached Saibo legal document classifier with lazy loading"""
+    global _LEGAL_CLASSIFIER, _LEGAL_CLASSIFIER_LOADED
+    
+    if _LEGAL_CLASSIFIER is None and not _LEGAL_CLASSIFIER_LOADED:
+        try:
+            from .legal_document_classifier import \
+                get_legal_document_classifier
+            print("Loading Saibo legal RoBERTa document classifier...")
+            start_time = time.time()
+            
+            _LEGAL_CLASSIFIER = get_legal_document_classifier()
+            
+            load_time = time.time() - start_time
+            print(f"[SUCCESS] Legal document classifier loaded in {load_time:.2f}s")
+            _LEGAL_CLASSIFIER_LOADED = True
+        except Exception as e:
+            print(f"Failed to load legal document classifier: {e}")
+            _LEGAL_CLASSIFIER = None
+            _LEGAL_CLASSIFIER_LOADED = True  # Mark as attempted to avoid retries
+    
+    return _LEGAL_CLASSIFIER
+
+def clear_legal_classifier_cache():
+    """Clear the legal document classifier cache to free memory"""
+    global _LEGAL_CLASSIFIER, _LEGAL_CLASSIFIER_LOADED
+    if _LEGAL_CLASSIFIER is not None:
+        try:
+            # Try to free the classifier from memory
+            del _LEGAL_CLASSIFIER
+        except Exception as e:
+            # Ignore errors during cleanup
+            pass
+    _LEGAL_CLASSIFIER = None
+    _LEGAL_CLASSIFIER_LOADED = False
+    print("[CLEARED] Legal document classifier cache cleared")
+
+# =============================================================================
 # SENTENCE TRANSFORMER CACHING
 # =============================================================================
 def get_cached_embedding_model() -> Optional[SentenceTransformer]:
@@ -335,6 +378,7 @@ def clear_all_model_caches():
     print("[CLEARING] All model caches...")
     clear_llm_cache()
     clear_embedding_model_cache()
+    clear_legal_classifier_cache()
     print("[SUCCESS] All model caches cleared")
 
 def get_cache_status() -> dict:
@@ -344,6 +388,8 @@ def get_cache_status() -> dict:
         "llm_marked_loaded": _LLM_LOADED,
         "embedding_loaded": _EMBEDDING_MODEL is not None,
         "embedding_marked_loaded": _EMBEDDING_MODEL_LOADED,
+        "legal_classifier_loaded": _LEGAL_CLASSIFIER is not None,
+        "legal_classifier_marked_loaded": _LEGAL_CLASSIFIER_LOADED,
     }
 
 def print_cache_status():

@@ -143,7 +143,6 @@ def create_points_from_chunks(chunks: List[Dict[str, Any]]) -> List[PointStruct]
         payload = {
             # Content fields
             'content': chunk['content'],
-            'content_preview': chunk['content_preview'],
             'section': chunk['section'],
             'section_type': chunk['section_type'],
             'chunk_type': chunk['chunk_type'],
@@ -157,7 +156,6 @@ def create_points_from_chunks(chunks: List[Dict[str, Any]]) -> List[PointStruct]
             'title': chunk['metadata']['title'],
             'date': chunk['metadata']['date'],
             'ponente': chunk['metadata']['ponente'],
-            'case_type': chunk['metadata']['case_type'],
             'division': chunk['metadata']['division'],
             'en_banc': chunk['metadata']['en_banc'],
             'source_url': chunk['metadata']['source_url'],
@@ -169,8 +167,17 @@ def create_points_from_chunks(chunks: List[Dict[str, Any]]) -> List[PointStruct]
             'total_chunks': chunk.get('total_chunks', 1),
             
             # Processing metadata
-            'chunk_version': 'v1.0',
+            'chunk_version': 'v2.0',
             'processed_timestamp': int(time.time()),
+            
+            # Legal classification metadata (from Saibo classifier)
+            'classification_method': chunk['metadata'].get('classification_method', 'unknown'),
+            'classification_confidence': chunk['metadata'].get('classification_confidence', 0.0),
+            'case_type_classification': chunk['metadata'].get('case_type', {}),
+            'legal_area_classification': chunk['metadata'].get('legal_area', {}),
+            'document_section_classification': chunk['metadata'].get('document_section', {}),
+            'complexity_level_classification': chunk['metadata'].get('complexity_level', {}),
+            'jurisdiction_level_classification': chunk['metadata'].get('jurisdiction_level', {}),
         }
         
         point = PointStruct(
@@ -234,6 +241,30 @@ def process_jsonl():
             if not clean_text or len(clean_text) < 500:  # Minimum content threshold
                 continue
 
+            # Classify case data using Saibo legal document classifier
+            try:
+                from .legal_document_classifier import classify_legal_case
+                classification_result = classify_legal_case(rec.copy())
+                
+                # Add classification results to case metadata
+                if classification_result.get('success', False):
+                    rec['legal_classification'] = classification_result
+                    rec['case_type'] = classification_result.get('predictions', {}).get('case_type', {})
+                    rec['legal_area'] = classification_result.get('predictions', {}).get('legal_area', {})
+                    rec['document_section'] = classification_result.get('predictions', {}).get('document_section', {})
+                    rec['complexity_level'] = classification_result.get('predictions', {}).get('complexity_level', {})
+                    rec['jurisdiction_level'] = classification_result.get('predictions', {}).get('jurisdiction_level', {})
+                    rec['classification_method'] = classification_result.get('method', 'unknown')
+                    rec['classification_confidence'] = classification_result.get('confidence', 0.0)
+                    
+                    print(f"Classified case {rec.get('gr_number', 'unknown')}: {classification_result.get('method', 'unknown')} method, confidence: {classification_result.get('confidence', 0.0):.3f}")
+                else:
+                    print(f"Classification failed for case {rec.get('gr_number', 'unknown')}")
+                    
+            except Exception as e:
+                print(f"Saibo classification failed for case {rec.get('gr_number', 'unknown')}: {e}")
+                # Continue with original case data
+            
             # Apply structure-aware chunking
             chunks = chunker.chunk_case(rec)
             if not chunks:
@@ -308,7 +339,7 @@ def test_chunking_sample():
         
         for i, chunk in enumerate(chunks[:3]):
             print(f"   {i+1}. [{chunk['section']}] {chunk['token_count']} tokens")
-            print(f"      {chunk['content_preview'][:100]}...")
+            print(f"      {chunk['content'][:100]}...")
         
         break
 

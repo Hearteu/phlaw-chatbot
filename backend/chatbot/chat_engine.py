@@ -977,44 +977,25 @@ Write exactly 5 complete sentences that tell the story of this case. Start with 
 
 
 def _extract_enhanced_case_type(main_doc: Dict) -> str:
-    """Extract case type with enhanced legal categorization"""
-    # Try metadata first
-    case_type = (main_doc.get("metadata", {}).get("case_type", "") or 
-                main_doc.get("case_type", "") or 
-                main_doc.get("metadata", {}).get("type", ""))
+    """Extract case type using Saibo classification metadata"""
+    # Get Saibo classification metadata
+    case_type_classification = (main_doc.get("metadata", {}).get("case_type_classification", {}) or 
+                               main_doc.get("case_type_classification", {}))
     
-    if case_type and case_type != "Not available":
-        return case_type.lower()
+    if case_type_classification and isinstance(case_type_classification, dict):
+        # Get the highest confidence case type from Saibo classification
+        if case_type_classification:
+            best_case_type = max(case_type_classification.items(), key=lambda x: x[1])
+            if best_case_type[1] > 0.5:  # Confidence threshold
+                print(f"Using Saibo classification: {best_case_type[0]} (confidence: {best_case_type[1]:.3f})")
+                return best_case_type[0].lower()
+            else:
+                print(f"Saibo classification confidence too low ({best_case_type[1]:.3f}), using default")
+                return "civil"
     
-    # Enhanced content-based detection
-    content = (main_doc.get("content", "") or 
-              main_doc.get("text", "") or "").lower()
-    
-    # Legal area keywords with weights
-    legal_areas = {
-        'criminal': ['criminal', 'penal', 'theft', 'robbery', 'murder', 'homicide', 'assault', 'fraud', 'estafa', 'violation', 'offense', 'crime', 'penalty', 'imprisonment'],
-        'contract': ['contract', 'agreement', 'obligation', 'breach', 'performance', 'consideration', 'parties', 'terms', 'conditions', 'stipulation', 'covenant'],
-        'property': ['property', 'real estate', 'land', 'title', 'ownership', 'possession', 'transfer', 'sale', 'purchase', 'mortgage', 'lease', 'tenancy'],
-        'family': ['marriage', 'divorce', 'annulment', 'custody', 'support', 'alimony', 'adoption', 'inheritance', 'succession', 'spouse', 'children'],
-        'labor': ['labor', 'employment', 'wage', 'salary', 'termination', 'dismissal', 'benefits', 'union', 'strike', 'collective bargaining', 'workplace'],
-        'administrative': ['administrative', 'government', 'public', 'official', 'discipline', 'misconduct', 'duty', 'authority', 'jurisdiction', 'agency'],
-        'constitutional': ['constitutional', 'rights', 'freedom', 'liberty', 'due process', 'equal protection', 'search', 'seizure', 'speech', 'religion'],
-        'commercial': ['commercial', 'business', 'corporation', 'partnership', 'company', 'trade', 'commerce', 'merchant', 'sale', 'goods'],
-        'tort': ['tort', 'negligence', 'damages', 'injury', 'liability', 'compensation', 'tortious', 'wrongful', 'harm', 'loss']
-    }
-    
-    # Score each legal area
-    area_scores = {}
-    for area, keywords in legal_areas.items():
-        score = sum(1 for keyword in keywords if keyword in content)
-        if score > 0:
-            area_scores[area] = score
-    
-    # Return highest scoring area or default to civil
-    if area_scores:
-        return max(area_scores.items(), key=lambda x: x[1])[0]
-    
-    return "civil"  # Default fallback
+    # If no Saibo classification available, default to civil
+    print("No Saibo classification metadata found, using default")
+    return "civil"
 
 
 def _extract_legal_concepts(main_doc: Dict) -> List[str]:
