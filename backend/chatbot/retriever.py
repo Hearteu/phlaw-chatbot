@@ -108,7 +108,7 @@ def load_case_from_jsonl(case_id: str, jsonl_path: str = DATA_FILE) -> Optional[
 class LegalRetriever:
     """Simplified legal document retriever with structure-aware chunking support"""
     
-    def __init__(self, collection: str = "jurisprudence_contextual", use_contextual_rag: bool = True):
+    def __init__(self, collection: str = "jurisprudence", use_contextual_rag: bool = True):
         self.collection = collection
         self.model = _get_cached_embedding_model()
         self.qdrant = _get_cached_qdrant_client()
@@ -119,17 +119,10 @@ class LegalRetriever:
         # Check if the requested collection exists and has sufficient data
         collection_has_data = self._check_collection_availability(collection)
         
-        # If contextual collection is empty or doesn't exist, fall back to original
-        if collection == "jurisprudence_contextual" and not collection_has_data:
-            print(f"⚠️ {collection} is empty or doesn't exist, falling back to 'jurisprudence'")
-            fallback_collection = "jurisprudence"
-            if self.qdrant.collection_exists(fallback_collection):
-                self.collection = fallback_collection
-                collection = fallback_collection
-                print(f"✅ Using fallback collection: {fallback_collection}")
-            else:
-                print(f"❌ Both {self.collection} and {fallback_collection} are unavailable")
-                raise ValueError(f"Neither '{self.collection}' nor '{fallback_collection}' collections are available")
+        # Collection validation
+        if not collection_has_data:
+            print(f"⚠️ {collection} is empty or doesn't exist")
+            raise ValueError(f"Collection '{collection}' is not available")
         
         # Initialize Contextual RAG system - always required
         self.contextual_rag = None

@@ -341,22 +341,35 @@ def _extract_am_case_title(text: str) -> str | None:
         case_title = match.group(2).strip()
         return f"A.M. NO. {am_number} - {case_title}"
     
-    # Look for just RE: pattern in the first few lines
-    lines = text.split('\n')[:10]  # Check first 10 lines
+    # Enhanced RE: pattern detection for administrative cases
+    lines = text.split('\n')[:15]  # Check first 15 lines for better coverage
     for line in lines:
         line = line.strip()
-        if line.startswith('RE:') and 'VS.' in line.upper():
-            # Extract the full RE: title
-            re_match = re.match(r'^RE:\s*(.+?)(?:\s+RESOLUTION|\s+DECISION|\s+ORDER)?$', line, re.IGNORECASE)
+        if not line:
+            continue
+            
+        # Look for RE: pattern with various administrative case formats
+        if line.startswith('RE:'):
+            # Extract the full RE: title, but be more specific about stopping conditions
+            re_match = re.match(r'^RE:\s*(.+?)(?:\s+(?:RESOLUTION|DECISION|ORDER|OF\s+THE\s+COURT|JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER|\d{4}))?$', line, re.IGNORECASE)
             if re_match:
-                return f"RE: {re_match.group(1).strip()}"
+                title_part = re_match.group(1).strip()
+                # Validate it's not body text
+                if not any(indicator in title_part.lower() for indicator in BODY_TEXT_INDICATORS):
+                    return f"RE: {title_part}"
+        
+        # Look for administrative case patterns without RE: prefix
+        if 'COMPLAINANT' in line.upper() and 'VS.' in line.upper():
+            # This looks like an administrative case title
+            if not any(indicator in line.lower() for indicator in BODY_TEXT_INDICATORS):
+                return line
     
     return None
 
 def derive_case_title_from_text(text: str) -> str | None:
     if not text:
         return None
-    head = text[:2000]  # Increased window for long titles
+    head = text[:3000]  # Increased window for long titles
     
     # Priority 1: A.M. cases with RE: format (most specific)
     am_title = _extract_am_case_title(text)
@@ -1032,12 +1045,33 @@ def parse_case(text_base: str, url: str, year_hint: int | None = None, month_hin
         if not title or len(title) < 10:
             return False
         title_lower = title.lower()
+        
         # Check if it looks like body text
         if any(indicator in title_lower for indicator in BODY_TEXT_INDICATORS):
             return False
-        # Check if it's too long (likely body text)
-        if len(title) > 200:
+        
+        # Check for administrative case patterns (these are valid even if long)
+        admin_patterns = [
+            're:', 'a.m. no.', 'complaint', 'administrative matter',
+            'complainant', 'respondent', 'vs.', 'versus'
+        ]
+        is_admin_case = any(pattern in title_lower for pattern in admin_patterns)
+        
+        # For administrative cases, allow longer titles (up to 300 chars)
+        max_length = 300 if is_admin_case else 200
+        if len(title) > max_length:
             return False
+            
+        # Additional validation: reject titles that look like procedural text
+        procedural_indicators = [
+            'held in abeyance', 'payment of', 'retirement benefits',
+            'subject to whatever', 'penalties the court', 'may impose',
+            'relative to another', 'docketed as', 'resolution of',
+            'decision of', 'order of', 'the court hereby'
+        ]
+        if any(indicator in title_lower for indicator in procedural_indicators):
+            return False
+            
         return True
     
     # Try fallback options in order of preference
@@ -1046,10 +1080,31 @@ def parse_case(text_base: str, url: str, year_hint: int | None = None, month_hin
         fallback_title = title_guess if is_valid_title_candidate(title_guess or "") else None
     if not fallback_title:
         fallback_title = page_title if is_valid_title_candidate(page_title or "") else None
+    
+    # If still no valid title, try to construct one from available metadata
     if not fallback_title:
-        # Last resort: use URL fragment or generic title
-        url_fragment = url.rsplit('/', 1)[-1] if url else None
-        fallback_title = url_fragment if is_valid_title_candidate(url_fragment or "") else "Untitled Case"
+        title_parts = []
+        
+        # Try to build title from special number or GR number
+        if special_primary:
+            title_parts.append(special_primary)
+        elif gr_primary:
+            title_parts.append(f"G.R. No. {gr_primary}")
+            
+        # Add division info if available
+        if division:
+            title_parts.append(f"({division})")
+            
+        # Add case type if it's administrative
+        if classification.get('case_type') == 'administrative':
+            title_parts.append("Administrative Matter")
+        
+        if title_parts:
+            fallback_title = " ".join(title_parts)
+        else:
+            # Last resort: use URL fragment or generic title
+            url_fragment = url.rsplit('/', 1)[-1] if url else None
+            fallback_title = url_fragment if is_valid_title_candidate(url_fragment or "") else "Untitled Case"
 
     # Extract structured sections for chunking alignment
     sections = extract_sections_for_chunking(text)

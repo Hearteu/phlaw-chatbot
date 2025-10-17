@@ -24,7 +24,7 @@ class ContextualRAG:
     """Performance-optimized Contextual RAG with caching and parallel processing"""
     
     def __init__(self, 
-                 collection: str = "jurisprudence_contextual",
+                 collection: str = "jurisprudence",
                  chunk_size: int = 640,
                  overlap_ratio: float = 0.15,
                  cache_dir: str = "backend/data/contextual_cache"):
@@ -121,10 +121,8 @@ Explanation:"""
     def _load_existing_indexes(self) -> None:
         """Try to load existing contextual chunks from Qdrant collection"""
         try:
-            # Use the collection name directly if it already ends with "_contextual"
+            # Use the collection name directly (no "_contextual" suffix)
             contextual_collection = self.collection
-            if not self.collection.endswith("_contextual"):
-                contextual_collection = f"{self.collection}_contextual"
             if self.qdrant.collection_exists(contextual_collection):
                 collection_info = self.qdrant.get_collection(contextual_collection)
                 if collection_info.points_count > 0:
@@ -189,8 +187,7 @@ Explanation:"""
                 self.id_to_metadata[chunk_id] = metadata
                 self.id_to_payload[chunk_id] = payload
             
-            # Rebuild legacy lists for backward compatibility
-            self._rebuild_legacy_lists()
+            # Legacy lists will be populated as needed
             
             print(f"Loaded {len(self.id_to_contextual_chunk)} contextual chunks from Qdrant")
             
@@ -199,7 +196,7 @@ Explanation:"""
             self.id_to_contextual_chunk.clear()
             self.id_to_metadata.clear()
             self.id_to_payload.clear()
-            self._rebuild_legacy_lists()
+            # Legacy lists will be populated as needed
     
     def generate_contextual_chunks_fast(self, document: str, chunks: List[Dict[str, Any]]) -> List[str]:
         """Fast contextual chunk generation with caching and rule-based fallbacks"""
@@ -506,10 +503,8 @@ Explanation:"""
         
         # Create collection and upsert with optimized settings
         try:
-            # Use the collection name directly if it already ends with "_contextual"
+            # Use the collection name directly (no "_contextual" suffix)
             collection_name = self.collection
-            if not self.collection.endswith("_contextual"):
-                collection_name = f"{self.collection}_contextual"
             
             if not self.qdrant.collection_exists(collection_name):
                 print(f"🔄 Creating collection: {collection_name}")
@@ -569,10 +564,8 @@ Explanation:"""
         
         # Create collection and upsert with optimized settings
         try:
-            # Use the collection name directly if it already ends with "_contextual"
+            # Use the collection name directly (no "_contextual" suffix)
             collection_name = self.collection
-            if not self.collection.endswith("_contextual"):
-                collection_name = f"{self.collection}_contextual"
             
             if not self.qdrant.collection_exists(collection_name):
                 print(f"🔄 Creating collection: {collection_name}")
@@ -607,10 +600,8 @@ Explanation:"""
             query_vector = self.embedding_model.encode([query], convert_to_numpy=True, normalize_embeddings=True)[0]
             
             # Search Qdrant with reduced limit
-            # Use the collection name directly if it already ends with "_contextual"
+            # Use the collection name directly (no "_contextual" suffix)
             search_collection = self.collection
-            if not self.collection.endswith("_contextual"):
-                search_collection = f"{self.collection}_contextual"
             
             results = self.qdrant.search(
                 collection_name=search_collection,
@@ -718,10 +709,8 @@ Explanation:"""
     
     def get_index_stats(self) -> Dict[str, Any]:
         """Get statistics about the built indexes"""
-        # Use the collection name directly if it already ends with "_contextual"
+        # Use the collection name directly (no "_contextual" suffix)
         vector_collection = self.collection
-        if not self.collection.endswith("_contextual"):
-            vector_collection = f"{self.collection}_contextual"
             
         return {
             "total_chunks": len(self.id_to_contextual_chunk),

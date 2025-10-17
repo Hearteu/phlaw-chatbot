@@ -49,7 +49,7 @@ UPSERT_BATCH = int(os.getenv("UPSERT_BATCH", 1024))
 # -----------------------------
 # Initialize components
 # -----------------------------
-print(f"🔗 Connecting to Qdrant: {QDRANT_HOST}:{QDRANT_PORT}")
+print(f"Connecting to Qdrant: {QDRANT_HOST}:{QDRANT_PORT}")
 client = QdrantClient(
     host=QDRANT_HOST, port=QDRANT_PORT, grpc_port=6334, prefer_grpc=True, timeout=120.0
 )
@@ -59,10 +59,10 @@ if not client.collection_exists(QDRANT_COLLECTION):
         collection_name=QDRANT_COLLECTION,
         vectors_config=VectorParams(size=VECTOR_SIZE, distance=Distance.COSINE),
     )
-print(f"✅ Qdrant collection ready: {QDRANT_COLLECTION}")
+print(f"Qdrant collection ready: {QDRANT_COLLECTION}")
 
 # Load embedding model using centralized cache
-print(f"📥 Loading model: {EMBED_MODEL}")
+print(f"Loading model: {EMBED_MODEL}")
 try:
     from .model_cache import get_cached_embedding_model
 except ImportError:
@@ -123,7 +123,7 @@ def create_points_from_chunks(chunks: List[Dict[str, Any]]) -> List[PointStruct]
     texts = [chunk['content'] for chunk in chunks]
     
     # Encode all chunks in one batch
-    print(f"🔀 Encoding {len(texts)} chunks...")
+    print(f"Encoding {len(texts)} chunks...")
     vectors = model.encode(
         texts, 
         batch_size=BATCH_SIZE, 
@@ -194,7 +194,7 @@ def upsert_points(points: List[PointStruct]):
     for i in range(0, len(points), UPSERT_BATCH):
         batch = points[i : i + UPSERT_BATCH]
         client.upsert(collection_name=QDRANT_COLLECTION, points=batch)
-        print(f"📤 Upserted batch {i//UPSERT_BATCH + 1}: {len(batch)} points")
+        print(f"Upserted batch {i//UPSERT_BATCH + 1}: {len(batch)} points")
 
 # -----------------------------
 # Main Processing Function
@@ -216,10 +216,10 @@ def process_jsonl():
     year_stats = defaultdict(int)
     section_stats = defaultdict(int)
 
-    print(f"🚀 Starting structure-aware embedding pipeline")
-    print(f"📁 Input: {DATA_FILE}")
-    print(f"🎯 Target: {QDRANT_COLLECTION}")
-    print(f"⚙️ Config: {CHUNK_SIZE_TOKENS} tokens, {OVERLAP_RATIO:.1%} overlap")
+    print(f"Starting structure-aware embedding pipeline")
+    print(f"Input: {DATA_FILE}")
+    print(f"Target: {QDRANT_COLLECTION}")
+    print(f"Config: {CHUNK_SIZE_TOKENS} tokens, {OVERLAP_RATIO:.1%} overlap")
     
     for rec in iter_cases(DATA_FILE):
         try:
@@ -243,7 +243,11 @@ def process_jsonl():
 
             # Classify case data using Saibo legal document classifier
             try:
-                from .legal_document_classifier import classify_legal_case
+                try:
+                    from .legal_document_classifier import classify_legal_case
+                except ImportError:
+                    # For direct execution
+                    from legal_document_classifier import classify_legal_case
                 classification_result = classify_legal_case(rec.copy())
                 
                 # Add classification results to case metadata
@@ -293,49 +297,49 @@ def process_jsonl():
 
             # Progress logging
             if processed_cases % 100 == 0:
-                print(f"📊 Progress: {processed_cases} cases, {total_chunks} chunks")
+                print(f"Progress: {processed_cases} cases, {total_chunks} chunks")
 
         except Exception as e:
             src = rec.get("source_url") if isinstance(rec, dict) else "unknown"
-            print(f"⚠️ Skipping record ({src}) — {e}")
+            print(f"Skipping record ({src}) - {e}")
 
     # Upsert remaining points
     if pending_points:
         upsert_points(pending_points)
 
     # Print comprehensive statistics
-    print(f"\n✅ Processing Complete!")
-    print(f"📊 Total Statistics:")
+    print(f"\nProcessing Complete!")
+    print(f"Total Statistics:")
     print(f"   Cases processed: {processed_cases}")
     print(f"   Total chunks created: {total_chunks}")
     print(f"   Average chunks per case: {total_chunks / processed_cases:.1f}")
     
-    print(f"\n📅 Year Distribution:")
+    print(f"\nYear Distribution:")
     for year in sorted(year_stats.keys()):
         print(f"   {year}: {year_stats[year]} cases")
     
-    print(f"\n📋 Section Distribution:")
+    print(f"\nSection Distribution:")
     for section in sorted(section_stats.keys()):
         print(f"   {section}: {section_stats[section]} chunks")
     
-    print(f"\n🎯 Collection: {QDRANT_COLLECTION}")
+    print(f"\nCollection: {QDRANT_COLLECTION}")
     collection_info = client.get_collection(QDRANT_COLLECTION)
     print(f"   Total points: {collection_info.points_count:,}")
 
 def test_chunking_sample():
     """Test the chunking strategy with a sample case"""
-    print("🧪 Testing chunking with sample case...")
+    print("Testing chunking with sample case...")
     
     # Load first case for testing
     for rec in iter_cases(DATA_FILE):
-        print(f"📄 Testing with: {rec.get('case_title', 'Unknown')[:100]}...")
+        print(f"Testing with: {rec.get('case_title', 'Unknown')[:100]}...")
         
         chunks = chunker.chunk_case(rec)
         stats = chunker.get_chunking_stats(chunks)
         
-        print(f"✅ Generated {len(chunks)} chunks")
-        print(f"📊 Statistics: {stats}")
-        print(f"📋 Sample chunks:")
+        print(f"Generated {len(chunks)} chunks")
+        print(f"Statistics: {stats}")
+        print(f"Sample chunks:")
         
         for i, chunk in enumerate(chunks[:3]):
             print(f"   {i+1}. [{chunk['section']}] {chunk['token_count']} tokens")
@@ -349,5 +353,5 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_chunking_sample()
     else:
-        print(f"📦 Mode: Structure-Aware JSONL Processing")
+        print(f"Mode: Structure-Aware JSONL Processing")
         process_jsonl()

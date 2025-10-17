@@ -1751,8 +1751,8 @@ def chat_with_law_bot(query: str, history: List[Dict] = None):
                 from .retriever import LegalRetriever
 
                 # Always use Contextual RAG - no fallback to basic retriever
-                base_retriever = LegalRetriever(collection="jurisprudence_contextual", use_contextual_rag=True)
-                print("✅ Using Contextual RAG Legal Retriever with jurisprudence_contextual collection")
+                base_retriever = LegalRetriever(collection="jurisprudence", use_contextual_rag=True)
+                print("✅ Using Contextual RAG Legal Retriever with jurisprudence collection")
                 retriever = base_retriever
             except Exception as e:
                 print(f"❌ Failed to load Contextual RAG Legal Retriever: {e}")

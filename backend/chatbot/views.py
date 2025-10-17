@@ -246,7 +246,7 @@ class ClearCacheView(APIView):
             
             if cache_type in ['all', 'retrieval']:
                 # Clear retrieval cache for both collections
-                for collection in ['jurisprudence', 'jurisprudence_contextual']:
+                for collection in ['jurisprudence']:
                     try:
                         retriever = LegalRetriever(collection=collection)
                         retriever.clear_cache()
