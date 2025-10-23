@@ -39,10 +39,10 @@ from selectolax.parser import HTMLParser
 # Config (env-overridable)
 # -----------------------------
 BASE_URL     = os.getenv("ELIBRARY_BASE", "https://elibrary.judiciary.gov.ph/")
-OUT_PATH     = os.getenv("CASES_JSONL", "backend/data/cases.jsonl.gz")
+OUT_PATH     = os.getenv("CASES_JSONL", "backend/data/cases2.jsonl.gz")
 UA           = os.getenv("CRAWLER_UA", "Mozilla/5.0 (compatible; PHLawBot/1.0)")
 YEAR_START   = int(os.getenv("YEAR_START", 2005))
-YEAR_END     = int(os.getenv("YEAR_END", 2005))
+YEAR_END     = int(os.getenv("YEAR_END", 2025))
 CONCURRENCY  = int(os.getenv("CONCURRENCY", 12))  # Higher for HTTP-first approach
 SLOWDOWN_MS  = int(os.getenv("SLOWDOWN_MS", 250))
 TIMEOUT_S    = int(os.getenv("TIMEOUT_S", 45))
@@ -217,12 +217,14 @@ def normalize_text(s: str) -> str:
 # Field extractors (caption, GR numbers, division, ponente)
 # -----------------------------
 TITLE_NOISE = (
-    "SUPREME COURT", "REPUBLIC OF THE PHILIPPINES", "EN BANC", "FIRST DIVISION",
+    "SUPREME COURT", "EN BANC", "FIRST DIVISION",
     "SECOND DIVISION", "THIRD DIVISION", "PER CURIAM",
 )
 
-CAPTION_RE = re.compile(r"\b(.+?)\s+(v\.|vs\.?|versus)\s+(.+?)\b", re.IGNORECASE)
-CAPTION_STRONG_RE = re.compile(r"^[A-Z0-9 ,.'\-()]+\s+(V\.|VS\.?|VERSUS)\s+[A-Z0-9 ,.'\-()]+$")
+CAPTION_RE = re.compile(r"(.+?)\s+(v\.|vs\.?|versus)\s+(.+?)(?:\.|$)", re.IGNORECASE)
+CAPTION_WITH_NOTATION_RE = re.compile(r"^(.+?,\[?\d*\]?)\s+(PETITIONER|RESPONDENT|COMPLAINANT|PLAINTIFF|DEFENDANT)S?,\s*(v\.|vs\.?|versus)\s+(.+?),\s*(PETITIONER|RESPONDENT|COMPLAINANT|PLAINTIFF|DEFENDANT)S?\.?$", re.IGNORECASE)
+CAPTION_WITH_GR_NOTATION_RE = re.compile(r"^(XXX\d+,\*?)\s+(PETITIONER|RESPONDENT|COMPLAINANT|PLAINTIFF|DEFENDANT)S?,\s*(v\.|vs\.?|versus)\s+(.+?),\s*(PETITIONER|RESPONDENT|COMPLAINANT|PLAINTIFF|DEFENDANT)S?\.?$", re.IGNORECASE)
+CAPTION_STRONG_RE = re.compile(r"^[A-Z0-9 ,.'\-()*\[\]]+\s+(V\.|VS\.?|VERSUS)\s+[A-Z0-9 ,.'\-()*\[\]]+$")
 
 # Additional patterns for edge cases
 ADMIN_COMPLAINT_RE = re.compile(r"^(.+?),\s*COMPLAINANT,\s*VS\.?\s*(.+?),\s*RESPONDENT", re.IGNORECASE)
@@ -261,7 +263,27 @@ BODY_TEXT_INDICATORS = [
     "against respondent", "for grave misconduct", "dishonesty and breach",
     "records officer", "office of administrative services", "court administrator",
     "this is a", "the instant", "the foregoing", "complainant claims",
-    "respondent served", "while respondent", "complainant states"
+    "respondent served", "while respondent", "complainant states",
+    # Historical/narrative indicators that signal body text
+    "in february", "in march", "in april", "in may", "in june", 
+    "in july", "in august", "in september", "in october", "in november", "in december",
+    "in january", "in 19", "in 20", "on january", "on february", "on march",
+    "the facts", "the case involve", "the case stem", "the case arise",
+    "the edsa", "revolution toppled", "one of the first acts",
+    "pursuant to this", "pursuant to the mandate", "pursuant to its mandate",
+    "his family and his cronies", "alleged ill-gotten wealth",
+    "the commission", "to recover", "following the", "after the",
+    "president corazon", "president aquino", "president marcos",
+    "was to establish", "was established", "encountered financial",
+    # Additional patterns for factual content from case bodies
+    "the marriage was", "respondent complained that", "their sexual relationship",
+    "the couple talked about", "is a product of a broken family",
+    "her father always subjected", "her mother to physical abuse",
+    "both parents are living", "her auntie took care",
+    "her mother would give her away", "in exchange for money",
+    "x x x", "is a product of", "broken family", "physical abuse",
+    "sexual relationship", "marriage was blissful", "turned sour",
+    "too direct", "outspoken", "domineering", "unsatisfying"
 ]
 GR_BLOCK_RE = re.compile(r"G\.R\.\s+No(?:s)?\.?\s*([0-9][0-9\-*,\s]+)", re.IGNORECASE)
 
@@ -276,9 +298,18 @@ def _clean_noise(line: str) -> str:
     # Remove decision headers that sometimes get appended to titles
     s = re.sub(r"\s+D\s+E\s+C\s+I\s+S\s+I\s+O\s+N.*$", "", s, flags=re.IGNORECASE)
     s = re.sub(r"\s+DECISION.*$", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"\s+R\s+E\s+S\s+O\s+L\s+U\s+T\s+I\s+O\s+N.*$", "", s, flags=re.IGNORECASE)
     s = re.sub(r"\s+RESOLUTION.*$", "", s, flags=re.IGNORECASE)
     s = re.sub(r"\s+ORDER.*$", "", s, flags=re.IGNORECASE)
-    return re.sub(r"\s{2,}", " ", s).strip(",;:- ")
+    # Remove ponente names that get appended to titles
+    s = re.sub(r"\s+[A-Z][A-Z\-']+,\s*J\.?.*$", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"\s+[A-Z][A-Z\-']+\s+J\.?.*$", "", s, flags=re.IGNORECASE)
+    # Clean up special characters but preserve them in names (like asterisks in names)
+    # Only remove trailing special characters, not those within names
+    s = re.sub(r"[,\s]*$", "", s)  # Remove trailing commas and spaces
+    # Normalize whitespace but preserve special characters within names
+    s = re.sub(r"\s+", " ", s)  # Normalize whitespace
+    return s.strip()
 
 def _is_body_text(line: str) -> bool:
     """Check if a line looks like body text rather than a title"""
@@ -341,6 +372,24 @@ def _extract_am_case_title(text: str) -> str | None:
         case_title = match.group(2).strip()
         return f"A.M. NO. {am_number} - {case_title}"
     
+    # Look for A.M. cases without RE: pattern
+    am_pattern2 = re.compile(r"A\.M\.\s+NO\.\s+([0-9\-]+[A-Z]?)\s*\([^)]+\)", re.IGNORECASE | re.MULTILINE)
+    match2 = am_pattern2.search(text)
+    if match2:
+        am_number = match2.group(1).strip()
+        # Look for the case title after the A.M. number
+        lines = text.split('\n')
+        for i, line in enumerate(lines):
+            if f"A.M. NO. {am_number}" in line.upper():
+                # Look for the title in the next few lines
+                for j in range(i + 1, min(i + 5, len(lines))):
+                    title_line = lines[j].strip()
+                    if (title_line and 
+                        len(title_line) > 10 and 
+                        not any(indicator in title_line.lower() for indicator in BODY_TEXT_INDICATORS) and
+                        ('V.' in title_line.upper() or 'VS.' in title_line.upper())):
+                        return f"A.M. NO. {am_number} - {title_line}"
+    
     # Enhanced RE: pattern detection for administrative cases
     lines = text.split('\n')[:15]  # Check first 15 lines for better coverage
     for line in lines:
@@ -369,92 +418,279 @@ def _extract_am_case_title(text: str) -> str | None:
 def derive_case_title_from_text(text: str) -> str | None:
     if not text:
         return None
-    head = text[:3000]  # Increased window for long titles
+    head = text[:5000]  # Increased window for very long multi-party titles
     
     # Priority 1: A.M. cases with RE: format (most specific)
     am_title = _extract_am_case_title(text)
     if am_title and 10 <= len(am_title) <= 500:
         return am_title
     
-    # Priority 2: Multi-line VS. format (handle long titles that span multiple lines)
-    # Look for the pattern across multiple lines
+    # Priority 2: Enhanced multi-line VS. format (handle long titles that span multiple lines)
+    # Look for the pattern across multiple lines with better logic
     lines = head.splitlines()
+    
+    # First, try to find complete single-line titles
+    for i, line in enumerate(lines):
+        line = line.strip()
+        if not line:
+            continue
+        
+        # Check if this line contains a case title with GR notation (like XXX264870,*)
+        if CAPTION_WITH_GR_NOTATION_RE.match(line):
+            # This is a complete case title with GR notation
+            if len(line) <= 3000:  # Allow very long titles for multi-party cases
+                cleaned = _clean_noise(line)
+                if 20 <= len(cleaned) <= 3000:
+                    return cleaned
+        
+        # Check if this line contains a case title with notation (like XXX,[1])
+        elif CAPTION_WITH_NOTATION_RE.match(line):
+            # This is a complete case title with notation
+            if len(line) <= 3000:  # Allow very long titles for multi-party cases
+                cleaned = _clean_noise(line)
+                if 20 <= len(cleaned) <= 3000:
+                    return cleaned
+        
+        # Check if this line contains a complete case title pattern
+        elif CAPTION_RE.match(line) and re.search(r"\b(PETITIONER|RESPONDENT|COMPLAINANT|PLAINTIFF|DEFENDANT)\b", line, re.IGNORECASE):
+            # Check if this line starts with comma - might be continuation of previous line
+            if line.startswith(','):
+                # This is likely a continuation line, skip it and let multi-line logic handle it
+                continue
+            # This line looks like a complete case title
+            if len(line) <= 3000:  # Allow very long titles for multi-party cases
+                cleaned = _clean_noise(line)
+                if 20 <= len(cleaned) <= 3000:
+                    return cleaned
+        
+        # Special handling for titles with special characters (asterisks, brackets)
+        elif re.search(r"\b(VS\.|V\.|VERSUS)\b", line, re.IGNORECASE) and re.search(r"\b(PETITIONER|RESPONDENT|COMPLAINANT|PLAINTIFF|DEFENDANT)\b", line, re.IGNORECASE):
+            # Check if this line starts with comma - might be continuation of previous line
+            if line.startswith(','):
+                # This is likely a continuation line, skip it and let multi-line logic handle it
+                continue
+            # This might be a complete title with special characters
+            if len(line) <= 3000:
+                cleaned = _clean_noise(line)
+                if 20 <= len(cleaned) <= 3000:
+                    return cleaned
+    
+    # Priority 3: Multi-line title reconstruction
+    # Look for partial titles and try to complete them across lines
     for i in range(len(lines)):
         line = lines[i].strip()
         if not line:
             continue
         
-        # Check if this line contains a case title pattern
-        if CAPTION_RE.search(line) and re.search(r"\b(PETITIONER|RESPONDENT|COMPLAINANT|PLAINTIFF|DEFENDANT)\b", line, re.IGNORECASE):
-            # This line looks like a case title, check if it's complete
-            if len(line) <= 500:  # Reasonable title length
-                cleaned = _clean_noise(line)
-                if 20 <= len(cleaned) <= 500:
-                    return cleaned
-            
-            # If the title is incomplete, try to find the complete title across lines
+        # Check if this line starts a case title (contains PETITIONER/PLAINTIFF/COMPLAINANT)
+        if re.search(r"\b(PETITIONER|PLAINTIFF|COMPLAINANT|DEFENDANT)S?\b", line, re.IGNORECASE):
+            # This might be the start of a case title
             title_parts = [line]
-            # Look forwards to complete the title (but be very conservative)
-            for j in range(i + 1, min(i + 3, len(lines))):  # Only look ahead 2-3 lines
+            
+            # Look ahead to find the complete title
+            for j in range(i + 1, min(i + 8, len(lines))):  # Look ahead up to 8 lines
                 next_line = lines[j].strip()
                 if not next_line:
                     continue
-                # Stop immediately if we hit decision content
-                if re.search(r"\b(DECISION|RESOLUTION|ORDER|PER CURIAM|J\.|CHICO-NAZARIO|CARPIO|MORALES)\b", next_line, re.IGNORECASE):
+                
+                # Stop if we hit decision content or other non-title content
+                if re.search(r"\b(DECISION|RESOLUTION|ORDER|PER CURIAM|J\.|CHICO-NAZARIO|CARPIO|MORALES|THE\s+CASES?|ANTECEDENTS?)\b", next_line, re.IGNORECASE):
                     break
-                # Also stop if we hit "D E C I S I O N" pattern (common in case headers)
                 if re.search(r"D\s+E\s+C\s+I\s+S\s+I\s+O\s+N", next_line, re.IGNORECASE):
                     break
-                # Only add if it looks like part of a title (contains legal terms)
-                if re.search(r"\b(PETITIONER|RESPONDENT|COMPLAINANT|PLAINTIFF|DEFENDANT|VS\.|V\.)\b", next_line, re.IGNORECASE):
+                if re.search(r"\[G\.R\.\s+No\.\s+\d+\]", next_line):  # Stop at GR number lines
+                    break
+                
+                # Add the line if it looks like part of a title
+                if (re.search(r"\b(PETITIONER|RESPONDENT|COMPLAINANT|PLAINTIFF|DEFENDANT|VS\.|V\.|VERSUS)\b", next_line, re.IGNORECASE) or
+                    re.search(r"\b(AND|&)\b", next_line, re.IGNORECASE) or  # Handle "AND" in multi-party cases
+                    re.search(r"^[A-Z][A-Z0-9\s,.'\-()]+$", next_line) or  # All caps legal names
+                    next_line.startswith(',') or  # Handle continuation lines that start with comma
+                    (next_line.startswith(' ') and re.search(r"\b(VS\.|V\.|VERSUS|RESPONDENT|PETITIONER|COMPLAINANT|PLAINTIFF|DEFENDANT)\b", next_line, re.IGNORECASE))):  # Indented continuation lines
                     title_parts.append(next_line)
                 else:
                     break
             
             # Join the parts and check if it forms a valid title
-            full_title = " ".join(title_parts)
-            if CAPTION_RE.search(full_title) and 20 <= len(full_title) <= 800:
-                cleaned = _clean_noise(full_title)
-                if 20 <= len(cleaned) <= 800:
+            if len(title_parts) > 1:  # Only if we found multiple parts
+                full_title = " ".join(title_parts)
+                # Clean up the title
+                full_title = re.sub(r"\s+", " ", full_title)  # Normalize whitespace
+                
+                # Check if this looks like a complete case title
+                if (CAPTION_RE.search(full_title) and 
+                    len(full_title) >= 20 and len(full_title) <= 3000 and
+                    re.search(r"\b(PETITIONER|RESPONDENT|COMPLAINANT|PLAINTIFF|DEFENDANT)\b", full_title, re.IGNORECASE)):
+                    cleaned = _clean_noise(full_title)
+                    if 20 <= len(cleaned) <= 3000:
+                        return cleaned
+    
+    # Priority 3.5: Special handling for Supreme Court E-Library format
+    # Look for the specific pattern: NAME, PETITIONER, VS. RESPONDENT
+    for i in range(len(lines)):
+        line = lines[i].strip()
+        if not line:
+            continue
+        
+        # Look for lines that start with a name followed by PETITIONER
+        if re.search(r"^[A-Z][A-Z0-9\s,.'\-()]+\s*,\s*PETITIONER", line, re.IGNORECASE):
+            # This looks like the start of a case title
+            title_parts = [line]
+            
+            # Look for the VS. line
+            for j in range(i + 1, min(i + 5, len(lines))):
+                next_line = lines[j].strip()
+                if not next_line:
+                    continue
+                
+                # Stop if we hit non-title content
+                if re.search(r"\b(DECISION|RESOLUTION|ORDER|PER CURIAM|J\.|CHICO-NAZARIO|CARPIO|MORALES|THE\s+CASES?|ANTECEDENTS?)\b", next_line, re.IGNORECASE):
+                    break
+                if re.search(r"D\s+E\s+C\s+I\s+S\s+I\s+O\s+N", next_line, re.IGNORECASE):
+                    break
+                if re.search(r"\[G\.R\.\s+No\.\s+\d+\]", next_line):
+                    break
+                
+                # Look for VS. line
+                if re.search(r"\b(VS\.|V\.|VERSUS)\b", next_line, re.IGNORECASE):
+                    title_parts.append(next_line)
+                    # Look for the respondent line
+                    for k in range(j + 1, min(j + 3, len(lines))):
+                        resp_line = lines[k].strip()
+                        if not resp_line:
+                            continue
+                        if re.search(r"\b(RESPONDENT|RESPONDENTS)\b", resp_line, re.IGNORECASE):
+                            title_parts.append(resp_line)
+                            break
+                    break
+                else:
+                    break
+            
+            # Join the parts and check if it forms a valid title
+            if len(title_parts) >= 2:  # At least petitioner and vs line
+                full_title = " ".join(title_parts)
+                full_title = re.sub(r"\s+", " ", full_title)  # Normalize whitespace
+                
+                # Check if this looks like a complete case title
+                if (CAPTION_RE.search(full_title) and 
+                    len(full_title) >= 20 and len(full_title) <= 3000 and
+                    re.search(r"\b(PETITIONER|RESPONDENT|COMPLAINANT|PLAINTIFF|DEFENDANT)\b", full_title, re.IGNORECASE)):
+                    cleaned = _clean_noise(full_title)
+                    if 20 <= len(cleaned) <= 3000:
+                        return cleaned
+    
+    # Priority 3.6: Handle incomplete titles by looking for complete versions
+    # This addresses cases where titles are truncated or incomplete
+    for i in range(len(lines)):
+        line = lines[i].strip()
+        if not line:
+            continue
+        
+        # Look for incomplete titles (ending with VS. or V. without respondent)
+        if re.search(r"\b(VS\.|V\.|VERSUS)\s*$", line, re.IGNORECASE):
+            # This might be an incomplete title, look for the respondent
+            title_parts = [line]
+            
+            for j in range(i + 1, min(i + 5, len(lines))):
+                next_line = lines[j].strip()
+                if not next_line:
+                    continue
+                
+                # Stop if we hit non-title content
+                if re.search(r"\b(DECISION|RESOLUTION|ORDER|PER CURIAM|J\.|CHICO-NAZARIO|CARPIO|MORALES|THE\s+CASES?|ANTECEDENTS?)\b", next_line, re.IGNORECASE):
+                    break
+                if re.search(r"D\s+E\s+C\s+I\s+S\s+I\s+O\s+N", next_line, re.IGNORECASE):
+                    break
+                if re.search(r"\[G\.R\.\s+No\.\s+\d+\]", next_line):
+                    break
+                
+                # Add if it looks like a respondent name (including special characters)
+                if (re.search(r"\b(RESPONDENT|RESPONDENTS|DEFENDANT|DEFENDANTS|ACCUSED|ACCUSED-APPELLANT|ACCUSED-APPELLEE)\b", next_line, re.IGNORECASE) or
+                    (len(next_line) > 5 and not re.search(r"\b(THE|OF|IN|FOR|WITH|AND|OR)\b", next_line, re.IGNORECASE))):
+                    title_parts.append(next_line)
+                    break
+                else:
+                    break
+            
+            # Join the parts and check if it forms a valid title
+            if len(title_parts) >= 2:  # At least vs and respondent
+                full_title = " ".join(title_parts)
+                full_title = re.sub(r"\s+", " ", full_title)  # Normalize whitespace
+                
+                # Check if this looks like a complete case title
+                if (CAPTION_RE.search(full_title) and 
+                    len(full_title) >= 20 and len(full_title) <= 3000):
+                    cleaned = _clean_noise(full_title)
+                    if 20 <= len(cleaned) <= 3000:
+                        return cleaned
+        
+        # Special handling for titles that might be complete but have special characters
+        # Look for patterns like "NAME, PETITIONER, VS. NAME* RESPONDENT" or "NAME[*] RESPONDENT"
+        elif re.search(r"\b(VS\.|V\.|VERSUS)\b", line, re.IGNORECASE) and re.search(r"\b(PETITIONER|RESPONDENT|COMPLAINANT|PLAINTIFF|DEFENDANT)\b", line, re.IGNORECASE):
+            # This might be a complete title with special characters
+            if len(line) <= 3000:
+                cleaned = _clean_noise(line)
+                if 20 <= len(cleaned) <= 3000:
                     return cleaned
     
-    # Priority 3: Single-line VS. format
+    # Priority 4: Single-line VS. format (fallback)
     for raw in head.splitlines():
         line = raw.strip()
         if not line:
             continue
-        if CAPTION_STRONG_RE.match(line) or CAPTION_RE.search(line):
+        # Try the GR notation pattern first
+        if CAPTION_WITH_GR_NOTATION_RE.match(line):
             cleaned = _clean_noise(line)
-            if 10 <= len(cleaned) <= 400:
+            if 10 <= len(cleaned) <= 3000:  # Allow long titles
+                return cleaned
+        # Try the notation pattern
+        elif CAPTION_WITH_NOTATION_RE.match(line):
+            cleaned = _clean_noise(line)
+            if 10 <= len(cleaned) <= 3000:  # Allow long titles
+                return cleaned
+        # Then try other patterns
+        elif CAPTION_STRONG_RE.match(line) or CAPTION_RE.search(line):
+            cleaned = _clean_noise(line)
+            if 10 <= len(cleaned) <= 3000:  # Allow long titles
                 return cleaned
     
-    # Priority 4: Administrative case formats
+    # Priority 5: Administrative case formats
     for raw in head.splitlines():
         line = raw.strip()
         if not line:
             continue
         admin_title = _extract_admin_title(line)
-        if admin_title and 10 <= len(admin_title) <= 400:
+        if admin_title and 10 <= len(admin_title) <= 500:
             return admin_title
     
-    # Priority 5: Fallback candidates (avoid body text)
+    # Priority 6: Fallback candidates (avoid body text)
     candidates = []
     for raw in head.splitlines():
         line = raw.strip()
         if not line or _is_body_text(line):
             continue
         cleaned = _clean_noise(line)
-        if (10 <= len(cleaned) <= 400 and 
+        if (10 <= len(cleaned) <= 3000 and  # Allow long titles
             not any(n in line.upper() for n in TITLE_NOISE) and
             not _is_body_text(cleaned)):
             candidates.append(cleaned)
     
-    # Return the longest candidate that looks like a title
+    # Return the best candidate that looks like a title
     if candidates:
         # Prefer candidates with VS. or similar patterns
         vs_candidates = [c for c in candidates if 'VS.' in c.upper() or 'V.' in c.upper()]
         if vs_candidates:
+            # Among VS candidates, prefer those that look like proper case titles
+            proper_case_candidates = [c for c in vs_candidates if re.search(r"\b(PETITIONER|RESPONDENT|COMPLAINANT|PLAINTIFF|DEFENDANT)\b", c, re.IGNORECASE)]
+            if proper_case_candidates:
+                return max(proper_case_candidates, key=len)
             return max(vs_candidates, key=len)
+        
+        # If no VS candidates, prefer candidates that look like case titles
+        case_title_candidates = [c for c in candidates if re.search(r"\b(PETITIONER|RESPONDENT|COMPLAINANT|PLAINTIFF|DEFENDANT)\b", c, re.IGNORECASE)]
+        if case_title_candidates:
+            return max(case_title_candidates, key=len)
+        
         return max(candidates, key=len)
     
     return None
@@ -462,13 +698,31 @@ def derive_case_title_from_text(text: str) -> str | None:
 def parse_gr_numbers_from_text(text: str) -> tuple[str | None, list[str]]:
     if not text:
         return None, []
-    found: list[str] = []
-    for m in GR_BLOCK_RE.finditer(text[:4000]):
+    
+    # First, try to find GR numbers in the header (first 10 lines)
+    header_lines = text.split('\n')[:10]
+    header_text = '\n'.join(header_lines)
+    
+    header_found = []
+    for m in GR_BLOCK_RE.finditer(header_text):
         block = m.group(1)
         parts = [p.strip().rstrip('*') for p in re.split(r"[,\s]+", block) if p.strip()]
         for p in parts:
-            if p and p not in found:
-                found.append(p)
+            if p and p not in header_found:
+                header_found.append(p)
+    
+    # If we found GR numbers in the header, use those
+    if header_found:
+        found = header_found
+    else:
+        # Fallback to searching the first 4000 characters
+        found = []
+        for m in GR_BLOCK_RE.finditer(text[:4000]):
+            block = m.group(1)
+            parts = [p.strip().rstrip('*') for p in re.split(r"[,\s]+", block) if p.strip()]
+            for p in parts:
+                if p and p not in found:
+                    found.append(p)
     
     # Format GR numbers as "G.R. No. XXXX"
     formatted_found = []
@@ -571,9 +825,14 @@ def extract_ponente(text: str) -> str | None:
     # Handle titles like SR., JR., III, etc. before the justice suffix
     # Also handle compound names like "CARPIO MORALES"
     patterns = [
-        r"\b([A-Z][A-Za-z\-']+(?:\s+[A-Z][A-Za-z\-']+)*(?:\s+(?:SR\.|JR\.|III|IV|V|VI|VII|VIII|IX|X))*)\s*,\s*(J\.|JJ\.|CJ|SAJ)\s*[:\.]?\b",
+        # Simple pattern for common cases like "GESMUNDO, C.J.:" - no word boundary
+        r"([A-Z][A-Za-z\-']+(?:\s+[A-Z][A-Za-z\-']+)*)\s*,\s*(C\.J\.|J\.|JJ\.|CJ\.|CJ|SAJ)\s*[:\.]?",
+        # Handle spaced DECISION pattern: "D E C I S I O N GESMUNDO, C.J.:"
+        r"(?:D\s*E\s*C\s*I\s*S\s*I\s*O\s*N\s+)([A-Z][A-Za-z\-']+(?:\s+[A-Z][A-Za-z\-']+)*)\s*,\s*(C\.J\.|J\.|JJ\.|CJ\.|CJ|SAJ)\s*[:\.]?",
+        # More complex patterns for edge cases
+        r"([A-Z][A-Za-z\-']+(?:\s+[A-Z][A-Za-z\-']+)*(?:\s+(?:SR\.|JR\.|III|IV|V|VI|VII|VIII|IX|X))*)\s*,\s*(J\.|JJ\.|C\.J\.|CJ\.|CJ|SAJ)\s*[:\.]?",
         # Some pages omit dot after J
-        r"\b([A-Z][A-Za-z\-']+(?:\s+[A-Z][A-Za-z\-']+)*(?:\s+(?:SR\.|JR\.|III|IV|V|VI|VII|VIII|IX|X))*)\s*,\s*(J|JJ|CJ|SAJ)\s*[:\.]?\b",
+        r"([A-Z][A-Za-z\-']+(?:\s+[A-Z][A-Za-z\-']+)*(?:\s+(?:SR\.|JR\.|III|IV|V|VI|VII|VIII|IX|X))*)\s*,\s*(J|JJ|C\.J\.|CJ\.|CJ|SAJ)\s*[:\.]?",
     ]
     for pat in patterns:
         m = re.search(pat, window)
@@ -744,7 +1003,7 @@ TITLE_BAD = {
 
 def _is_title_like(line: str) -> bool:
     s = line.strip()
-    if not (10 <= len(s) <= 200):
+    if not (10 <= len(s) <= 3000):  # Allow very long titles for multi-party cases
         return False
     U = s.upper()
     if any(bad in U for bad in TITLE_BAD):
@@ -1050,15 +1309,22 @@ def parse_case(text_base: str, url: str, year_hint: int | None = None, month_hin
         if any(indicator in title_lower for indicator in BODY_TEXT_INDICATORS):
             return False
         
-        # Check for administrative case patterns (these are valid even if long)
-        admin_patterns = [
-            're:', 'a.m. no.', 'complaint', 'administrative matter',
-            'complainant', 'respondent', 'vs.', 'versus'
-        ]
-        is_admin_case = any(pattern in title_lower for pattern in admin_patterns)
+        # Check for case patterns that indicate legitimate long titles
+        # Many Philippine SC cases have numerous co-petitioners/respondents
+        is_multi_party_case = ('vs.' in title_lower or 'versus' in title_lower) and title_lower.count(',') > 3
+        is_admin_case = any(pattern in title_lower for pattern in ['re:', 'a.m. no.', 'administrative matter'])
         
-        # For administrative cases, allow longer titles (up to 300 chars)
-        max_length = 300 if is_admin_case else 200
+        # Dynamic max length based on case type:
+        # - Multi-party cases (many commas): up to 3000 chars (legitimate full party lists)
+        # - Administrative cases: up to 500 chars
+        # - Regular cases: up to 400 chars
+        if is_multi_party_case:
+            max_length = 3000
+        elif is_admin_case:
+            max_length = 500
+        else:
+            max_length = 400
+            
         if len(title) > max_length:
             return False
             
