@@ -3,7 +3,7 @@
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
 
-import RatingComponent from "@/components/RatingComponent";
+// import RatingComponent from "@/components/RatingComponent";
 import RichText from "@/components/RichText";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -37,7 +37,7 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
-  const [ratedMessages, setRatedMessages] = useState<Set<string>>(new Set());
+  // const [ratedMessages, setRatedMessages] = useState<Set<string>>(new Set());
 
   // 👇 ref for the dummy "end of messages" div
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -110,9 +110,9 @@ export default function Home() {
     });
   };
 
-  const handleRatingSubmitted = (messageId: string) => {
-    setRatedMessages(prev => new Set([...prev, messageId]));
-  };
+  // const handleRatingSubmitted = (messageId: string) => {
+  //   setRatedMessages(prev => new Set([...prev, messageId]));
+  // };
 
   const handleClearChat = () => {
     // Reset to initial welcome message
@@ -126,7 +126,7 @@ export default function Home() {
       },
     ]);
     setInput("");
-    setRatedMessages(new Set());
+    // setRatedMessages(new Set());
     console.log("🔄 Chat history cleared - starting new session");
   };
 
@@ -369,8 +369,8 @@ export default function Home() {
         </Card>
       </div>
 
-      {/* Rating Sidebar */}
-      {messages.length > 1 && messages[messages.length - 1].role === "assistant" && 
+      {/* Rating Sidebar - COMMENTED OUT */}
+      {/* {messages.length > 1 && messages[messages.length - 1].role === "assistant" && 
        !ratedMessages.has(messages[messages.length - 1].id) && (
         <div className="w-80 bg-gray-50 border-l border-gray-200 p-4 overflow-y-auto">
           <div className="sticky top-4">
@@ -388,7 +388,7 @@ export default function Home() {
             />
           </div>
         </div>
-      )}
+      )} */}
     </div>
   );
 }

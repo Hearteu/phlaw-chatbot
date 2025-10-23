@@ -96,7 +96,16 @@ def load_case_from_jsonl(case_id: str, jsonl_path: str = DATA_FILE) -> Optional[
                     case_special == case_id or
                     case_id_field == case_id or 
                     case_gr == f"G.R. No. {case_id}" or
-                    case_gr == f"GR No. {case_id}"):
+                    case_gr == f"GR No. {case_id}" or
+                    # Handle A.M. numbers with different formats
+                    case_special == f"A.M. No. {case_id}" or
+                    case_special == f"A.M. {case_id}" or
+                    case_gr == f"A.M. No. {case_id}" or
+                    case_gr == f"A.M. {case_id}" or
+                    # Handle other special number formats
+                    case_special == f"OCA No. {case_id}" or
+                    case_special == f"U.C. No. {case_id}" or
+                    case_special == f"ADM No. {case_id}"):
                     print(f"✅ Found case {case_id} at line {line_num}")
                     return case
                     

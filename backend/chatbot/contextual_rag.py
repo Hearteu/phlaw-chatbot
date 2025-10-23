@@ -23,6 +23,12 @@ from .model_cache import get_cached_embedding_model, get_cached_llm
 class ContextualRAG:
     """Performance-optimized Contextual RAG with caching and parallel processing"""
     
+    # Class-level cache to avoid reloading chunks on every request
+    _chunks_loaded = False
+    _shared_id_to_contextual_chunk = {}
+    _shared_id_to_metadata = {}
+    _shared_id_to_payload = {}
+    
     def __init__(self, 
                  collection: str = "jurisprudence",
                  chunk_size: int = 640,
@@ -49,10 +55,10 @@ class ContextualRAG:
         # BM25 index for keyword search
         self.bm25_index = None
         
-        # ID-based storage instead of list-based (critical fix for correctness)
-        self.id_to_contextual_chunk = {}  # id -> contextual_chunk_text
-        self.id_to_metadata = {}          # id -> metadata
-        self.id_to_payload = {}           # id -> full_payload (for Qdrant compatibility)
+        # Use class-level shared cache instead of instance-level
+        self.id_to_contextual_chunk = ContextualRAG._shared_id_to_contextual_chunk
+        self.id_to_metadata = ContextualRAG._shared_id_to_metadata
+        self.id_to_payload = ContextualRAG._shared_id_to_payload
         self.id_to_embedding = {}         # id -> embedding (optional, for reranking)
         
         # Legacy lists for backward compatibility (will be populated from maps)
@@ -67,8 +73,12 @@ class ContextualRAG:
         # Load existing cache
         self._load_contextual_cache()
         
-        # Try to load existing indexes
-        self._load_existing_indexes()
+        # Try to load existing indexes (only if not already loaded)
+        if not ContextualRAG._chunks_loaded:
+            self._load_existing_indexes()
+            ContextualRAG._chunks_loaded = True
+        else:
+            print(f"✅ Using cached chunks: {len(self.id_to_contextual_chunk)} chunks already in memory")
         
         # Optimized context generation prompt (shorter, more focused)
         self.CONTEXTUAL_RAG_PROMPT = """Briefly explain what this legal document section discusses (1 sentence):
@@ -140,21 +150,43 @@ Explanation:"""
         try:
             print("🔄 Loading contextual chunks from Qdrant...")
             
-            # Get all points from the collection
-            points = self.qdrant.scroll(
-                collection_name=collection_name,
-                limit=10000,
-                with_payload=True
-            )[0]
+            # Get ALL points from the collection using pagination
+            all_points = []
+            offset = None
+            batch_size = 10000
             
-            if not points:
+            while True:
+                scroll_result = self.qdrant.scroll(
+                    collection_name=collection_name,
+                    limit=batch_size,
+                    offset=offset,
+                    with_payload=True
+                )
+                points, next_offset = scroll_result[0], scroll_result[1]
+                
+                if not points:
+                    break
+                    
+                all_points.extend(points)
+                print(f"   Loaded {len(all_points)} points so far...")
+                
+                # Check if we've reached the end
+                if next_offset is None or len(points) < batch_size:
+                    break
+                    
+                offset = next_offset
+            
+            if not all_points:
                 print("⚠️ No points found in contextual collection")
                 return
             
-            # Clear existing maps
-            self.id_to_contextual_chunk.clear()
-            self.id_to_metadata.clear()
-            self.id_to_payload.clear()
+            points = all_points
+            print(f"✅ Total points loaded: {len(points)}")
+            
+            # Clear existing shared maps (using class-level cache)
+            ContextualRAG._shared_id_to_contextual_chunk.clear()
+            ContextualRAG._shared_id_to_metadata.clear()
+            ContextualRAG._shared_id_to_payload.clear()
             
             # Load chunks using stable IDs
             for point in points:
@@ -182,20 +214,22 @@ Explanation:"""
                     }
                 }
                 
-                # Store in ID-based maps
-                self.id_to_contextual_chunk[chunk_id] = contextual_text
-                self.id_to_metadata[chunk_id] = metadata
-                self.id_to_payload[chunk_id] = payload
+                # Store in shared ID-based maps (class-level cache)
+                ContextualRAG._shared_id_to_contextual_chunk[chunk_id] = contextual_text
+                ContextualRAG._shared_id_to_metadata[chunk_id] = metadata
+                ContextualRAG._shared_id_to_payload[chunk_id] = payload
             
-            # Legacy lists will be populated as needed
-            
-            print(f"Loaded {len(self.id_to_contextual_chunk)} contextual chunks from Qdrant")
+            # Rebuild BM25 index after loading all chunks
+            print(f"Loaded {len(ContextualRAG._shared_id_to_contextual_chunk)} contextual chunks from Qdrant")
+            print("🔄 Building BM25 index...")
+            self._rebuild_legacy_lists()
+            print(f"✅ BM25 index built with {len(self.contextual_chunks)} chunks")
             
         except Exception as e:
             print(f"Failed to load contextual chunks from Qdrant: {e}")
-            self.id_to_contextual_chunk.clear()
-            self.id_to_metadata.clear()
-            self.id_to_payload.clear()
+            ContextualRAG._shared_id_to_contextual_chunk.clear()
+            ContextualRAG._shared_id_to_metadata.clear()
+            ContextualRAG._shared_id_to_payload.clear()
             # Legacy lists will be populated as needed
     
     def generate_contextual_chunks_fast(self, document: str, chunks: List[Dict[str, Any]]) -> List[str]:
@@ -648,33 +682,124 @@ Explanation:"""
         sorted_items = sorted(rrf_map.items(), key=lambda x: x[1], reverse=True)
         return sorted_items, [item for item, score in sorted_items]
     
+    def _is_title_query(self, query: str) -> bool:
+        """Check if query looks like a title/party name search"""
+        q = query.lower()
+        # Check for "vs", "versus", or party name patterns
+        return bool(re.search(r'\bvs\.?\b|\bversus\b', q, re.IGNORECASE))
+    
+    def _extract_party_names(self, query: str) -> list:
+        """Extract party names from title query"""
+        q = query.lower()
+        # Split by "vs" or "versus"
+        parts = re.split(r'\bvs\.?\b|\bversus\b', q, flags=re.IGNORECASE)
+        if len(parts) >= 2:
+            # Clean up party names
+            return [p.strip() for p in parts[:2] if p.strip()]
+        return []
+    
+    def _calculate_title_match_score(self, chunk_id: str, query: str) -> float:
+        """Calculate how well a chunk's title matches the query"""
+        if chunk_id not in self.id_to_metadata:
+            return 0.0
+        
+        metadata = self.id_to_metadata[chunk_id]
+        title = metadata.get('metadata', {}).get('title', '').lower()
+        
+        if not title:
+            return 0.0
+        
+        # Extract party names from query
+        party_names = self._extract_party_names(query)
+        if not party_names:
+            return 0.0
+        
+        # Check if both party names appear in title
+        score = 0.0
+        for party in party_names:
+            if party in title:
+                score += 50.0  # High boost for each matching party
+        
+        return score
+    
+    def _keyword_title_search(self, party_names: list, top_k: int = 50) -> List[str]:
+        """Direct keyword search in titles for party names"""
+        if not party_names or len(party_names) < 2:
+            return []
+        
+        print(f"🔍 Keyword title search for parties: {party_names}")
+        matching_ids = []
+        
+        # Search through all chunks for title matches
+        for chunk_id, metadata in self.id_to_metadata.items():
+            title = metadata.get('metadata', {}).get('title', '').lower()
+            if not title:
+                continue
+            
+            # Check if ALL party names appear in title
+            if all(party.lower() in title for party in party_names):
+                matching_ids.append(chunk_id)
+                if len(matching_ids) >= top_k:
+                    break
+        
+        print(f"✅ Found {len(matching_ids)} chunks with matching titles")
+        return matching_ids
+    
     def retrieve_and_rank_fast(self, query: str, 
                               vector_k: int = 50, 
                               bm25_k: int = 50, 
                               final_k: int = 15) -> List[Dict[str, Any]]:
-        """Optimized retrieval pipeline with reduced parameters"""
+        """Optimized retrieval pipeline with keyword title search"""
         print(f"🔍 Fast Contextual RAG retrieval for: '{query}'")
         
-        # Step 1: Perform vector and BM25 retrieval with reduced limits
-        vector_results = self.vector_retrieval(query, top_k=vector_k)
-        bm25_results = self.bm25_retrieval(query, k=bm25_k)
+        # Check if this is a title query
+        is_title_query = self._is_title_query(query)
+        party_names = []
+        
+        if is_title_query:
+            party_names = self._extract_party_names(query)
+            print(f"📋 Detected title query with parties: {party_names}")
+            
+            # For title queries, use keyword search first
+            if len(party_names) >= 2:
+                keyword_results = self._keyword_title_search(party_names, top_k=vector_k)
+                if keyword_results:
+                    print(f"✅ Using keyword title search results: {len(keyword_results)} matches")
+                    # Use keyword results as primary source
+                    vector_results = keyword_results
+                    bm25_results = []
+                else:
+                    print(f"⚠️ No keyword matches, falling back to semantic search")
+                    vector_results = self.vector_retrieval(query, top_k=vector_k)
+                    bm25_results = self.bm25_retrieval(query, k=bm25_k)
+            else:
+                vector_results = self.vector_retrieval(query, top_k=vector_k)
+                bm25_results = self.bm25_retrieval(query, k=bm25_k)
+        else:
+            # Normal semantic search for non-title queries
+            vector_results = self.vector_retrieval(query, top_k=vector_k)
+            bm25_results = self.bm25_retrieval(query, k=bm25_k)
         
         print(f"📊 Vector results: {len(vector_results)}, BM25 results: {len(bm25_results)}")
         
         # Step 2: Combine using RRF
         if vector_results and bm25_results:
-            _, hybrid_results = self.reciprocal_rank_fusion(vector_results, bm25_results)
+            scored_items, hybrid_results = self.reciprocal_rank_fusion(vector_results, bm25_results)
         elif vector_results:
             hybrid_results = vector_results
+            scored_items = [(chunk_id, 1.0) for chunk_id in vector_results]
         elif bm25_results:
             hybrid_results = bm25_results
+            scored_items = [(chunk_id, 1.0) for chunk_id in bm25_results]
         else:
             return []
         
         print(f"🔄 Hybrid results: {len(hybrid_results)} chunks")
         
-        # Step 3: Return top results directly (skip expensive reranking)
+        # Step 3: For title queries with keyword matches, results are already filtered
+        # No need for additional boosting
         final_results = hybrid_results[:final_k]
+        
         print(f"✅ Final results: {len(final_results)} chunks")
         
         # Step 4: Return formatted results using ID-based lookup (CRITICAL FIX)

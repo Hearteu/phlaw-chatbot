@@ -10,6 +10,7 @@ import torch
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, PointStruct, VectorParams
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 # Import the new chunker (handle both package and direct execution)
 try:
@@ -20,6 +21,311 @@ except ImportError:
     import sys
     sys.path.append(os.path.dirname(__file__))
     from chunker import LegalDocumentChunker
+
+# -----------------------------
+# Fine-tuned Model Classification
+# -----------------------------
+
+# Global variables for fine-tuned model
+_finetuned_model = None
+_finetuned_tokenizer = None
+_finetuned_model_loaded = False
+
+def load_finetuned_model(model_path: str = None):
+    """Load the fine-tuned Legal RoBERTa model and tokenizer"""
+    global _finetuned_model, _finetuned_tokenizer, _finetuned_model_loaded
+    
+    if _finetuned_model_loaded:
+        return _finetuned_model, _finetuned_tokenizer
+    
+    # Determine the correct path based on execution context
+    if model_path is None:
+        # Get the directory where this script is located
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # Try different possible paths
+        possible_paths = [
+            "backend/legal_roberta_finetuned",  # When running from project root
+            os.path.join(script_dir, "..", "legal_roberta_finetuned"),  # Relative to script
+            os.path.join(os.path.dirname(script_dir), "legal_roberta_finetuned"),  # Backend directory
+            "legal_roberta_finetuned",  # When running from project root (alternative)
+            os.path.join(script_dir, "legal_roberta_finetuned"),  # Same directory as script
+        ]
+        
+        for path in possible_paths:
+            if os.path.exists(path):
+                model_path = path
+                break
+        
+        if model_path is None:
+            print("Fine-tuned model not found in any expected location, using original Saibo model")
+            print(f"Current working directory: {os.getcwd()}")
+            print(f"Script directory: {script_dir}")
+            print(f"Searched paths:")
+            for i, path in enumerate(possible_paths):
+                exists = os.path.exists(path)
+                print(f"  {i+1}. {path} - {'EXISTS' if exists else 'NOT FOUND'}")
+            return None, None
+    
+    try:
+        if not os.path.exists(model_path):
+            print(f"Fine-tuned model not found at {model_path}, using original Saibo model")
+            return None, None
+        
+        print(f"Loading fine-tuned Legal RoBERTa model from {model_path}...")
+        _finetuned_tokenizer = AutoTokenizer.from_pretrained(model_path)
+        _finetuned_model = AutoModelForSequenceClassification.from_pretrained(model_path)
+        
+        # Set to evaluation mode
+        _finetuned_model.eval()
+        _finetuned_model_loaded = True
+        
+        print("Fine-tuned model loaded successfully")
+        print(f"Model info - Labels: {_finetuned_model.config.num_labels}, Problem type: {_finetuned_model.config.problem_type}")
+        return _finetuned_model, _finetuned_tokenizer
+        
+    except Exception as e:
+        print(f"Error loading fine-tuned model: {e}")
+        return None, None
+
+def _organize_flat_predictions(flat_predictions: Dict[str, float]) -> Dict[str, Dict[str, float]]:
+    """Organize flat predictions into categories"""
+    # Define label-to-category mapping based on fine-tuned model labels
+    LABEL_CATEGORIES = {
+        # Case types
+        'civil': 'case_type',
+        'criminal': 'case_type',
+        'administrative': 'case_type',
+        'constitutional': 'case_type',
+        'labor': 'case_type',
+        'commercial': 'case_type',
+        'family': 'case_type',
+        'property': 'case_type',
+        'tort': 'case_type',
+        'tax': 'case_type',
+        'environmental': 'case_type',
+        'election': 'case_type',
+        'agrarian': 'case_type',
+        'intellectual_property': 'case_type',
+        'special_civil_action': 'case_type',
+        'special_proceedings': 'case_type',
+        'appellate': 'case_type',
+        'original_jurisdiction': 'case_type',
+        'admiralty': 'case_type',
+        'insurance': 'case_type',
+        'banking': 'case_type',
+        'corporate': 'case_type',
+        'public_international': 'case_type',
+        'private_international': 'case_type',
+        
+        # Legal areas
+        'criminal_law': 'legal_area',
+        'civil_law': 'legal_area',
+        'administrative_law': 'legal_area',
+        'constitutional_law': 'legal_area',
+        'labor_law': 'legal_area',
+        'commercial_law': 'legal_area',
+        'family_law': 'legal_area',
+        'property_law': 'legal_area',
+        'tort_law': 'legal_area',
+        'tax_law': 'legal_area',
+        'environmental_law': 'legal_area',
+        'election_law': 'legal_area',
+        'agrarian_law': 'legal_area',
+        'intellectual_property_law': 'legal_area',
+        'remedial_law': 'legal_area',
+        'political_law': 'legal_area',
+        'public_corporation_law': 'legal_area',
+        'private_corporation_law': 'legal_area',
+        'banking_law': 'legal_area',
+        'insurance_law': 'legal_area',
+        'maritime_law': 'legal_area',
+        'international_law': 'legal_area',
+        'ethics': 'legal_area',
+        'constitutional_remedies': 'legal_area',
+        
+        # Document sections
+        'facts': 'document_section',
+        'issues': 'document_section',
+        'ruling': 'document_section',
+        'ratio_decidendi': 'document_section',
+        'disposition': 'document_section',
+        'dissenting_opinion': 'document_section',
+        'concurring_opinion': 'document_section',
+        'separate_opinion': 'document_section',
+        'legal_precedent': 'document_section',
+        'procedural_history': 'document_section',
+        'summary': 'document_section',
+        'background': 'document_section',
+        'analysis': 'document_section',
+        'petition': 'document_section',
+        'motion': 'document_section',
+        'memorandum': 'document_section',
+        'brief': 'document_section',
+        'pleading': 'document_section',
+        
+        # Complexity level
+        'simple': 'complexity_level',
+        'moderate': 'complexity_level',
+        'complex': 'complexity_level',
+        'highly_complex': 'complexity_level',
+        
+        # Jurisdiction level
+        'supreme_court': 'jurisdiction_level',
+        'appellate_court': 'jurisdiction_level',
+        'regional_trial_court': 'jurisdiction_level',
+        'municipal_trial_court': 'jurisdiction_level',
+        'quasi_judicial_agency': 'jurisdiction_level',
+        'sandiganbayan': 'jurisdiction_level',
+        'court_of_tax_appeals': 'jurisdiction_level',
+        'court_of_appeals': 'jurisdiction_level',
+        
+        # Case status
+        'pending': 'case_status',
+        'decided': 'case_status',
+        'dismissed': 'case_status',
+        'settled': 'case_status',
+        'appealed': 'case_status',
+        'affirmed': 'case_status',
+        'reversed': 'case_status',
+        'modified': 'case_status',
+        'remanded': 'case_status',
+        
+        # Issue categories
+        'constitutional_question': 'issue_category',
+        'administrative_matter': 'issue_category',
+        'criminal_liability': 'issue_category',
+        'civil_liability': 'issue_category',
+        'contract_dispute': 'issue_category',
+        'property_rights': 'issue_category',
+        'family_dispute': 'issue_category',
+        'labor_dispute': 'issue_category',
+        'tax_dispute': 'issue_category',
+        'environmental_violation': 'issue_category',
+        'election_dispute': 'issue_category',
+        'banking_dispute': 'issue_category',
+        'insurance_claim': 'issue_category'
+    }
+    
+    # Initialize organized structure
+    organized = {}
+    
+    # Organize predictions by category
+    for label, score in flat_predictions.items():
+        category = LABEL_CATEGORIES.get(label)
+        if category:
+            if category not in organized:
+                organized[category] = {}
+            organized[category][label] = score
+    
+    # Sort each category by confidence
+    for category in organized:
+        organized[category] = dict(
+            sorted(organized[category].items(), key=lambda x: x[1], reverse=True)
+        )
+    
+    return organized
+
+
+def classify_with_finetuned_model(case_data: Dict[str, Any], confidence_threshold: float = 0.1) -> Dict[str, Any]:
+    """Classify case using the fine-tuned Legal RoBERTa model"""
+    
+    # Load model if not already loaded
+    model, tokenizer = load_finetuned_model()
+    
+    if model is None or tokenizer is None:
+        return {"success": False, "error": "Fine-tuned model not available"}
+    
+    try:
+        # Extract text for classification
+        text = case_data.get('clean_text', '') or case_data.get('content', '')
+        title = case_data.get('case_title', '') or case_data.get('title', '')
+        
+        if not text or len(text) < 100:
+            return {"success": False, "error": "Insufficient text for classification"}
+        
+        # Combine title and text for better context
+        if title and len(title) < 200:
+            full_text = f"{title}. {text[:1800]}"  # Limit total length
+        else:
+            full_text = text[:2000]
+        
+        # Tokenize input
+        inputs = tokenizer(
+            full_text,
+            truncation=True,
+            padding='max_length',
+            max_length=512,
+            return_tensors='pt'
+        )
+        
+        # Move to GPU if available
+        if torch.cuda.is_available():
+            model = model.cuda()
+            inputs = {k: v.cuda() for k, v in inputs.items()}
+        
+        # Get predictions
+        with torch.no_grad():
+            outputs = model(**inputs)
+            logits = outputs.logits
+            probabilities = torch.sigmoid(logits)
+        
+        # Convert to CPU for processing
+        probabilities = probabilities.cpu().numpy()[0]
+        
+        # Debug: Print comprehensive prediction info
+        max_prob = max(probabilities) if len(probabilities) > 0 else 0.0
+        print(f"Model predictions - Max probability: {max_prob:.4f}, Threshold: {confidence_threshold}")
+        print(f"Total probabilities: {len(probabilities)}")
+        
+        # Get top 10 predictions for debugging
+        if len(probabilities) > 0:
+            top_indices = probabilities.argsort()[-10:][::-1]
+            print("Top 10 predictions:")
+            for i, idx in enumerate(top_indices):
+                label_name = model.config.id2label.get(idx, f"label_{idx}")
+                print(f"  {i+1}. {label_name}: {probabilities[idx]:.4f}")
+        
+        # Get predictions above threshold
+        flat_predictions = {}
+        for i, prob in enumerate(probabilities):
+            if prob > confidence_threshold:
+                # Get label name from model config
+                label_name = model.config.id2label.get(i, f"label_{i}")
+                flat_predictions[label_name] = float(prob)
+        
+        print(f"Predictions above threshold ({confidence_threshold}): {len(flat_predictions)}")
+        
+        # If no predictions above threshold, get top 5 predictions anyway
+        if not flat_predictions and len(probabilities) > 0:
+            print("No predictions above threshold, using top 5 predictions...")
+            # Get top 5 predictions regardless of threshold
+            top_indices = probabilities.argsort()[-5:][::-1]
+            for idx in top_indices:
+                if probabilities[idx] > 0.01:  # Very low threshold for fallback
+                    label_name = model.config.id2label.get(idx, f"label_{idx}")
+                    flat_predictions[label_name] = float(probabilities[idx])
+                    print(f"  Fallback: {label_name}: {probabilities[idx]:.4f}")
+        
+        # Organize predictions by category
+        organized_predictions = _organize_flat_predictions(flat_predictions)
+        
+        # Calculate overall confidence
+        overall_confidence = max(probabilities) if len(probabilities) > 0 else 0.0
+        
+        return {
+            "success": True,
+            "predictions": organized_predictions,
+            "raw_predictions": flat_predictions,
+            "confidence": float(overall_confidence),
+            "method": "finetuned_legal_roberta"
+        }
+        
+    except Exception as e:
+        print(f"Classification error: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
 
 # -----------------------------
 # Config
@@ -33,8 +339,8 @@ VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", 768))
 
 # Source data (JSONL only)
 DATA_FILE = os.getenv("DATA_FILE", "backend/data/cases.jsonl.gz")
-YEAR_START = int(os.getenv("YEAR_START", 2005))
-YEAR_END = int(os.getenv("YEAR_END", 2005))
+YEAR_START = int(os.getenv("YEAR_START", 2006))
+YEAR_END = int(os.getenv("YEAR_END", 2025))
 
 # Chunking config
 CHUNK_SIZE_TOKENS = int(os.getenv("CHUNK_SIZE_TOKENS", 640))
@@ -170,14 +476,10 @@ def create_points_from_chunks(chunks: List[Dict[str, Any]]) -> List[PointStruct]
             'chunk_version': 'v2.0',
             'processed_timestamp': int(time.time()),
             
-            # Legal classification metadata (from Saibo classifier)
-            'classification_method': chunk['metadata'].get('classification_method', 'unknown'),
+            # Legal classification metadata (from fine-tuned Legal RoBERTa)
+            'classification_method': chunk['metadata'].get('classification_method', 'finetuned_legal_roberta'),
             'classification_confidence': chunk['metadata'].get('classification_confidence', 0.0),
-            'case_type_classification': chunk['metadata'].get('case_type', {}),
-            'legal_area_classification': chunk['metadata'].get('legal_area', {}),
-            'document_section_classification': chunk['metadata'].get('document_section', {}),
-            'complexity_level_classification': chunk['metadata'].get('complexity_level', {}),
-            'jurisdiction_level_classification': chunk['metadata'].get('jurisdiction_level', {}),
+            'case_type_classification': chunk['metadata'].get('case_type_classification', {}),
         }
         
         point = PointStruct(
@@ -241,32 +543,23 @@ def process_jsonl():
             if not clean_text or len(clean_text) < 500:  # Minimum content threshold
                 continue
 
-            # Classify case data using Saibo legal document classifier
+            # Classify case data using fine-tuned Legal RoBERTa model
             try:
-                try:
-                    from .legal_document_classifier import classify_legal_case
-                except ImportError:
-                    # For direct execution
-                    from legal_document_classifier import classify_legal_case
-                classification_result = classify_legal_case(rec.copy())
+                classification_result = classify_with_finetuned_model(rec.copy())
                 
                 # Add classification results to case metadata
                 if classification_result.get('success', False):
                     rec['legal_classification'] = classification_result
-                    rec['case_type'] = classification_result.get('predictions', {}).get('case_type', {})
-                    rec['legal_area'] = classification_result.get('predictions', {}).get('legal_area', {})
-                    rec['document_section'] = classification_result.get('predictions', {}).get('document_section', {})
-                    rec['complexity_level'] = classification_result.get('predictions', {}).get('complexity_level', {})
-                    rec['jurisdiction_level'] = classification_result.get('predictions', {}).get('jurisdiction_level', {})
-                    rec['classification_method'] = classification_result.get('method', 'unknown')
+                    rec['case_type_classification'] = classification_result.get('predictions', {})
+                    rec['classification_method'] = classification_result.get('method', 'finetuned_legal_roberta')
                     rec['classification_confidence'] = classification_result.get('confidence', 0.0)
                     
                     print(f"Classified case {rec.get('gr_number', 'unknown')}: {classification_result.get('method', 'unknown')} method, confidence: {classification_result.get('confidence', 0.0):.3f}")
                 else:
-                    print(f"Classification failed for case {rec.get('gr_number', 'unknown')}")
+                    print(f"Classification failed for case {rec.get('gr_number', 'unknown')}: {classification_result.get('error', 'unknown error')}")
                     
             except Exception as e:
-                print(f"Saibo classification failed for case {rec.get('gr_number', 'unknown')}: {e}")
+                print(f"Fine-tuned model classification failed for case {rec.get('gr_number', 'unknown')}: {e}")
                 # Continue with original case data
             
             # Apply structure-aware chunking

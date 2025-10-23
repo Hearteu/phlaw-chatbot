@@ -231,6 +231,58 @@ class RatingMetricsView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class StreamingChatView(APIView):
+    """Streaming chat endpoint with real-time progress updates"""
+    authentication_classes: list = []
+    permission_classes: list = []
+
+    def post(self, request):
+        import json
+
+        from django.http import StreamingHttpResponse
+        
+        serializer = ChatRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({"error": "Missing or invalid 'query'."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        query = serializer.validated_data["query"]
+        history = serializer.validated_data.get("history") or []
+        
+        def generate_stream():
+            """Generator function for streaming responses with progress updates"""
+            try:
+                # Import here to avoid circular dependencies
+                from .chat_engine import chat_with_law_bot_streaming
+
+                # Send initial metadata
+                yield f"data: {json.dumps({'type': 'start', 'query': query})}\n\n"
+                
+                # Generate streaming response with progress updates
+                for chunk in chat_with_law_bot_streaming(query, history=history):
+                    if isinstance(chunk, dict):
+                        # Progress update
+                        yield f"data: {json.dumps(chunk)}\n\n"
+                    else:
+                        # Content chunk (string)
+                        yield f"data: {json.dumps({'type': 'content', 'chunk': chunk})}\n\n"
+                
+                # Send completion signal
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                
+            except Exception as e:
+                logger.exception("Streaming chat failed: %s", e)
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+
+        response = StreamingHttpResponse(
+            generate_stream(),
+            content_type='text/event-stream'
+        )
+        response['Cache-Control'] = 'no-cache'
+        response['X-Accel-Buffering'] = 'no'
+        return response
+
+
 class ClearCacheView(APIView):
     """API endpoint to clear LLM response caches"""
     authentication_classes: list = []

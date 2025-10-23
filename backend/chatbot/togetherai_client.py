@@ -15,6 +15,8 @@ class TogetherAIClient:
     def __init__(self, 
                  api_key: Optional[str] = None,
                  model_name: str = "meta-llama/Llama-3.3-70B-Instruct-Turbo"):
+                #  model_name: str = "deepseek-ai/DeepSeek-R1-Distill-Llama-70B-free"):
+                #  model_name: str = "openai/gpt-oss-20b"):
         self.api_key = api_key or os.getenv("TOGETHERAI_API_KEY")
         self.model_name = model_name
         self.base_url = "https://api.together.xyz/v1"

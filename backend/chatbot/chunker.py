@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 DISPOSITIVE_HDR = r"(?:WHEREFORE|ACCORDINGLY|IN VIEW OF THE FOREGOING|IN VIEW WHEREOF|THUS|HENCE|PREMISES CONSIDERED)"
 SO_ORDERED = r"SO\s+ORDERED\.?"
 RULING_REGEX = re.compile(
-    rf"{DISPOSITIVE_HDR}[\s\S]{{0,4000}}?{SO_ORDERED}",
+    rf"{DISPOSITIVE_HDR}[\s\S]{{0,10000}}?{SO_ORDERED}",
     re.IGNORECASE,
 )
 
@@ -20,7 +20,7 @@ class LegalDocumentChunker:
                  chunk_size: int = 640,  # tokens
                  overlap_ratio: float = 0.15,
                  min_chunk_size: int = 200,
-                 max_dispositive_size: int = 1200):
+                 max_dispositive_size: int = 3000):
         self.chunk_size = chunk_size
         self.overlap_ratio = overlap_ratio
         self.min_chunk_size = min_chunk_size
@@ -83,7 +83,11 @@ class LegalDocumentChunker:
             'en_banc': case_data.get('en_banc', False),
             'source_url': case_data.get('source_url', ''),
             'promulgation_year': case_data.get('promulgation_year', ''),
-            'is_administrative': case_data.get('is_administrative', False)
+            'is_administrative': case_data.get('is_administrative', False),
+            # Legal classification metadata from fine-tuned model
+            'case_type_classification': case_data.get('case_type_classification', {}),
+            'classification_method': case_data.get('classification_method', 'finetuned_legal_roberta'),
+            'classification_confidence': case_data.get('classification_confidence', 0.0)
         }
     
     def _create_mini_summary(self, case_data: Dict[str, Any], metadata: Dict[str, Any]) -> Dict[str, Any]:

@@ -41,7 +41,7 @@ def generate_response(prompt: str, _retry_count: int = 0) -> str:
 
         result = generate_with_togetherai(
             prompt,
-            max_tokens=2048,
+            max_tokens=4096,
             temperature=0.3,
             top_p=0.85,
             stop=["User:", "Human:", "\n\n\n\n"]
@@ -61,7 +61,7 @@ def generate_response_from_messages(messages: List[Dict[str, str]], _retry_count
 
         result = generate_messages_with_togetherai(
             messages,
-            max_tokens=2048,
+            max_tokens=4096,
             temperature=0.3,
             top_p=0.85,
             stop=["User:", "Human:", "\n\n\n\n"]
@@ -153,9 +153,11 @@ Focus exclusively on Philippine Law. If asked about other jurisdictions, politel
     
     # Generate response
     try:
+        # Use more tokens for case digests (they're longer)
+        max_response_tokens = 4096 if is_case_digest else 2048
         response = togetherai_client.generate_response_from_messages(
             messages,
-            max_tokens=2048,
+            max_tokens=max_response_tokens,
             temperature=0.3,
             top_p=0.85
         )
