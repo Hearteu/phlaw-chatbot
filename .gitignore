@@ -54,3 +54,10 @@ volume_backup/
 backend/law-chat.Q5_K_M.gguf
 backend/data/*.gz
 backend/law-chat.Q4_K_M.gguf
+
+backend/legal_roberta_finetuned/
+backend/backend/data
+backend/data/evaluation_logs
+backend/test_results
+test_results
+wandb

@@ -1,0 +1,6298 @@
+{
+  "test_queries": [
+    {
+      "id": 1,
+      "year": "2005",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 163410."
+    },
+    {
+      "id": 2,
+      "year": "2005",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 152230."
+    },
+    {
+      "id": 3,
+      "year": "2005",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 148339."
+    },
+    {
+      "id": 4,
+      "year": "2005",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 151266."
+    },
+    {
+      "id": 5,
+      "year": "2005",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. RTJ-04-1873."
+    },
+    {
+      "id": 6,
+      "year": "2005",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 150678."
+    },
+    {
+      "id": 7,
+      "year": "2005",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 156260."
+    },
+    {
+      "id": 8,
+      "year": "2005",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. P-05-1933."
+    },
+    {
+      "id": 9,
+      "year": "2005",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.C. No. 5864."
+    },
+    {
+      "id": 10,
+      "year": "2005",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. P-05-2021."
+    },
+    {
+      "id": 11,
+      "year": "2005",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 140945."
+    },
+    {
+      "id": 12,
+      "year": "2005",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 137447."
+    },
+    {
+      "id": 13,
+      "year": "2005",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 141180."
+    },
+    {
+      "id": 14,
+      "year": "2005",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in A.M. No. P-04-1927?"
+    },
+    {
+      "id": 15,
+      "year": "2005",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 128305?"
+    },
+    {
+      "id": 16,
+      "year": "2005",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in A.M. No. P-05-2061?"
+    },
+    {
+      "id": 17,
+      "year": "2005",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 159212?"
+    },
+    {
+      "id": 18,
+      "year": "2005",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 153866?"
+    },
+    {
+      "id": 19,
+      "year": "2005",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 147706-07?"
+    },
+    {
+      "id": 20,
+      "year": "2005",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 152481?"
+    },
+    {
+      "id": 21,
+      "year": "2005",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 141669?"
+    },
+    {
+      "id": 22,
+      "year": "2005",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in A.M. No. MTJ-03-1501?"
+    },
+    {
+      "id": 23,
+      "year": "2005",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 153667?"
+    },
+    {
+      "id": 24,
+      "year": "2005",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 158684?"
+    },
+    {
+      "id": 25,
+      "year": "2005",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 164921?"
+    },
+    {
+      "id": 26,
+      "year": "2005",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 163338?"
+    },
+    {
+      "id": 27,
+      "year": "2005",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 145823."
+    },
+    {
+      "id": 28,
+      "year": "2005",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 154092."
+    },
+    {
+      "id": 29,
+      "year": "2005",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 158904."
+    },
+    {
+      "id": 30,
+      "year": "2005",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.M. No. RTJ-05-1914."
+    },
+    {
+      "id": 31,
+      "year": "2005",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 158088."
+    },
+    {
+      "id": 32,
+      "year": "2005",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 149837."
+    },
+    {
+      "id": 33,
+      "year": "2005",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 160315."
+    },
+    {
+      "id": 34,
+      "year": "2005",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 167025."
+    },
+    {
+      "id": 35,
+      "year": "2005",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in === Year 2006: selected 50 of 1458 available ===."
+    },
+    {
+      "id": 36,
+      "year": "2005",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.M. No. 05-9-555-RTC."
+    },
+    {
+      "id": 37,
+      "year": "2005",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.M. No. P-05-1945."
+    },
+    {
+      "id": 38,
+      "year": "2005",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 148361."
+    },
+    {
+      "id": 39,
+      "year": "2005",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 161309?"
+    },
+    {
+      "id": 40,
+      "year": "2005",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 150994?"
+    },
+    {
+      "id": 41,
+      "year": "2005",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.M. No. P-04-1828?"
+    },
+    {
+      "id": 42,
+      "year": "2005",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 158753?"
+    },
+    {
+      "id": 43,
+      "year": "2005",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 158064?"
+    },
+    {
+      "id": 44,
+      "year": "2005",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 132209?"
+    },
+    {
+      "id": 45,
+      "year": "2005",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 141523?"
+    },
+    {
+      "id": 46,
+      "year": "2005",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.M. No. P-05-2005?"
+    },
+    {
+      "id": 47,
+      "year": "2005",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.M. No. RTJ-04-1888?"
+    },
+    {
+      "id": 48,
+      "year": "2005",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 156262?"
+    },
+    {
+      "id": 49,
+      "year": "2005",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 156403?"
+    },
+    {
+      "id": 50,
+      "year": "2005",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 149636?"
+    },
+    {
+      "id": 51,
+      "year": "2006",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 143219."
+    },
+    {
+      "id": 52,
+      "year": "2006",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 165580."
+    },
+    {
+      "id": 53,
+      "year": "2006",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.C. No. 7056."
+    },
+    {
+      "id": 54,
+      "year": "2006",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.C. No. 7123."
+    },
+    {
+      "id": 55,
+      "year": "2006",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. 05-8-226-METC."
+    },
+    {
+      "id": 56,
+      "year": "2006",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. P-05-2034."
+    },
+    {
+      "id": 57,
+      "year": "2006",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 166479."
+    },
+    {
+      "id": 58,
+      "year": "2006",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 160053."
+    },
+    {
+      "id": 59,
+      "year": "2006",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 131408."
+    },
+    {
+      "id": 60,
+      "year": "2006",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 153144."
+    },
+    {
+      "id": 61,
+      "year": "2006",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 146426."
+    },
+    {
+      "id": 62,
+      "year": "2006",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. P-06-2110."
+    },
+    {
+      "id": 63,
+      "year": "2006",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 136349?"
+    },
+    {
+      "id": 64,
+      "year": "2006",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 173940?"
+    },
+    {
+      "id": 65,
+      "year": "2006",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 157745?"
+    },
+    {
+      "id": 66,
+      "year": "2006",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 154156?"
+    },
+    {
+      "id": 67,
+      "year": "2006",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 168550?"
+    },
+    {
+      "id": 68,
+      "year": "2006",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 121165?"
+    },
+    {
+      "id": 69,
+      "year": "2006",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 142625?"
+    },
+    {
+      "id": 70,
+      "year": "2006",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 149145?"
+    },
+    {
+      "id": 71,
+      "year": "2006",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 147989?"
+    },
+    {
+      "id": 72,
+      "year": "2006",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 148102?"
+    },
+    {
+      "id": 73,
+      "year": "2006",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 146616?"
+    },
+    {
+      "id": 74,
+      "year": "2006",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 169517?"
+    },
+    {
+      "id": 75,
+      "year": "2006",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 137171?"
+    },
+    {
+      "id": 76,
+      "year": "2006",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 168438."
+    },
+    {
+      "id": 77,
+      "year": "2006",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 154665."
+    },
+    {
+      "id": 78,
+      "year": "2006",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 167502."
+    },
+    {
+      "id": 79,
+      "year": "2006",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 146824."
+    },
+    {
+      "id": 80,
+      "year": "2006",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 153785."
+    },
+    {
+      "id": 81,
+      "year": "2006",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 168476."
+    },
+    {
+      "id": 82,
+      "year": "2006",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 164156."
+    },
+    {
+      "id": 83,
+      "year": "2006",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 144449."
+    },
+    {
+      "id": 84,
+      "year": "2006",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 155392."
+    },
+    {
+      "id": 85,
+      "year": "2006",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 143542."
+    },
+    {
+      "id": 86,
+      "year": "2006",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.M. No. 2006-11-SC."
+    },
+    {
+      "id": 87,
+      "year": "2006",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.M. No. MTJ-06-1644."
+    },
+    {
+      "id": 88,
+      "year": "2006",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 152440."
+    },
+    {
+      "id": 89,
+      "year": "2006",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in === Year 2007: selected 50 of 1424 available ===?"
+    },
+    {
+      "id": 90,
+      "year": "2006",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 148893?"
+    },
+    {
+      "id": 91,
+      "year": "2006",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 147375?"
+    },
+    {
+      "id": 92,
+      "year": "2006",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 168498?"
+    },
+    {
+      "id": 93,
+      "year": "2006",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 147902?"
+    },
+    {
+      "id": 94,
+      "year": "2006",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 133168?"
+    },
+    {
+      "id": 95,
+      "year": "2006",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 153979?"
+    },
+    {
+      "id": 96,
+      "year": "2006",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 127165?"
+    },
+    {
+      "id": 97,
+      "year": "2006",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 159810?"
+    },
+    {
+      "id": 98,
+      "year": "2006",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 151001?"
+    },
+    {
+      "id": 99,
+      "year": "2006",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 149753?"
+    },
+    {
+      "id": 100,
+      "year": "2006",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 171901?"
+    },
+    {
+      "id": 101,
+      "year": "2007",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 170785."
+    },
+    {
+      "id": 102,
+      "year": "2007",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 149125."
+    },
+    {
+      "id": 103,
+      "year": "2007",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 167961."
+    },
+    {
+      "id": 104,
+      "year": "2007",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 150537."
+    },
+    {
+      "id": 105,
+      "year": "2007",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 172913."
+    },
+    {
+      "id": 106,
+      "year": "2007",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 175594."
+    },
+    {
+      "id": 107,
+      "year": "2007",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. RTJ-03-1749."
+    },
+    {
+      "id": 108,
+      "year": "2007",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 143093."
+    },
+    {
+      "id": 109,
+      "year": "2007",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. MTJ-06-1649."
+    },
+    {
+      "id": 110,
+      "year": "2007",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 149625."
+    },
+    {
+      "id": 111,
+      "year": "2007",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. MTJ-07-1674."
+    },
+    {
+      "id": 112,
+      "year": "2007",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 170384-85."
+    },
+    {
+      "id": 113,
+      "year": "2007",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 170471?"
+    },
+    {
+      "id": 114,
+      "year": "2007",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 171029?"
+    },
+    {
+      "id": 115,
+      "year": "2007",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 167670?"
+    },
+    {
+      "id": 116,
+      "year": "2007",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 172406?"
+    },
+    {
+      "id": 117,
+      "year": "2007",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 149508?"
+    },
+    {
+      "id": 118,
+      "year": "2007",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 174551?"
+    },
+    {
+      "id": 119,
+      "year": "2007",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 168811?"
+    },
+    {
+      "id": 120,
+      "year": "2007",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 131491?"
+    },
+    {
+      "id": 121,
+      "year": "2007",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 165080?"
+    },
+    {
+      "id": 122,
+      "year": "2007",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 170740?"
+    },
+    {
+      "id": 123,
+      "year": "2007",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 153460?"
+    },
+    {
+      "id": 124,
+      "year": "2007",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 169204?"
+    },
+    {
+      "id": 125,
+      "year": "2007",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 175895."
+    },
+    {
+      "id": 126,
+      "year": "2007",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 157593."
+    },
+    {
+      "id": 127,
+      "year": "2007",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.M. No. P-07-2401."
+    },
+    {
+      "id": 128,
+      "year": "2007",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 176633."
+    },
+    {
+      "id": 129,
+      "year": "2007",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 172691."
+    },
+    {
+      "id": 130,
+      "year": "2007",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 151910."
+    },
+    {
+      "id": 131,
+      "year": "2007",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 174668."
+    },
+    {
+      "id": 132,
+      "year": "2007",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 158253."
+    },
+    {
+      "id": 133,
+      "year": "2007",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 150648."
+    },
+    {
+      "id": 134,
+      "year": "2007",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 158907."
+    },
+    {
+      "id": 135,
+      "year": "2007",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 162583."
+    },
+    {
+      "id": 136,
+      "year": "2007",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 174474."
+    },
+    {
+      "id": 137,
+      "year": "2007",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 168988."
+    },
+    {
+      "id": 138,
+      "year": "2007",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 161594?"
+    },
+    {
+      "id": 139,
+      "year": "2007",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in === Year 2008: selected 50 of 1442 available ===?"
+    },
+    {
+      "id": 140,
+      "year": "2007",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 142399?"
+    },
+    {
+      "id": 141,
+      "year": "2007",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 165164?"
+    },
+    {
+      "id": 142,
+      "year": "2007",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 167552?"
+    },
+    {
+      "id": 143,
+      "year": "2007",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 168827?"
+    },
+    {
+      "id": 144,
+      "year": "2007",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 172607?"
+    },
+    {
+      "id": 145,
+      "year": "2007",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 172760-61?"
+    },
+    {
+      "id": 146,
+      "year": "2007",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 171503?"
+    },
+    {
+      "id": 147,
+      "year": "2007",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 172697?"
+    },
+    {
+      "id": 148,
+      "year": "2007",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 153839?"
+    },
+    {
+      "id": 149,
+      "year": "2007",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 168818?"
+    },
+    {
+      "id": 150,
+      "year": "2007",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 173034?"
+    },
+    {
+      "id": 151,
+      "year": "2008",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 177797."
+    },
+    {
+      "id": 152,
+      "year": "2008",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.C. No. 7747."
+    },
+    {
+      "id": 153,
+      "year": "2008",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 158270."
+    },
+    {
+      "id": 154,
+      "year": "2008",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. RTJ-03-1762."
+    },
+    {
+      "id": 155,
+      "year": "2008",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 161004."
+    },
+    {
+      "id": 156,
+      "year": "2008",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 159421."
+    },
+    {
+      "id": 157,
+      "year": "2008",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 157264."
+    },
+    {
+      "id": 158,
+      "year": "2008",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. MTJ-99-1204."
+    },
+    {
+      "id": 159,
+      "year": "2008",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. P-07-2380."
+    },
+    {
+      "id": 160,
+      "year": "2008",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 172970."
+    },
+    {
+      "id": 161,
+      "year": "2008",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. RTJ-07-2050."
+    },
+    {
+      "id": 162,
+      "year": "2008",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 168799."
+    },
+    {
+      "id": 163,
+      "year": "2008",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 181901."
+    },
+    {
+      "id": 164,
+      "year": "2008",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 177565?"
+    },
+    {
+      "id": 165,
+      "year": "2008",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 173415?"
+    },
+    {
+      "id": 166,
+      "year": "2008",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 172167?"
+    },
+    {
+      "id": 167,
+      "year": "2008",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 171961?"
+    },
+    {
+      "id": 168,
+      "year": "2008",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 150844?"
+    },
+    {
+      "id": 169,
+      "year": "2008",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 164081?"
+    },
+    {
+      "id": 170,
+      "year": "2008",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 174659?"
+    },
+    {
+      "id": 171,
+      "year": "2008",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in A.M. No. P-07-2384?"
+    },
+    {
+      "id": 172,
+      "year": "2008",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 149787?"
+    },
+    {
+      "id": 173,
+      "year": "2008",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 174405?"
+    },
+    {
+      "id": 174,
+      "year": "2008",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 148433?"
+    },
+    {
+      "id": 175,
+      "year": "2008",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 160127?"
+    },
+    {
+      "id": 176,
+      "year": "2008",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 146121-22."
+    },
+    {
+      "id": 177,
+      "year": "2008",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 173473."
+    },
+    {
+      "id": 178,
+      "year": "2008",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in OCA No. CA-02-16-P."
+    },
+    {
+      "id": 179,
+      "year": "2008",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 163749."
+    },
+    {
+      "id": 180,
+      "year": "2008",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 183171."
+    },
+    {
+      "id": 181,
+      "year": "2008",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 168163."
+    },
+    {
+      "id": 182,
+      "year": "2008",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 178443."
+    },
+    {
+      "id": 183,
+      "year": "2008",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 155844."
+    },
+    {
+      "id": 184,
+      "year": "2008",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 157287."
+    },
+    {
+      "id": 185,
+      "year": "2008",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 151110."
+    },
+    {
+      "id": 186,
+      "year": "2008",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 178366."
+    },
+    {
+      "id": 187,
+      "year": "2008",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 180448."
+    },
+    {
+      "id": 188,
+      "year": "2008",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in === Year 2009: selected 50 of 1429 available ===?"
+    },
+    {
+      "id": 189,
+      "year": "2008",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 179895?"
+    },
+    {
+      "id": 190,
+      "year": "2008",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 159255?"
+    },
+    {
+      "id": 191,
+      "year": "2008",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 136197?"
+    },
+    {
+      "id": 192,
+      "year": "2008",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 176733?"
+    },
+    {
+      "id": 193,
+      "year": "2008",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 178545?"
+    },
+    {
+      "id": 194,
+      "year": "2008",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 181492?"
+    },
+    {
+      "id": 195,
+      "year": "2008",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 167622?"
+    },
+    {
+      "id": 196,
+      "year": "2008",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 178546?"
+    },
+    {
+      "id": 197,
+      "year": "2008",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 161032?"
+    },
+    {
+      "id": 198,
+      "year": "2008",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 169245?"
+    },
+    {
+      "id": 199,
+      "year": "2008",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 136409?"
+    },
+    {
+      "id": 200,
+      "year": "2008",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 159130?"
+    },
+    {
+      "id": 201,
+      "year": "2009",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 173215."
+    },
+    {
+      "id": 202,
+      "year": "2009",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 178873."
+    },
+    {
+      "id": 203,
+      "year": "2009",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 123650."
+    },
+    {
+      "id": 204,
+      "year": "2009",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 167017."
+    },
+    {
+      "id": 205,
+      "year": "2009",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. RTJ-07-2055."
+    },
+    {
+      "id": 206,
+      "year": "2009",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 163553."
+    },
+    {
+      "id": 207,
+      "year": "2009",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 156809."
+    },
+    {
+      "id": 208,
+      "year": "2009",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 170182."
+    },
+    {
+      "id": 209,
+      "year": "2009",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 180668."
+    },
+    {
+      "id": 210,
+      "year": "2009",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 174975."
+    },
+    {
+      "id": 211,
+      "year": "2009",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. P-08-2571."
+    },
+    {
+      "id": 212,
+      "year": "2009",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 156660."
+    },
+    {
+      "id": 213,
+      "year": "2009",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 149660."
+    },
+    {
+      "id": 214,
+      "year": "2009",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 171535?"
+    },
+    {
+      "id": 215,
+      "year": "2009",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 183142?"
+    },
+    {
+      "id": 216,
+      "year": "2009",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 172931?"
+    },
+    {
+      "id": 217,
+      "year": "2009",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 166879?"
+    },
+    {
+      "id": 218,
+      "year": "2009",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 183366?"
+    },
+    {
+      "id": 219,
+      "year": "2009",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in A.M. No. P-09-2676?"
+    },
+    {
+      "id": 220,
+      "year": "2009",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 176566?"
+    },
+    {
+      "id": 221,
+      "year": "2009",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in === Year 2010: selected 50 of 1270 available ===?"
+    },
+    {
+      "id": 222,
+      "year": "2009",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in A.C. No. 5691?"
+    },
+    {
+      "id": 223,
+      "year": "2009",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 165927?"
+    },
+    {
+      "id": 224,
+      "year": "2009",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 182791?"
+    },
+    {
+      "id": 225,
+      "year": "2009",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 164195?"
+    },
+    {
+      "id": 226,
+      "year": "2009",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in A.M. No. P-09-2622?"
+    },
+    {
+      "id": 227,
+      "year": "2009",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 169889."
+    },
+    {
+      "id": 228,
+      "year": "2009",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 171313."
+    },
+    {
+      "id": 229,
+      "year": "2009",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 162074."
+    },
+    {
+      "id": 230,
+      "year": "2009",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 162738."
+    },
+    {
+      "id": 231,
+      "year": "2009",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 187156."
+    },
+    {
+      "id": 232,
+      "year": "2009",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 159710."
+    },
+    {
+      "id": 233,
+      "year": "2009",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 175048."
+    },
+    {
+      "id": 234,
+      "year": "2009",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 132826."
+    },
+    {
+      "id": 235,
+      "year": "2009",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 164804."
+    },
+    {
+      "id": 236,
+      "year": "2009",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 149050."
+    },
+    {
+      "id": 237,
+      "year": "2009",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 175317."
+    },
+    {
+      "id": 238,
+      "year": "2009",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 180439."
+    },
+    {
+      "id": 239,
+      "year": "2009",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.M. No. P-04-1795?"
+    },
+    {
+      "id": 240,
+      "year": "2009",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 182585?"
+    },
+    {
+      "id": 241,
+      "year": "2009",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 169554?"
+    },
+    {
+      "id": 242,
+      "year": "2009",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 163495?"
+    },
+    {
+      "id": 243,
+      "year": "2009",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 185251?"
+    },
+    {
+      "id": 244,
+      "year": "2009",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 162374?"
+    },
+    {
+      "id": 245,
+      "year": "2009",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 173654-765?"
+    },
+    {
+      "id": 246,
+      "year": "2009",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 170270?"
+    },
+    {
+      "id": 247,
+      "year": "2009",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 173533?"
+    },
+    {
+      "id": 248,
+      "year": "2009",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 170147?"
+    },
+    {
+      "id": 249,
+      "year": "2009",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 174269?"
+    },
+    {
+      "id": 250,
+      "year": "2009",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 172367?"
+    },
+    {
+      "id": 251,
+      "year": "2010",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 180050."
+    },
+    {
+      "id": 252,
+      "year": "2010",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 181809."
+    },
+    {
+      "id": 253,
+      "year": "2010",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 186640."
+    },
+    {
+      "id": 254,
+      "year": "2010",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 173854."
+    },
+    {
+      "id": 255,
+      "year": "2010",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 178274."
+    },
+    {
+      "id": 256,
+      "year": "2010",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 160422."
+    },
+    {
+      "id": 257,
+      "year": "2010",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of === Year 2011: selected 50 of 986 available ===."
+    },
+    {
+      "id": 258,
+      "year": "2010",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 171033."
+    },
+    {
+      "id": 259,
+      "year": "2010",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 174833."
+    },
+    {
+      "id": 260,
+      "year": "2010",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 182086."
+    },
+    {
+      "id": 261,
+      "year": "2010",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 165676."
+    },
+    {
+      "id": 262,
+      "year": "2010",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 159097."
+    },
+    {
+      "id": 263,
+      "year": "2010",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 181913?"
+    },
+    {
+      "id": 264,
+      "year": "2010",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in A.M. No. P-09-2602?"
+    },
+    {
+      "id": 265,
+      "year": "2010",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 149548?"
+    },
+    {
+      "id": 266,
+      "year": "2010",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 190078?"
+    },
+    {
+      "id": 267,
+      "year": "2010",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 180836?"
+    },
+    {
+      "id": 268,
+      "year": "2010",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 188471?"
+    },
+    {
+      "id": 269,
+      "year": "2010",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 170599?"
+    },
+    {
+      "id": 270,
+      "year": "2010",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 174039?"
+    },
+    {
+      "id": 271,
+      "year": "2010",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 165266?"
+    },
+    {
+      "id": 272,
+      "year": "2010",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 191404?"
+    },
+    {
+      "id": 273,
+      "year": "2010",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 150666?"
+    },
+    {
+      "id": 274,
+      "year": "2010",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in A.M. No. RTJ-08-2145?"
+    },
+    {
+      "id": 275,
+      "year": "2010",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 157009?"
+    },
+    {
+      "id": 276,
+      "year": "2010",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 182677."
+    },
+    {
+      "id": 277,
+      "year": "2010",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 172635."
+    },
+    {
+      "id": 278,
+      "year": "2010",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 177740."
+    },
+    {
+      "id": 279,
+      "year": "2010",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 172292."
+    },
+    {
+      "id": 280,
+      "year": "2010",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 172027."
+    },
+    {
+      "id": 281,
+      "year": "2010",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 179549."
+    },
+    {
+      "id": 282,
+      "year": "2010",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 188669."
+    },
+    {
+      "id": 283,
+      "year": "2010",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 186605."
+    },
+    {
+      "id": 284,
+      "year": "2010",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 175837."
+    },
+    {
+      "id": 285,
+      "year": "2010",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 180564."
+    },
+    {
+      "id": 286,
+      "year": "2010",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 166356."
+    },
+    {
+      "id": 287,
+      "year": "2010",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 180915."
+    },
+    {
+      "id": 288,
+      "year": "2010",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.M. No. P-08-2584."
+    },
+    {
+      "id": 289,
+      "year": "2010",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 175200?"
+    },
+    {
+      "id": 290,
+      "year": "2010",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 180505?"
+    },
+    {
+      "id": 291,
+      "year": "2010",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 133347?"
+    },
+    {
+      "id": 292,
+      "year": "2010",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 183711?"
+    },
+    {
+      "id": 293,
+      "year": "2010",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 156125?"
+    },
+    {
+      "id": 294,
+      "year": "2010",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.M. No. P-09-2638?"
+    },
+    {
+      "id": 295,
+      "year": "2010",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 165976?"
+    },
+    {
+      "id": 296,
+      "year": "2010",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 187049?"
+    },
+    {
+      "id": 297,
+      "year": "2010",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.M. No. P-10-2807?"
+    },
+    {
+      "id": 298,
+      "year": "2010",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.M. No. 10-4-22-SC?"
+    },
+    {
+      "id": 299,
+      "year": "2010",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 168386?"
+    },
+    {
+      "id": 300,
+      "year": "2010",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 171980?"
+    },
+    {
+      "id": 301,
+      "year": "2011",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 186417."
+    },
+    {
+      "id": 302,
+      "year": "2011",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. 08-19-SB-J."
+    },
+    {
+      "id": 303,
+      "year": "2011",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. 10-10-4-SC."
+    },
+    {
+      "id": 304,
+      "year": "2011",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. RTJ-11-2267."
+    },
+    {
+      "id": 305,
+      "year": "2011",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 160138."
+    },
+    {
+      "id": 306,
+      "year": "2011",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 142676."
+    },
+    {
+      "id": 307,
+      "year": "2011",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 156318."
+    },
+    {
+      "id": 308,
+      "year": "2011",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 175330."
+    },
+    {
+      "id": 309,
+      "year": "2011",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 170166."
+    },
+    {
+      "id": 310,
+      "year": "2011",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. RTJ-07-2069."
+    },
+    {
+      "id": 311,
+      "year": "2011",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 182521."
+    },
+    {
+      "id": 312,
+      "year": "2011",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 183711."
+    },
+    {
+      "id": 313,
+      "year": "2011",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 176091?"
+    },
+    {
+      "id": 314,
+      "year": "2011",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 192856?"
+    },
+    {
+      "id": 315,
+      "year": "2011",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 171569?"
+    },
+    {
+      "id": 316,
+      "year": "2011",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 197042?"
+    },
+    {
+      "id": 317,
+      "year": "2011",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 173038?"
+    },
+    {
+      "id": 318,
+      "year": "2011",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 169985?"
+    },
+    {
+      "id": 319,
+      "year": "2011",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in A.C. No. 6655?"
+    },
+    {
+      "id": 320,
+      "year": "2011",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 172110?"
+    },
+    {
+      "id": 321,
+      "year": "2011",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 191940?"
+    },
+    {
+      "id": 322,
+      "year": "2011",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 181440?"
+    },
+    {
+      "id": 323,
+      "year": "2011",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 191392?"
+    },
+    {
+      "id": 324,
+      "year": "2011",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 164682?"
+    },
+    {
+      "id": 325,
+      "year": "2011",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 165887."
+    },
+    {
+      "id": 326,
+      "year": "2011",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 182539-40."
+    },
+    {
+      "id": 327,
+      "year": "2011",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 189655."
+    },
+    {
+      "id": 328,
+      "year": "2011",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 191448."
+    },
+    {
+      "id": 329,
+      "year": "2011",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.M. No. P-10-2810."
+    },
+    {
+      "id": 330,
+      "year": "2011",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 174476."
+    },
+    {
+      "id": 331,
+      "year": "2011",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.M. No. RTJ-11-2272."
+    },
+    {
+      "id": 332,
+      "year": "2011",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 189821."
+    },
+    {
+      "id": 333,
+      "year": "2011",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 173349."
+    },
+    {
+      "id": 334,
+      "year": "2011",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 182237."
+    },
+    {
+      "id": 335,
+      "year": "2011",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 178218."
+    },
+    {
+      "id": 336,
+      "year": "2011",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 163433."
+    },
+    {
+      "id": 337,
+      "year": "2011",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.M. No. P-09-2696."
+    },
+    {
+      "id": 338,
+      "year": "2011",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 185668?"
+    },
+    {
+      "id": 339,
+      "year": "2011",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 167545?"
+    },
+    {
+      "id": 340,
+      "year": "2011",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 185917?"
+    },
+    {
+      "id": 341,
+      "year": "2011",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 172624?"
+    },
+    {
+      "id": 342,
+      "year": "2011",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 191224?"
+    },
+    {
+      "id": 343,
+      "year": "2011",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 180849?"
+    },
+    {
+      "id": 344,
+      "year": "2011",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 169260?"
+    },
+    {
+      "id": 345,
+      "year": "2011",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.M. No. P-07-2297?"
+    },
+    {
+      "id": 346,
+      "year": "2011",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 175473?"
+    },
+    {
+      "id": 347,
+      "year": "2011",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.M. No. 2011-07-SC?"
+    },
+    {
+      "id": 348,
+      "year": "2011",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 178296?"
+    },
+    {
+      "id": 349,
+      "year": "2011",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 179446?"
+    },
+    {
+      "id": 350,
+      "year": "2011",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 157717?"
+    },
+    {
+      "id": 351,
+      "year": "2012",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 191792."
+    },
+    {
+      "id": 352,
+      "year": "2012",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 172825."
+    },
+    {
+      "id": 353,
+      "year": "2012",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 189817."
+    },
+    {
+      "id": 354,
+      "year": "2012",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 156869."
+    },
+    {
+      "id": 355,
+      "year": "2012",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.C. No. 7880."
+    },
+    {
+      "id": 356,
+      "year": "2012",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of B.M. No. 2112."
+    },
+    {
+      "id": 357,
+      "year": "2012",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 182197."
+    },
+    {
+      "id": 358,
+      "year": "2012",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. RTJ-10-2257."
+    },
+    {
+      "id": 359,
+      "year": "2012",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 170454."
+    },
+    {
+      "id": 360,
+      "year": "2012",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 183573."
+    },
+    {
+      "id": 361,
+      "year": "2012",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of === Year 2013: selected 50 of 957 available ===."
+    },
+    {
+      "id": 362,
+      "year": "2012",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. P-09-2720."
+    },
+    {
+      "id": 363,
+      "year": "2012",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 172338."
+    },
+    {
+      "id": 364,
+      "year": "2012",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 177320?"
+    },
+    {
+      "id": 365,
+      "year": "2012",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 170839?"
+    },
+    {
+      "id": 366,
+      "year": "2012",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 166259?"
+    },
+    {
+      "id": 367,
+      "year": "2012",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 195002?"
+    },
+    {
+      "id": 368,
+      "year": "2012",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 176085?"
+    },
+    {
+      "id": 369,
+      "year": "2012",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 199082?"
+    },
+    {
+      "id": 370,
+      "year": "2012",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 195592?"
+    },
+    {
+      "id": 371,
+      "year": "2012",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 192377?"
+    },
+    {
+      "id": 372,
+      "year": "2012",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 152093?"
+    },
+    {
+      "id": 373,
+      "year": "2012",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 186141?"
+    },
+    {
+      "id": 374,
+      "year": "2012",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 175303?"
+    },
+    {
+      "id": 375,
+      "year": "2012",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 173390?"
+    },
+    {
+      "id": 376,
+      "year": "2012",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 163286."
+    },
+    {
+      "id": 377,
+      "year": "2012",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 188288."
+    },
+    {
+      "id": 378,
+      "year": "2012",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in SP No. 102289."
+    },
+    {
+      "id": 379,
+      "year": "2012",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 181138."
+    },
+    {
+      "id": 380,
+      "year": "2012",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 183623."
+    },
+    {
+      "id": 381,
+      "year": "2012",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 191336."
+    },
+    {
+      "id": 382,
+      "year": "2012",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 175792."
+    },
+    {
+      "id": 383,
+      "year": "2012",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 192999."
+    },
+    {
+      "id": 384,
+      "year": "2012",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 171118."
+    },
+    {
+      "id": 385,
+      "year": "2012",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 195640."
+    },
+    {
+      "id": 386,
+      "year": "2012",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 183308."
+    },
+    {
+      "id": 387,
+      "year": "2012",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 153511."
+    },
+    {
+      "id": 388,
+      "year": "2012",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 185460?"
+    },
+    {
+      "id": 389,
+      "year": "2012",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 194014?"
+    },
+    {
+      "id": 390,
+      "year": "2012",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 192330?"
+    },
+    {
+      "id": 391,
+      "year": "2012",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 175552?"
+    },
+    {
+      "id": 392,
+      "year": "2012",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.M. No. RTJ-09-2182?"
+    },
+    {
+      "id": 393,
+      "year": "2012",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 154670?"
+    },
+    {
+      "id": 394,
+      "year": "2012",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.M. No. P-06-2241?"
+    },
+    {
+      "id": 395,
+      "year": "2012",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 185282?"
+    },
+    {
+      "id": 396,
+      "year": "2012",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 165413?"
+    },
+    {
+      "id": 397,
+      "year": "2012",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.C. No. 9390?"
+    },
+    {
+      "id": 398,
+      "year": "2012",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 187734?"
+    },
+    {
+      "id": 399,
+      "year": "2012",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.M. No. RTJ-11-2258?"
+    },
+    {
+      "id": 400,
+      "year": "2012",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 189277?"
+    },
+    {
+      "id": 401,
+      "year": "2013",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 178952."
+    },
+    {
+      "id": 402,
+      "year": "2013",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 182378."
+    },
+    {
+      "id": 403,
+      "year": "2013",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 173297."
+    },
+    {
+      "id": 404,
+      "year": "2013",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. RTJ-13-2355."
+    },
+    {
+      "id": 405,
+      "year": "2013",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 182249."
+    },
+    {
+      "id": 406,
+      "year": "2013",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 199612."
+    },
+    {
+      "id": 407,
+      "year": "2013",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 181738."
+    },
+    {
+      "id": 408,
+      "year": "2013",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 189843."
+    },
+    {
+      "id": 409,
+      "year": "2013",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. MTJ-11-1778."
+    },
+    {
+      "id": 410,
+      "year": "2013",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 173987."
+    },
+    {
+      "id": 411,
+      "year": "2013",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 191247."
+    },
+    {
+      "id": 412,
+      "year": "2013",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 165014."
+    },
+    {
+      "id": 413,
+      "year": "2013",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 184369."
+    },
+    {
+      "id": 414,
+      "year": "2013",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 200727?"
+    },
+    {
+      "id": 415,
+      "year": "2013",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 181096?"
+    },
+    {
+      "id": 416,
+      "year": "2013",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in A.M. No. P-11-2980?"
+    },
+    {
+      "id": 417,
+      "year": "2013",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 184079?"
+    },
+    {
+      "id": 418,
+      "year": "2013",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 171664?"
+    },
+    {
+      "id": 419,
+      "year": "2013",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 177751?"
+    },
+    {
+      "id": 420,
+      "year": "2013",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 198755?"
+    },
+    {
+      "id": 421,
+      "year": "2013",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 189145?"
+    },
+    {
+      "id": 422,
+      "year": "2013",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 160932?"
+    },
+    {
+      "id": 423,
+      "year": "2013",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 188708?"
+    },
+    {
+      "id": 424,
+      "year": "2013",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 185734?"
+    },
+    {
+      "id": 425,
+      "year": "2013",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 207026?"
+    },
+    {
+      "id": 426,
+      "year": "2013",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 181359?"
+    },
+    {
+      "id": 427,
+      "year": "2013",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.M. No. 10-9-15-SC."
+    },
+    {
+      "id": 428,
+      "year": "2013",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 187308."
+    },
+    {
+      "id": 429,
+      "year": "2013",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 170022."
+    },
+    {
+      "id": 430,
+      "year": "2013",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 174665."
+    },
+    {
+      "id": 431,
+      "year": "2013",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 188179."
+    },
+    {
+      "id": 432,
+      "year": "2013",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 191431."
+    },
+    {
+      "id": 433,
+      "year": "2013",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 193493."
+    },
+    {
+      "id": 434,
+      "year": "2013",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 192913."
+    },
+    {
+      "id": 435,
+      "year": "2013",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 190622."
+    },
+    {
+      "id": 436,
+      "year": "2013",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 193839."
+    },
+    {
+      "id": 437,
+      "year": "2013",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 191063."
+    },
+    {
+      "id": 438,
+      "year": "2013",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 172206."
+    },
+    {
+      "id": 439,
+      "year": "2013",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 192073?"
+    },
+    {
+      "id": 440,
+      "year": "2013",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 204828?"
+    },
+    {
+      "id": 441,
+      "year": "2013",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 193078?"
+    },
+    {
+      "id": 442,
+      "year": "2013",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 182963?"
+    },
+    {
+      "id": 443,
+      "year": "2013",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.C. No. 9615?"
+    },
+    {
+      "id": 444,
+      "year": "2013",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in === Year 2014: selected 50 of 1028 available ===?"
+    },
+    {
+      "id": 445,
+      "year": "2013",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 196723?"
+    },
+    {
+      "id": 446,
+      "year": "2013",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 184116?"
+    },
+    {
+      "id": 447,
+      "year": "2013",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 186344?"
+    },
+    {
+      "id": 448,
+      "year": "2013",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 188514?"
+    },
+    {
+      "id": 449,
+      "year": "2013",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 198444?"
+    },
+    {
+      "id": 450,
+      "year": "2013",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 186433?"
+    },
+    {
+      "id": 451,
+      "year": "2014",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 199226."
+    },
+    {
+      "id": 452,
+      "year": "2014",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 206770."
+    },
+    {
+      "id": 453,
+      "year": "2014",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 199549."
+    },
+    {
+      "id": 454,
+      "year": "2014",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 182573."
+    },
+    {
+      "id": 455,
+      "year": "2014",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 181760."
+    },
+    {
+      "id": 456,
+      "year": "2014",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 189358."
+    },
+    {
+      "id": 457,
+      "year": "2014",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 167286."
+    },
+    {
+      "id": 458,
+      "year": "2014",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 196735."
+    },
+    {
+      "id": 459,
+      "year": "2014",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 192582."
+    },
+    {
+      "id": 460,
+      "year": "2014",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of AC No. 7766."
+    },
+    {
+      "id": 461,
+      "year": "2014",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 204142."
+    },
+    {
+      "id": 462,
+      "year": "2014",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 192531."
+    },
+    {
+      "id": 463,
+      "year": "2014",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 203254?"
+    },
+    {
+      "id": 464,
+      "year": "2014",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 173632?"
+    },
+    {
+      "id": 465,
+      "year": "2014",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 173802?"
+    },
+    {
+      "id": 466,
+      "year": "2014",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in A.M. No. RTJ-09-2200?"
+    },
+    {
+      "id": 467,
+      "year": "2014",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 163879?"
+    },
+    {
+      "id": 468,
+      "year": "2014",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 208760?"
+    },
+    {
+      "id": 469,
+      "year": "2014",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 205821?"
+    },
+    {
+      "id": 470,
+      "year": "2014",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 198656?"
+    },
+    {
+      "id": 471,
+      "year": "2014",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 187836?"
+    },
+    {
+      "id": 472,
+      "year": "2014",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 208469?"
+    },
+    {
+      "id": 473,
+      "year": "2014",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 183795?"
+    },
+    {
+      "id": 474,
+      "year": "2014",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 191240?"
+    },
+    {
+      "id": 475,
+      "year": "2014",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 195580?"
+    },
+    {
+      "id": 476,
+      "year": "2014",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 202342."
+    },
+    {
+      "id": 477,
+      "year": "2014",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 205870."
+    },
+    {
+      "id": 478,
+      "year": "2014",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.M. No. P-14-3260."
+    },
+    {
+      "id": 479,
+      "year": "2014",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 193652."
+    },
+    {
+      "id": 480,
+      "year": "2014",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 188035."
+    },
+    {
+      "id": 481,
+      "year": "2014",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 204699."
+    },
+    {
+      "id": 482,
+      "year": "2014",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 209785."
+    },
+    {
+      "id": 483,
+      "year": "2014",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 199022."
+    },
+    {
+      "id": 484,
+      "year": "2014",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 206368."
+    },
+    {
+      "id": 485,
+      "year": "2014",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 200598."
+    },
+    {
+      "id": 486,
+      "year": "2014",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 211703."
+    },
+    {
+      "id": 487,
+      "year": "2014",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 200748."
+    },
+    {
+      "id": 488,
+      "year": "2014",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 199740."
+    },
+    {
+      "id": 489,
+      "year": "2014",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.M. No. RTJ-14-2394?"
+    },
+    {
+      "id": 490,
+      "year": "2014",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 200103?"
+    },
+    {
+      "id": 491,
+      "year": "2014",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in === Year 2015: selected 50 of 989 available ===?"
+    },
+    {
+      "id": 492,
+      "year": "2014",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 172404?"
+    },
+    {
+      "id": 493,
+      "year": "2014",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 204101?"
+    },
+    {
+      "id": 494,
+      "year": "2014",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 182794?"
+    },
+    {
+      "id": 495,
+      "year": "2014",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 190178?"
+    },
+    {
+      "id": 496,
+      "year": "2014",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 180069?"
+    },
+    {
+      "id": 497,
+      "year": "2014",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 197486?"
+    },
+    {
+      "id": 498,
+      "year": "2014",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 183918?"
+    },
+    {
+      "id": 499,
+      "year": "2014",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 196023?"
+    },
+    {
+      "id": 500,
+      "year": "2014",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 189861?"
+    },
+    {
+      "id": 501,
+      "year": "2015",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 213189."
+    },
+    {
+      "id": 502,
+      "year": "2015",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 183587."
+    },
+    {
+      "id": 503,
+      "year": "2015",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 182255."
+    },
+    {
+      "id": 504,
+      "year": "2015",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 187524."
+    },
+    {
+      "id": 505,
+      "year": "2015",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 203087."
+    },
+    {
+      "id": 506,
+      "year": "2015",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 209284."
+    },
+    {
+      "id": 507,
+      "year": "2015",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 182208."
+    },
+    {
+      "id": 508,
+      "year": "2015",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of AC No. 6056."
+    },
+    {
+      "id": 509,
+      "year": "2015",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 202708."
+    },
+    {
+      "id": 510,
+      "year": "2015",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 155701."
+    },
+    {
+      "id": 511,
+      "year": "2015",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.C. No. 8084."
+    },
+    {
+      "id": 512,
+      "year": "2015",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 183511."
+    },
+    {
+      "id": 513,
+      "year": "2015",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 175098?"
+    },
+    {
+      "id": 514,
+      "year": "2015",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in —?"
+    },
+    {
+      "id": 515,
+      "year": "2015",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 166357?"
+    },
+    {
+      "id": 516,
+      "year": "2015",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 201110?"
+    },
+    {
+      "id": 517,
+      "year": "2015",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 175842?"
+    },
+    {
+      "id": 518,
+      "year": "2015",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 185058?"
+    },
+    {
+      "id": 519,
+      "year": "2015",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 198543?"
+    },
+    {
+      "id": 520,
+      "year": "2015",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 175863?"
+    },
+    {
+      "id": 521,
+      "year": "2015",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 212054?"
+    },
+    {
+      "id": 522,
+      "year": "2015",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 206019?"
+    },
+    {
+      "id": 523,
+      "year": "2015",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 193034?"
+    },
+    {
+      "id": 524,
+      "year": "2015",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 192284?"
+    },
+    {
+      "id": 525,
+      "year": "2015",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.C. No. 7250."
+    },
+    {
+      "id": 526,
+      "year": "2015",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 195272."
+    },
+    {
+      "id": 527,
+      "year": "2015",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.M. No. CA-15-33-P."
+    },
+    {
+      "id": 528,
+      "year": "2015",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 211497."
+    },
+    {
+      "id": 529,
+      "year": "2015",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 210836."
+    },
+    {
+      "id": 530,
+      "year": "2015",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 188639."
+    },
+    {
+      "id": 531,
+      "year": "2015",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 190828."
+    },
+    {
+      "id": 532,
+      "year": "2015",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 205867."
+    },
+    {
+      "id": 533,
+      "year": "2015",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 203384."
+    },
+    {
+      "id": 534,
+      "year": "2015",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 207098."
+    },
+    {
+      "id": 535,
+      "year": "2015",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 179457."
+    },
+    {
+      "id": 536,
+      "year": "2015",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.M. No. MTJ-10-1760."
+    },
+    {
+      "id": 537,
+      "year": "2015",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.M. No. P-15-3298."
+    },
+    {
+      "id": 538,
+      "year": "2015",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 200233?"
+    },
+    {
+      "id": 539,
+      "year": "2015",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 206526?"
+    },
+    {
+      "id": 540,
+      "year": "2015",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 183681?"
+    },
+    {
+      "id": 541,
+      "year": "2015",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 205681?"
+    },
+    {
+      "id": 542,
+      "year": "2015",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in AC No. 10681?"
+    },
+    {
+      "id": 543,
+      "year": "2015",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 182864?"
+    },
+    {
+      "id": 544,
+      "year": "2015",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 179491?"
+    },
+    {
+      "id": 545,
+      "year": "2015",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 210603?"
+    },
+    {
+      "id": 546,
+      "year": "2015",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 206942?"
+    },
+    {
+      "id": 547,
+      "year": "2015",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 188839?"
+    },
+    {
+      "id": 548,
+      "year": "2015",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 206612?"
+    },
+    {
+      "id": 549,
+      "year": "2015",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in === Year 2016: selected 50 of 1088 available ===?"
+    },
+    {
+      "id": 550,
+      "year": "2016",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.C. No. 11128."
+    },
+    {
+      "id": 551,
+      "year": "2016",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 191088."
+    },
+    {
+      "id": 552,
+      "year": "2016",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 201106."
+    },
+    {
+      "id": 553,
+      "year": "2016",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 209303."
+    },
+    {
+      "id": 554,
+      "year": "2016",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 193837."
+    },
+    {
+      "id": 555,
+      "year": "2016",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 208264."
+    },
+    {
+      "id": 556,
+      "year": "2016",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 221897."
+    },
+    {
+      "id": 557,
+      "year": "2016",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.C. No. 10868."
+    },
+    {
+      "id": 558,
+      "year": "2016",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 204494."
+    },
+    {
+      "id": 559,
+      "year": "2016",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 163494."
+    },
+    {
+      "id": 560,
+      "year": "2016",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 183529."
+    },
+    {
+      "id": 561,
+      "year": "2016",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 202978."
+    },
+    {
+      "id": 562,
+      "year": "2016",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 201614."
+    },
+    {
+      "id": 563,
+      "year": "2016",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 209011?"
+    },
+    {
+      "id": 564,
+      "year": "2016",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 198752?"
+    },
+    {
+      "id": 565,
+      "year": "2016",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 205010?"
+    },
+    {
+      "id": 566,
+      "year": "2016",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 188829?"
+    },
+    {
+      "id": 567,
+      "year": "2016",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 200302?"
+    },
+    {
+      "id": 568,
+      "year": "2016",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 208383?"
+    },
+    {
+      "id": 569,
+      "year": "2016",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 181387?"
+    },
+    {
+      "id": 570,
+      "year": "2016",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 184933?"
+    },
+    {
+      "id": 571,
+      "year": "2016",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in —?"
+    },
+    {
+      "id": 572,
+      "year": "2016",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 207517?"
+    },
+    {
+      "id": 573,
+      "year": "2016",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 190520?"
+    },
+    {
+      "id": 574,
+      "year": "2016",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in === Year 2017: selected 50 of 1002 available ===?"
+    },
+    {
+      "id": 575,
+      "year": "2016",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 219510."
+    },
+    {
+      "id": 576,
+      "year": "2016",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 213863."
+    },
+    {
+      "id": 577,
+      "year": "2016",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 195026."
+    },
+    {
+      "id": 578,
+      "year": "2016",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 211539."
+    },
+    {
+      "id": 579,
+      "year": "2016",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 170192."
+    },
+    {
+      "id": 580,
+      "year": "2016",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 160071."
+    },
+    {
+      "id": 581,
+      "year": "2016",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.C. No. 7447."
+    },
+    {
+      "id": 582,
+      "year": "2016",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 215723."
+    },
+    {
+      "id": 583,
+      "year": "2016",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 218072."
+    },
+    {
+      "id": 584,
+      "year": "2016",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 208524."
+    },
+    {
+      "id": 585,
+      "year": "2016",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 207597."
+    },
+    {
+      "id": 586,
+      "year": "2016",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 197980."
+    },
+    {
+      "id": 587,
+      "year": "2016",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.C. No. 11059?"
+    },
+    {
+      "id": 588,
+      "year": "2016",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.C. No. 10117?"
+    },
+    {
+      "id": 589,
+      "year": "2016",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.C. No. 11069?"
+    },
+    {
+      "id": 590,
+      "year": "2016",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 212930?"
+    },
+    {
+      "id": 591,
+      "year": "2016",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 210428?"
+    },
+    {
+      "id": 592,
+      "year": "2016",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 197634?"
+    },
+    {
+      "id": 593,
+      "year": "2016",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 203880?"
+    },
+    {
+      "id": 594,
+      "year": "2016",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 207342?"
+    },
+    {
+      "id": 595,
+      "year": "2016",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 201017?"
+    },
+    {
+      "id": 596,
+      "year": "2016",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 212878?"
+    },
+    {
+      "id": 597,
+      "year": "2016",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 178501?"
+    },
+    {
+      "id": 598,
+      "year": "2016",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 194065?"
+    },
+    {
+      "id": 599,
+      "year": "2016",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 221849-50?"
+    },
+    {
+      "id": 600,
+      "year": "2017",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. RTJ-10-2219."
+    },
+    {
+      "id": 601,
+      "year": "2017",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 178379."
+    },
+    {
+      "id": 602,
+      "year": "2017",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 211222."
+    },
+    {
+      "id": 603,
+      "year": "2017",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.C. No. 1346."
+    },
+    {
+      "id": 604,
+      "year": "2017",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 194189."
+    },
+    {
+      "id": 605,
+      "year": "2017",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 197146."
+    },
+    {
+      "id": 606,
+      "year": "2017",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. P-15-3315."
+    },
+    {
+      "id": 607,
+      "year": "2017",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. RTJ-16-2479."
+    },
+    {
+      "id": 608,
+      "year": "2017",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 196074."
+    },
+    {
+      "id": 609,
+      "year": "2017",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 209969."
+    },
+    {
+      "id": 610,
+      "year": "2017",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.C. No. 10580."
+    },
+    {
+      "id": 611,
+      "year": "2017",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.C. No. 11043."
+    },
+    {
+      "id": 612,
+      "year": "2017",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 220168."
+    },
+    {
+      "id": 613,
+      "year": "2017",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 229722?"
+    },
+    {
+      "id": 614,
+      "year": "2017",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 223138?"
+    },
+    {
+      "id": 615,
+      "year": "2017",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in === Year 2018: selected 50 of 1075 available ===?"
+    },
+    {
+      "id": 616,
+      "year": "2017",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 205539?"
+    },
+    {
+      "id": 617,
+      "year": "2017",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 199710?"
+    },
+    {
+      "id": 618,
+      "year": "2017",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 181149?"
+    },
+    {
+      "id": 619,
+      "year": "2017",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 208625?"
+    },
+    {
+      "id": 620,
+      "year": "2017",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 181984?"
+    },
+    {
+      "id": 621,
+      "year": "2017",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 204663?"
+    },
+    {
+      "id": 622,
+      "year": "2017",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 222561?"
+    },
+    {
+      "id": 623,
+      "year": "2017",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in A.C. No. 10253?"
+    },
+    {
+      "id": 624,
+      "year": "2017",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 218592?"
+    },
+    {
+      "id": 625,
+      "year": "2017",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 211564?"
+    },
+    {
+      "id": 626,
+      "year": "2017",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 202872."
+    },
+    {
+      "id": 627,
+      "year": "2017",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 192648."
+    },
+    {
+      "id": 628,
+      "year": "2017",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 220977."
+    },
+    {
+      "id": 629,
+      "year": "2017",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 189102."
+    },
+    {
+      "id": 630,
+      "year": "2017",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.C. No. 11828."
+    },
+    {
+      "id": 631,
+      "year": "2017",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 196072."
+    },
+    {
+      "id": 632,
+      "year": "2017",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 215195."
+    },
+    {
+      "id": 633,
+      "year": "2017",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 215009."
+    },
+    {
+      "id": 634,
+      "year": "2017",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 223768."
+    },
+    {
+      "id": 635,
+      "year": "2017",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 178467."
+    },
+    {
+      "id": 636,
+      "year": "2017",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 206292."
+    },
+    {
+      "id": 637,
+      "year": "2017",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 210251."
+    },
+    {
+      "id": 638,
+      "year": "2017",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 212098?"
+    },
+    {
+      "id": 639,
+      "year": "2017",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 220889?"
+    },
+    {
+      "id": 640,
+      "year": "2017",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 209468?"
+    },
+    {
+      "id": 641,
+      "year": "2017",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.M. No. P-15-3379?"
+    },
+    {
+      "id": 642,
+      "year": "2017",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.C. No. 6933?"
+    },
+    {
+      "id": 643,
+      "year": "2017",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 206008?"
+    },
+    {
+      "id": 644,
+      "year": "2017",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 210209?"
+    },
+    {
+      "id": 645,
+      "year": "2017",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 217730?"
+    },
+    {
+      "id": 646,
+      "year": "2017",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 225808?"
+    },
+    {
+      "id": 647,
+      "year": "2017",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 223073?"
+    },
+    {
+      "id": 648,
+      "year": "2017",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 225562?"
+    },
+    {
+      "id": 649,
+      "year": "2017",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 214500?"
+    },
+    {
+      "id": 650,
+      "year": "2018",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.C. No. 10244."
+    },
+    {
+      "id": 651,
+      "year": "2018",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 199515."
+    },
+    {
+      "id": 652,
+      "year": "2018",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 237703."
+    },
+    {
+      "id": 653,
+      "year": "2018",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 234616."
+    },
+    {
+      "id": 654,
+      "year": "2018",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 237355."
+    },
+    {
+      "id": 655,
+      "year": "2018",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. RTJ-18-2536."
+    },
+    {
+      "id": 656,
+      "year": "2018",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 207354."
+    },
+    {
+      "id": 657,
+      "year": "2018",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 196058."
+    },
+    {
+      "id": 658,
+      "year": "2018",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 223477."
+    },
+    {
+      "id": 659,
+      "year": "2018",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 234448."
+    },
+    {
+      "id": 660,
+      "year": "2018",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 229920."
+    },
+    {
+      "id": 661,
+      "year": "2018",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 224498."
+    },
+    {
+      "id": 662,
+      "year": "2018",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 205548?"
+    },
+    {
+      "id": 663,
+      "year": "2018",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 231989?"
+    },
+    {
+      "id": 664,
+      "year": "2018",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 226002?"
+    },
+    {
+      "id": 665,
+      "year": "2018",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 231983?"
+    },
+    {
+      "id": 666,
+      "year": "2018",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 217722?"
+    },
+    {
+      "id": 667,
+      "year": "2018",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in === Year 2019: selected 50 of 1091 available ===?"
+    },
+    {
+      "id": 668,
+      "year": "2018",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 206331?"
+    },
+    {
+      "id": 669,
+      "year": "2018",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 227405?"
+    },
+    {
+      "id": 670,
+      "year": "2018",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 221505?"
+    },
+    {
+      "id": 671,
+      "year": "2018",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 224015?"
+    },
+    {
+      "id": 672,
+      "year": "2018",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 215314?"
+    },
+    {
+      "id": 673,
+      "year": "2018",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 202836?"
+    },
+    {
+      "id": 674,
+      "year": "2018",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 210043?"
+    },
+    {
+      "id": 675,
+      "year": "2018",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.M. No. MTJ-18-1911."
+    },
+    {
+      "id": 676,
+      "year": "2018",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 180845."
+    },
+    {
+      "id": 677,
+      "year": "2018",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.C. No. 9119."
+    },
+    {
+      "id": 678,
+      "year": "2018",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 211525."
+    },
+    {
+      "id": 679,
+      "year": "2018",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 196681."
+    },
+    {
+      "id": 680,
+      "year": "2018",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 218701."
+    },
+    {
+      "id": 681,
+      "year": "2018",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 202534."
+    },
+    {
+      "id": 682,
+      "year": "2018",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 200258."
+    },
+    {
+      "id": 683,
+      "year": "2018",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 218427."
+    },
+    {
+      "id": 684,
+      "year": "2018",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.M. No. P-17-3659."
+    },
+    {
+      "id": 685,
+      "year": "2018",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 204039."
+    },
+    {
+      "id": 686,
+      "year": "2018",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 205904-06."
+    },
+    {
+      "id": 687,
+      "year": "2018",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 228945."
+    },
+    {
+      "id": 688,
+      "year": "2018",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 226836?"
+    },
+    {
+      "id": 689,
+      "year": "2018",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 234808?"
+    },
+    {
+      "id": 690,
+      "year": "2018",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 233084?"
+    },
+    {
+      "id": 691,
+      "year": "2018",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 219591?"
+    },
+    {
+      "id": 692,
+      "year": "2018",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 240563?"
+    },
+    {
+      "id": 693,
+      "year": "2018",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 219884?"
+    },
+    {
+      "id": 694,
+      "year": "2018",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 195814?"
+    },
+    {
+      "id": 695,
+      "year": "2018",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.C. No. 5580?"
+    },
+    {
+      "id": 696,
+      "year": "2018",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 203090?"
+    },
+    {
+      "id": 697,
+      "year": "2018",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.M. No. P-16-3507?"
+    },
+    {
+      "id": 698,
+      "year": "2018",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 224678?"
+    },
+    {
+      "id": 699,
+      "year": "2018",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 227796?"
+    },
+    {
+      "id": 700,
+      "year": "2019",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 237802."
+    },
+    {
+      "id": 701,
+      "year": "2019",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 200984."
+    },
+    {
+      "id": 702,
+      "year": "2019",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 233200."
+    },
+    {
+      "id": 703,
+      "year": "2019",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 240231."
+    },
+    {
+      "id": 704,
+      "year": "2019",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 226908."
+    },
+    {
+      "id": 705,
+      "year": "2019",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 228355."
+    },
+    {
+      "id": 706,
+      "year": "2019",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 242817."
+    },
+    {
+      "id": 707,
+      "year": "2019",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.C. No. 5285."
+    },
+    {
+      "id": 708,
+      "year": "2019",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 238171."
+    },
+    {
+      "id": 709,
+      "year": "2019",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 240843."
+    },
+    {
+      "id": 710,
+      "year": "2019",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 245972."
+    },
+    {
+      "id": 711,
+      "year": "2019",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 211810."
+    },
+    {
+      "id": 712,
+      "year": "2019",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 222192?"
+    },
+    {
+      "id": 713,
+      "year": "2019",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 235898?"
+    },
+    {
+      "id": 714,
+      "year": "2019",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 230642?"
+    },
+    {
+      "id": 715,
+      "year": "2019",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 247777?"
+    },
+    {
+      "id": 716,
+      "year": "2019",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 232070?"
+    },
+    {
+      "id": 717,
+      "year": "2019",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in A.C. No. 9838?"
+    },
+    {
+      "id": 718,
+      "year": "2019",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 196743?"
+    },
+    {
+      "id": 719,
+      "year": "2019",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 237977?"
+    },
+    {
+      "id": 720,
+      "year": "2019",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 217360?"
+    },
+    {
+      "id": 721,
+      "year": "2019",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 229084?"
+    },
+    {
+      "id": 722,
+      "year": "2019",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 240199?"
+    },
+    {
+      "id": 723,
+      "year": "2019",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 242018?"
+    },
+    {
+      "id": 724,
+      "year": "2019",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 228951."
+    },
+    {
+      "id": 725,
+      "year": "2019",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 234038."
+    },
+    {
+      "id": 726,
+      "year": "2019",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 199783."
+    },
+    {
+      "id": 727,
+      "year": "2019",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 237582."
+    },
+    {
+      "id": 728,
+      "year": "2019",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.M. No. MTJ-17-1889."
+    },
+    {
+      "id": 729,
+      "year": "2019",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 214546."
+    },
+    {
+      "id": 730,
+      "year": "2019",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 223405."
+    },
+    {
+      "id": 731,
+      "year": "2019",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 175727."
+    },
+    {
+      "id": 732,
+      "year": "2019",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 238467."
+    },
+    {
+      "id": 733,
+      "year": "2019",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 205473."
+    },
+    {
+      "id": 734,
+      "year": "2019",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 243940."
+    },
+    {
+      "id": 735,
+      "year": "2019",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 209014."
+    },
+    {
+      "id": 736,
+      "year": "2019",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 213666."
+    },
+    {
+      "id": 737,
+      "year": "2019",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 200170?"
+    },
+    {
+      "id": 738,
+      "year": "2019",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 193276?"
+    },
+    {
+      "id": 739,
+      "year": "2019",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 237975?"
+    },
+    {
+      "id": 740,
+      "year": "2019",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 200021-22?"
+    },
+    {
+      "id": 741,
+      "year": "2019",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 229099?"
+    },
+    {
+      "id": 742,
+      "year": "2019",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 225899?"
+    },
+    {
+      "id": 743,
+      "year": "2019",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 228509?"
+    },
+    {
+      "id": 744,
+      "year": "2019",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 228334?"
+    },
+    {
+      "id": 745,
+      "year": "2019",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 239052?"
+    },
+    {
+      "id": 746,
+      "year": "2019",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 220456?"
+    },
+    {
+      "id": 747,
+      "year": "2019",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.C. No. 12408?"
+    },
+    {
+      "id": 748,
+      "year": "2019",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in === Year 2020: selected 50 of 1070 available ===?"
+    },
+    {
+      "id": 749,
+      "year": "2019",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 232863?"
+    },
+    {
+      "id": 750,
+      "year": "2020",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 222133."
+    },
+    {
+      "id": 751,
+      "year": "2020",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 244721."
+    },
+    {
+      "id": 752,
+      "year": "2020",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 183478."
+    },
+    {
+      "id": 753,
+      "year": "2020",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 243296."
+    },
+    {
+      "id": 754,
+      "year": "2020",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 227447."
+    },
+    {
+      "id": 755,
+      "year": "2020",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 223018."
+    },
+    {
+      "id": 756,
+      "year": "2020",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 221874."
+    },
+    {
+      "id": 757,
+      "year": "2020",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 227777."
+    },
+    {
+      "id": 758,
+      "year": "2020",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 238103."
+    },
+    {
+      "id": 759,
+      "year": "2020",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 233301."
+    },
+    {
+      "id": 760,
+      "year": "2020",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.C. No. 10306."
+    },
+    {
+      "id": 761,
+      "year": "2020",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 248061."
+    },
+    {
+      "id": 762,
+      "year": "2020",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 230626."
+    },
+    {
+      "id": 763,
+      "year": "2020",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 228608?"
+    },
+    {
+      "id": 764,
+      "year": "2020",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 245617?"
+    },
+    {
+      "id": 765,
+      "year": "2020",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 222768?"
+    },
+    {
+      "id": 766,
+      "year": "2020",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 227070?"
+    },
+    {
+      "id": 767,
+      "year": "2020",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 234886-911?"
+    },
+    {
+      "id": 768,
+      "year": "2020",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in A.C. No. 5314?"
+    },
+    {
+      "id": 769,
+      "year": "2020",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 216425?"
+    },
+    {
+      "id": 770,
+      "year": "2020",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 224345?"
+    },
+    {
+      "id": 771,
+      "year": "2020",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in A.M. No. RTJ-20-2584?"
+    },
+    {
+      "id": 772,
+      "year": "2020",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 241632?"
+    },
+    {
+      "id": 773,
+      "year": "2020",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 230222?"
+    },
+    {
+      "id": 774,
+      "year": "2020",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 247575?"
+    },
+    {
+      "id": 775,
+      "year": "2020",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 231984."
+    },
+    {
+      "id": 776,
+      "year": "2020",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.C. No. 12452."
+    },
+    {
+      "id": 777,
+      "year": "2020",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 238059."
+    },
+    {
+      "id": 778,
+      "year": "2020",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 224650."
+    },
+    {
+      "id": 779,
+      "year": "2020",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 237449."
+    },
+    {
+      "id": 780,
+      "year": "2020",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 245457."
+    },
+    {
+      "id": 781,
+      "year": "2020",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 232769."
+    },
+    {
+      "id": 782,
+      "year": "2020",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.C. No. 12701."
+    },
+    {
+      "id": 783,
+      "year": "2020",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 248941."
+    },
+    {
+      "id": 784,
+      "year": "2020",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 233316."
+    },
+    {
+      "id": 785,
+      "year": "2020",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 219964."
+    },
+    {
+      "id": 786,
+      "year": "2020",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in === Year 2021: selected 50 of 1039 available ===."
+    },
+    {
+      "id": 787,
+      "year": "2020",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 246012?"
+    },
+    {
+      "id": 788,
+      "year": "2020",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 204010?"
+    },
+    {
+      "id": 789,
+      "year": "2020",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 246499?"
+    },
+    {
+      "id": 790,
+      "year": "2020",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 222239?"
+    },
+    {
+      "id": 791,
+      "year": "2020",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.C. No. 12030?"
+    },
+    {
+      "id": 792,
+      "year": "2020",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.M. No. 2019-17-SC?"
+    },
+    {
+      "id": 793,
+      "year": "2020",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 205559?"
+    },
+    {
+      "id": 794,
+      "year": "2020",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 238954?"
+    },
+    {
+      "id": 795,
+      "year": "2020",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 248204?"
+    },
+    {
+      "id": 796,
+      "year": "2020",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 233846?"
+    },
+    {
+      "id": 797,
+      "year": "2020",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 197422?"
+    },
+    {
+      "id": 798,
+      "year": "2020",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 202004?"
+    },
+    {
+      "id": 799,
+      "year": "2020",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 228572?"
+    },
+    {
+      "id": 800,
+      "year": "2021",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 239464."
+    },
+    {
+      "id": 801,
+      "year": "2021",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 218381."
+    },
+    {
+      "id": 802,
+      "year": "2021",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. 07-4-11-SC."
+    },
+    {
+      "id": 803,
+      "year": "2021",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 213821."
+    },
+    {
+      "id": 804,
+      "year": "2021",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 252198."
+    },
+    {
+      "id": 805,
+      "year": "2021",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 217569."
+    },
+    {
+      "id": 806,
+      "year": "2021",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 206015."
+    },
+    {
+      "id": 807,
+      "year": "2021",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 249412."
+    },
+    {
+      "id": 808,
+      "year": "2021",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 203946."
+    },
+    {
+      "id": 809,
+      "year": "2021",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 204405."
+    },
+    {
+      "id": 810,
+      "year": "2021",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 231721-22."
+    },
+    {
+      "id": 811,
+      "year": "2021",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 247007."
+    },
+    {
+      "id": 812,
+      "year": "2021",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 238882."
+    },
+    {
+      "id": 813,
+      "year": "2021",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 243951?"
+    },
+    {
+      "id": 814,
+      "year": "2021",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 248652?"
+    },
+    {
+      "id": 815,
+      "year": "2021",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 203539?"
+    },
+    {
+      "id": 816,
+      "year": "2021",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 250128?"
+    },
+    {
+      "id": 817,
+      "year": "2021",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 250865?"
+    },
+    {
+      "id": 818,
+      "year": "2021",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 215877?"
+    },
+    {
+      "id": 819,
+      "year": "2021",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 198832?"
+    },
+    {
+      "id": 820,
+      "year": "2021",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 232724-27?"
+    },
+    {
+      "id": 821,
+      "year": "2021",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 225960?"
+    },
+    {
+      "id": 822,
+      "year": "2021",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 247323?"
+    },
+    {
+      "id": 823,
+      "year": "2021",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 241952?"
+    },
+    {
+      "id": 824,
+      "year": "2021",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 237798?"
+    },
+    {
+      "id": 825,
+      "year": "2021",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 239257?"
+    },
+    {
+      "id": 826,
+      "year": "2021",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in === Year 2022: selected 50 of 567 available ===."
+    },
+    {
+      "id": 827,
+      "year": "2021",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 249638."
+    },
+    {
+      "id": 828,
+      "year": "2021",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 208494."
+    },
+    {
+      "id": 829,
+      "year": "2021",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 240163."
+    },
+    {
+      "id": 830,
+      "year": "2021",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 211303."
+    },
+    {
+      "id": 831,
+      "year": "2021",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 214260."
+    },
+    {
+      "id": 832,
+      "year": "2021",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 233420."
+    },
+    {
+      "id": 833,
+      "year": "2021",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 237432-33."
+    },
+    {
+      "id": 834,
+      "year": "2021",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 214540."
+    },
+    {
+      "id": 835,
+      "year": "2021",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.C. No. 12826."
+    },
+    {
+      "id": 836,
+      "year": "2021",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 208318."
+    },
+    {
+      "id": 837,
+      "year": "2021",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 240144."
+    },
+    {
+      "id": 838,
+      "year": "2021",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 233857?"
+    },
+    {
+      "id": 839,
+      "year": "2021",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 250332?"
+    },
+    {
+      "id": 840,
+      "year": "2021",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 210072?"
+    },
+    {
+      "id": 841,
+      "year": "2021",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 228588?"
+    },
+    {
+      "id": 842,
+      "year": "2021",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 246948?"
+    },
+    {
+      "id": 843,
+      "year": "2021",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 239221?"
+    },
+    {
+      "id": 844,
+      "year": "2021",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 203420?"
+    },
+    {
+      "id": 845,
+      "year": "2021",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.M. No. 02-8-13-SC?"
+    },
+    {
+      "id": 846,
+      "year": "2021",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 237620?"
+    },
+    {
+      "id": 847,
+      "year": "2021",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 204778?"
+    },
+    {
+      "id": 848,
+      "year": "2021",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 237843?"
+    },
+    {
+      "id": 849,
+      "year": "2021",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 247970?"
+    },
+    {
+      "id": 850,
+      "year": "2022",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 242831."
+    },
+    {
+      "id": 851,
+      "year": "2022",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.C. No. 7121."
+    },
+    {
+      "id": 852,
+      "year": "2022",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 238282."
+    },
+    {
+      "id": 853,
+      "year": "2022",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 252252."
+    },
+    {
+      "id": 854,
+      "year": "2022",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 241333."
+    },
+    {
+      "id": 855,
+      "year": "2022",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 238041."
+    },
+    {
+      "id": 856,
+      "year": "2022",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. RTJ-21-003."
+    },
+    {
+      "id": 857,
+      "year": "2022",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 252791."
+    },
+    {
+      "id": 858,
+      "year": "2022",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 219986-87."
+    },
+    {
+      "id": 859,
+      "year": "2022",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 253020."
+    },
+    {
+      "id": 860,
+      "year": "2022",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 210422."
+    },
+    {
+      "id": 861,
+      "year": "2022",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 190509."
+    },
+    {
+      "id": 862,
+      "year": "2022",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 260261?"
+    },
+    {
+      "id": 863,
+      "year": "2022",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 200544?"
+    },
+    {
+      "id": 864,
+      "year": "2022",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 235790?"
+    },
+    {
+      "id": 865,
+      "year": "2022",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 218068?"
+    },
+    {
+      "id": 866,
+      "year": "2022",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 240810?"
+    },
+    {
+      "id": 867,
+      "year": "2022",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 216107?"
+    },
+    {
+      "id": 868,
+      "year": "2022",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 208258?"
+    },
+    {
+      "id": 869,
+      "year": "2022",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 248974?"
+    },
+    {
+      "id": 870,
+      "year": "2022",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 238581?"
+    },
+    {
+      "id": 871,
+      "year": "2022",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 206404?"
+    },
+    {
+      "id": 872,
+      "year": "2022",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 235965-66?"
+    },
+    {
+      "id": 873,
+      "year": "2022",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in A.M. No. RTJ-07-2063?"
+    },
+    {
+      "id": 874,
+      "year": "2022",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 227655?"
+    },
+    {
+      "id": 875,
+      "year": "2022",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 180350."
+    },
+    {
+      "id": 876,
+      "year": "2022",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 250951."
+    },
+    {
+      "id": 877,
+      "year": "2022",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 240224."
+    },
+    {
+      "id": 878,
+      "year": "2022",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in —."
+    },
+    {
+      "id": 879,
+      "year": "2022",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.C. No. 10511."
+    },
+    {
+      "id": 880,
+      "year": "2022",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 221823."
+    },
+    {
+      "id": 881,
+      "year": "2022",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 232168."
+    },
+    {
+      "id": 882,
+      "year": "2022",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 258947."
+    },
+    {
+      "id": 883,
+      "year": "2022",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 229026-31."
+    },
+    {
+      "id": 884,
+      "year": "2022",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.M. No. P-12-3091."
+    },
+    {
+      "id": 885,
+      "year": "2022",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 207828."
+    },
+    {
+      "id": 886,
+      "year": "2022",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 214195."
+    },
+    {
+      "id": 887,
+      "year": "2022",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 249563."
+    },
+    {
+      "id": 888,
+      "year": "2022",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in === Year 2023: selected 50 of 604 available ===?"
+    },
+    {
+      "id": 889,
+      "year": "2022",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 252507?"
+    },
+    {
+      "id": 890,
+      "year": "2022",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 198629?"
+    },
+    {
+      "id": 891,
+      "year": "2022",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 241330?"
+    },
+    {
+      "id": 892,
+      "year": "2022",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 246127?"
+    },
+    {
+      "id": 893,
+      "year": "2022",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 255677?"
+    },
+    {
+      "id": 894,
+      "year": "2022",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 252715?"
+    },
+    {
+      "id": 895,
+      "year": "2022",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 214933?"
+    },
+    {
+      "id": 896,
+      "year": "2022",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 223042?"
+    },
+    {
+      "id": 897,
+      "year": "2022",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 231540?"
+    },
+    {
+      "id": 898,
+      "year": "2022",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 252861?"
+    },
+    {
+      "id": 899,
+      "year": "2022",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 233181?"
+    },
+    {
+      "id": 900,
+      "year": "2023",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 214115."
+    },
+    {
+      "id": 901,
+      "year": "2023",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 247918."
+    },
+    {
+      "id": 902,
+      "year": "2023",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 211772."
+    },
+    {
+      "id": 903,
+      "year": "2023",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. 02-8-13-SC."
+    },
+    {
+      "id": 904,
+      "year": "2023",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 254875."
+    },
+    {
+      "id": 905,
+      "year": "2023",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 225722."
+    },
+    {
+      "id": 906,
+      "year": "2023",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 249684."
+    },
+    {
+      "id": 907,
+      "year": "2023",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 265117."
+    },
+    {
+      "id": 908,
+      "year": "2023",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 244724."
+    },
+    {
+      "id": 909,
+      "year": "2023",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 252186."
+    },
+    {
+      "id": 910,
+      "year": "2023",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 262473."
+    },
+    {
+      "id": 911,
+      "year": "2023",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 259282."
+    },
+    {
+      "id": 912,
+      "year": "2023",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in —?"
+    },
+    {
+      "id": 913,
+      "year": "2023",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 228513?"
+    },
+    {
+      "id": 914,
+      "year": "2023",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 248584?"
+    },
+    {
+      "id": 915,
+      "year": "2023",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 244017?"
+    },
+    {
+      "id": 916,
+      "year": "2023",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 254886?"
+    },
+    {
+      "id": 917,
+      "year": "2023",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 200015?"
+    },
+    {
+      "id": 918,
+      "year": "2023",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 222068?"
+    },
+    {
+      "id": 919,
+      "year": "2023",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 236161?"
+    },
+    {
+      "id": 920,
+      "year": "2023",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 252092?"
+    },
+    {
+      "id": 921,
+      "year": "2023",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 203867?"
+    },
+    {
+      "id": 922,
+      "year": "2023",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 201914?"
+    },
+    {
+      "id": 923,
+      "year": "2023",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 255252?"
+    },
+    {
+      "id": 924,
+      "year": "2023",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 192694."
+    },
+    {
+      "id": 925,
+      "year": "2023",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 230200."
+    },
+    {
+      "id": 926,
+      "year": "2023",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 222810."
+    },
+    {
+      "id": 927,
+      "year": "2023",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 263481."
+    },
+    {
+      "id": 928,
+      "year": "2023",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 251350."
+    },
+    {
+      "id": 929,
+      "year": "2023",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 213640."
+    },
+    {
+      "id": 930,
+      "year": "2023",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 228127."
+    },
+    {
+      "id": 931,
+      "year": "2023",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 253026."
+    },
+    {
+      "id": 932,
+      "year": "2023",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.M. No. 17-12-02-SC."
+    },
+    {
+      "id": 933,
+      "year": "2023",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 231145."
+    },
+    {
+      "id": 934,
+      "year": "2023",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 258887."
+    },
+    {
+      "id": 935,
+      "year": "2023",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 225774."
+    },
+    {
+      "id": 936,
+      "year": "2023",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 234640."
+    },
+    {
+      "id": 937,
+      "year": "2023",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 215527-28?"
+    },
+    {
+      "id": 938,
+      "year": "2023",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 255324?"
+    },
+    {
+      "id": 939,
+      "year": "2023",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 204479?"
+    },
+    {
+      "id": 940,
+      "year": "2023",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 239350?"
+    },
+    {
+      "id": 941,
+      "year": "2023",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 223270?"
+    },
+    {
+      "id": 942,
+      "year": "2023",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 253090?"
+    },
+    {
+      "id": 943,
+      "year": "2023",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 255299?"
+    },
+    {
+      "id": 944,
+      "year": "2023",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 256759?"
+    },
+    {
+      "id": 945,
+      "year": "2023",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 240542?"
+    },
+    {
+      "id": 946,
+      "year": "2023",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.C. No. 10743?"
+    },
+    {
+      "id": 947,
+      "year": "2023",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 261207?"
+    },
+    {
+      "id": 948,
+      "year": "2023",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 224457?"
+    },
+    {
+      "id": 949,
+      "year": "2023",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in === Year 2024: selected 50 of 384 available ===?"
+    },
+    {
+      "id": 950,
+      "year": "2024",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 263920."
+    },
+    {
+      "id": 951,
+      "year": "2024",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 265847."
+    },
+    {
+      "id": 952,
+      "year": "2024",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 196517."
+    },
+    {
+      "id": 953,
+      "year": "2024",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 267580."
+    },
+    {
+      "id": 954,
+      "year": "2024",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 266880."
+    },
+    {
+      "id": 955,
+      "year": "2024",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 242133."
+    },
+    {
+      "id": 956,
+      "year": "2024",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of === Year 2025: selected 50 of 206 available ===."
+    },
+    {
+      "id": 957,
+      "year": "2024",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 254639."
+    },
+    {
+      "id": 958,
+      "year": "2024",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 256194."
+    },
+    {
+      "id": 959,
+      "year": "2024",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 267946."
+    },
+    {
+      "id": 960,
+      "year": "2024",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 269401."
+    },
+    {
+      "id": 961,
+      "year": "2024",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 257821."
+    },
+    {
+      "id": 962,
+      "year": "2024",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 249890."
+    },
+    {
+      "id": 963,
+      "year": "2024",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 237422?"
+    },
+    {
+      "id": 964,
+      "year": "2024",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 269883?"
+    },
+    {
+      "id": 965,
+      "year": "2024",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 230865?"
+    },
+    {
+      "id": 966,
+      "year": "2024",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 206306?"
+    },
+    {
+      "id": 967,
+      "year": "2024",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 255367?"
+    },
+    {
+      "id": 968,
+      "year": "2024",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 268962?"
+    },
+    {
+      "id": 969,
+      "year": "2024",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 214042?"
+    },
+    {
+      "id": 970,
+      "year": "2024",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 245461?"
+    },
+    {
+      "id": 971,
+      "year": "2024",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in A.M. No. P-23-111?"
+    },
+    {
+      "id": 972,
+      "year": "2024",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in A.M. No. RTJ-24-066?"
+    },
+    {
+      "id": 973,
+      "year": "2024",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 260458?"
+    },
+    {
+      "id": 974,
+      "year": "2024",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in A.C. No. 11478?"
+    },
+    {
+      "id": 975,
+      "year": "2024",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 263828."
+    },
+    {
+      "id": 976,
+      "year": "2024",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 259381."
+    },
+    {
+      "id": 977,
+      "year": "2024",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 214741."
+    },
+    {
+      "id": 978,
+      "year": "2024",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 262092."
+    },
+    {
+      "id": 979,
+      "year": "2024",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 268094."
+    },
+    {
+      "id": 980,
+      "year": "2024",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 256540."
+    },
+    {
+      "id": 981,
+      "year": "2024",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 239385."
+    },
+    {
+      "id": 982,
+      "year": "2024",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 249238."
+    },
+    {
+      "id": 983,
+      "year": "2024",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 253127."
+    },
+    {
+      "id": 984,
+      "year": "2024",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 240320."
+    },
+    {
+      "id": 985,
+      "year": "2024",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.M. No. 23-05-05-SC."
+    },
+    {
+      "id": 986,
+      "year": "2024",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 255569."
+    },
+    {
+      "id": 987,
+      "year": "2024",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.C. No. 13368?"
+    },
+    {
+      "id": 988,
+      "year": "2024",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 257683?"
+    },
+    {
+      "id": 989,
+      "year": "2024",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.M. No. P-17-3768?"
+    },
+    {
+      "id": 990,
+      "year": "2024",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 219598?"
+    },
+    {
+      "id": 991,
+      "year": "2024",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 260148?"
+    },
+    {
+      "id": 992,
+      "year": "2024",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 233909?"
+    },
+    {
+      "id": 993,
+      "year": "2024",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 260547?"
+    },
+    {
+      "id": 994,
+      "year": "2024",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 263014?"
+    },
+    {
+      "id": 995,
+      "year": "2024",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 269657?"
+    },
+    {
+      "id": 996,
+      "year": "2024",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.M. No. P-24-150?"
+    },
+    {
+      "id": 997,
+      "year": "2024",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 258527?"
+    },
+    {
+      "id": 998,
+      "year": "2024",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 246434?"
+    },
+    {
+      "id": 999,
+      "year": "2024",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 264661?"
+    },
+    {
+      "id": 1000,
+      "year": "2025",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 277067."
+    },
+    {
+      "id": 1001,
+      "year": "2025",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 272006."
+    },
+    {
+      "id": 1002,
+      "year": "2025",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 248685."
+    },
+    {
+      "id": 1003,
+      "year": "2025",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 267315."
+    },
+    {
+      "id": 1004,
+      "year": "2025",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 269302."
+    },
+    {
+      "id": 1005,
+      "year": "2025",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 222448."
+    },
+    {
+      "id": 1006,
+      "year": "2025",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 261877."
+    },
+    {
+      "id": 1007,
+      "year": "2025",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 242366."
+    },
+    {
+      "id": 1008,
+      "year": "2025",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 256021."
+    },
+    {
+      "id": 1009,
+      "year": "2025",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 256343."
+    },
+    {
+      "id": 1010,
+      "year": "2025",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. 23-04-15-SC."
+    },
+    {
+      "id": 1011,
+      "year": "2025",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of G.R. No. 273562."
+    },
+    {
+      "id": 1012,
+      "year": "2025",
+      "category": "Case Digest & Summary Generation",
+      "query_text": "Make a case digest of A.M. No. P-24-203."
+    },
+    {
+      "id": 1013,
+      "year": "2025",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 266494?"
+    },
+    {
+      "id": 1014,
+      "year": "2025",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in A.M. No. MTJ-25-043?"
+    },
+    {
+      "id": 1015,
+      "year": "2025",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 265434?"
+    },
+    {
+      "id": 1016,
+      "year": "2025",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 255983?"
+    },
+    {
+      "id": 1017,
+      "year": "2025",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 251736?"
+    },
+    {
+      "id": 1018,
+      "year": "2025",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 257086?"
+    },
+    {
+      "id": 1019,
+      "year": "2025",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 258968?"
+    },
+    {
+      "id": 1020,
+      "year": "2025",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 263341?"
+    },
+    {
+      "id": 1021,
+      "year": "2025",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 270948?"
+    },
+    {
+      "id": 1022,
+      "year": "2025",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 276682?"
+    },
+    {
+      "id": 1023,
+      "year": "2025",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 252101?"
+    },
+    {
+      "id": 1024,
+      "year": "2025",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 262831?"
+    },
+    {
+      "id": 1025,
+      "year": "2025",
+      "category": "Related Laws and Statutes Retrieval",
+      "query_text": "What statutes or code provisions were applied in G.R. No. 268116?"
+    },
+    {
+      "id": 1026,
+      "year": "2025",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 259662."
+    },
+    {
+      "id": 1027,
+      "year": "2025",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in A.M. No. P-24-192."
+    },
+    {
+      "id": 1028,
+      "year": "2025",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 236548."
+    },
+    {
+      "id": 1029,
+      "year": "2025",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 263099."
+    },
+    {
+      "id": 1030,
+      "year": "2025",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 265921."
+    },
+    {
+      "id": 1031,
+      "year": "2025",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 260038."
+    },
+    {
+      "id": 1032,
+      "year": "2025",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 256183."
+    },
+    {
+      "id": 1033,
+      "year": "2025",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 252787."
+    },
+    {
+      "id": 1034,
+      "year": "2025",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 257747."
+    },
+    {
+      "id": 1035,
+      "year": "2025",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 255602."
+    },
+    {
+      "id": 1036,
+      "year": "2025",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 240143."
+    },
+    {
+      "id": 1037,
+      "year": "2025",
+      "category": "Related Cases and Precedents Retrieval",
+      "query_text": "List the precedents cited in G.R. No. 263014."
+    },
+    {
+      "id": 1038,
+      "year": "2025",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.C. No. 13986?"
+    },
+    {
+      "id": 1039,
+      "year": "2025",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.C. No. 13998?"
+    },
+    {
+      "id": 1040,
+      "year": "2025",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 273446?"
+    },
+    {
+      "id": 1041,
+      "year": "2025",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 265808?"
+    },
+    {
+      "id": 1042,
+      "year": "2025",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 227190?"
+    },
+    {
+      "id": 1043,
+      "year": "2025",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 256709?"
+    },
+    {
+      "id": 1044,
+      "year": "2025",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 272308?"
+    },
+    {
+      "id": 1045,
+      "year": "2025",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in A.M. No. RTJ-24-073?"
+    },
+    {
+      "id": 1046,
+      "year": "2025",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 254957-58?"
+    },
+    {
+      "id": 1047,
+      "year": "2025",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 278177?"
+    },
+    {
+      "id": 1048,
+      "year": "2025",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 269981?"
+    },
+    {
+      "id": 1049,
+      "year": "2025",
+      "category": "Factual Q&A and Doctrine Application",
+      "query_text": "What was the main legal issue decided in G.R. No. 258978?"
+    }
+  ]
+}
