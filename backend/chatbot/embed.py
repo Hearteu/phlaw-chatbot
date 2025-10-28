@@ -333,14 +333,14 @@ def classify_with_finetuned_model(case_data: Dict[str, Any], confidence_threshol
 load_dotenv()
 QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", 6333))
-QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "jurisprudence")
+QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "jurisprudence2")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "Stern5497/sbert-legal-xlm-roberta-base")
 VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", 768))
 
 # Source data (JSONL only)
 DATA_FILE = os.getenv("DATA_FILE", "backend/data/cases.jsonl.gz")
-YEAR_START = int(os.getenv("YEAR_START", 2006))
-YEAR_END = int(os.getenv("YEAR_END", 2025))
+YEAR_START = int(os.getenv("YEAR_START", 2005))
+YEAR_END = int(os.getenv("YEAR_END", 2005))
 
 # Chunking config
 CHUNK_SIZE_TOKENS = int(os.getenv("CHUNK_SIZE_TOKENS", 640))

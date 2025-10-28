@@ -407,7 +407,10 @@ class LegalRetriever:
             'date': payload.get('date'),
             'promulgation_year': payload.get('promulgation_year'),
             'is_en_banc': payload.get('is_en_banc', False),
-            'is_administrative': payload.get('is_administrative', False)
+            'is_administrative': payload.get('is_administrative', False),
+            # Bar subject classification (if available in payload)
+            'bar_primary_subject': payload.get('bar_primary_subject'),
+            'bar_secondary_subjects': payload.get('bar_secondary_subjects')
         })
         
         doc['metadata'] = metadata

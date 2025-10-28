@@ -29,14 +29,3 @@ class ChatRequestSerializer(serializers.Serializer):
     )
 
 
-class RatingSerializer(serializers.Serializer):
-    """Serializer for rating chatbot responses"""
-    query = serializers.CharField(allow_blank=False, trim_whitespace=True)
-    response = serializers.CharField(allow_blank=False, trim_whitespace=True)
-    case_id = serializers.CharField(allow_blank=True, required=False)
-    correctness = serializers.BooleanField(help_text="Was the response correct?")
-    confidence = serializers.IntegerField(min_value=1, max_value=5, help_text="Confidence level 1-5")
-    helpfulness = serializers.IntegerField(min_value=1, max_value=5, help_text="How helpful was the response? 1-5")
-    clarity = serializers.IntegerField(min_value=1, max_value=5, help_text="How clear was the response? 1-5")
-    comment = serializers.CharField(allow_blank=True, required=False, help_text="Optional feedback comment")
-    user_id = serializers.CharField(allow_blank=True, required=False, help_text="Optional user identifier")

@@ -110,9 +110,29 @@ Explanation:"""
             else:
                 self.contextual_cache = {}
                 print("📝 No existing contextual cache found")
+            
+            # Initialize cache count for tracking
+            self._last_cache_count = len(self.contextual_cache)
         except Exception as e:
             print(f"⚠️ Failed to load contextual cache: {e}")
             self.contextual_cache = {}
+            self._last_cache_count = 0
+    
+    def _save_contextual_cache_if_needed(self, force: bool = False) -> None:
+        """Save contextual chunk cache to disk if there are new entries"""
+        try:
+            # Save if cache has entries and hasn't been saved yet, or if forced
+            if self.contextual_cache:
+                current_count = len(self.contextual_cache)
+                # Save if first time or if count has increased
+                if not hasattr(self, '_last_cache_count') or current_count > self._last_cache_count:
+                    self._last_cache_count = current_count
+                    self._save_contextual_cache()
+            elif force:
+                self._save_contextual_cache()
+        except Exception as e:
+            # Don't fail the entire request if save fails
+            print(f"⚠️ Failed to save contextual cache: {e}")
     
     def _save_contextual_cache(self) -> None:
         """Save contextual chunk cache to disk"""
@@ -268,6 +288,9 @@ Explanation:"""
             # Cache the result
             self.contextual_cache[chunk_hash] = contextual_chunk
         
+        # Save cache periodically to disk after updates
+        self._save_contextual_cache_if_needed()
+        
         return contextual_chunks
     
     def generate_contextual_chunks_with_llm_parallel(self, document: str, chunks: List[Dict[str, Any]], 
@@ -365,6 +388,9 @@ Explanation:"""
                         
                         contextual_chunk = f"{context} {chunk.get('content', '')}"
                         contextual_chunks.append(contextual_chunk)
+        
+        # Save cache after processing chunks
+        self._save_contextual_cache_if_needed()
         
         return contextual_chunks
     

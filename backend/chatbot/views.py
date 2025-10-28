@@ -10,9 +10,8 @@ from rest_framework.views import APIView
 from .chat_engine import chat_with_law_bot
 from .debug_logger import debug_capture
 from .model_cache import clear_llm_cache, get_memory_stats, reload_llm
-from .rating_analyzer import RatingAnalyzer
 from .retriever import LegalRetriever
-from .serializers import ChatRequestSerializer, RatingSerializer
+from .serializers import ChatRequestSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +39,13 @@ class ChatView(APIView):
                 # Call chat_with_law_bot directly without timeout
                 answer = chat_with_law_bot(query, history=history)
                 
-                # Ensure string response
-                if not isinstance(answer, str):
+                # Handle caching response format
+                cached_case_data = None
+                if isinstance(answer, dict) and "_cached_case_data" in answer:
+                    # Extract the actual response and cached data
+                    cached_case_data = answer["_cached_case_data"]
+                    answer = answer["content"]
+                elif not isinstance(answer, str):
                     answer = str(answer)
                 
                 # Get captured debug messages
@@ -49,6 +53,11 @@ class ChatView(APIView):
                 
                 # Include debug output in response
                 response_data = {"response": answer}
+                
+                # Include cached case data for frontend to manage
+                if cached_case_data:
+                    response_data["_cached_case_data"] = cached_case_data
+                
                 if debug_messages:
                     response_data["debug_info"] = {
                         "debug_output": debug_messages,
@@ -129,106 +138,6 @@ class AdminMemoryStatsView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class RatingView(APIView):
-    """API endpoint for rating chatbot responses"""
-    # Disable auth/CSRF for simple local testing. Remove these in prod.
-    authentication_classes: list = []
-    permission_classes: list = []
-
-    def post(self, request):
-        """Submit a rating for a chatbot response"""
-        serializer = RatingSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response({
-                "error": "Invalid rating data",
-                "details": serializer.errors
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            # Create rating data
-            rating_data = serializer.validated_data
-            rating_data['timestamp'] = int(time.time())
-            rating_data['session_id'] = request.session.session_key or f"anon_{int(time.time())}"
-            
-            # Save to JSONL file
-            import json
-            import os
-            from datetime import datetime
-
-            # Create ratings directory if it doesn't exist
-            ratings_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'ratings')
-            os.makedirs(ratings_dir, exist_ok=True)
-            
-            # Save to daily file
-            today = datetime.now().strftime('%Y%m%d')
-            ratings_file = os.path.join(ratings_dir, f'ratings_{today}.jsonl')
-            
-            with open(ratings_file, 'a', encoding='utf-8') as f:
-                f.write(json.dumps(rating_data, ensure_ascii=False) + '\n')
-            
-            logger.info(f"Rating saved: {rating_data['correctness']} (confidence: {rating_data['confidence']})")
-            
-            return Response({
-                "message": "Rating submitted successfully",
-                "status": "success"
-            }, status=status.HTTP_201_CREATED)
-            
-        except Exception as e:
-            logger.exception("Failed to save rating: %s", e)
-            return Response({
-                "message": f"Failed to save rating: {str(e)}",
-                "status": "error"
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-class RatingMetricsView(APIView):
-    """API endpoint to get rating metrics and analysis"""
-    # Disable auth/CSRF for simple local testing. Remove these in prod.
-    authentication_classes: list = []
-    permission_classes: list = []
-
-    def get(self, request):
-        """Get rating metrics and analysis"""
-        try:
-            # Get parameters
-            days_back = int(request.GET.get('days', 30))
-            include_details = request.GET.get('details', 'false').lower() == 'true'
-            
-            # Initialize analyzer
-            analyzer = RatingAnalyzer()
-            
-            # Generate report
-            report = analyzer.generate_report(days_back=days_back)
-            
-            if 'error' in report:
-                return Response({
-                    "error": report['error'],
-                    "status": "error"
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Prepare response data
-            response_data = {
-                "period_days": report['period_days'],
-                "total_ratings": report['total_ratings'],
-                "overall_metrics": report['overall_metrics'],
-                "summary": report['summary']
-            }
-            
-            # Include detailed analysis if requested
-            if include_details:
-                response_data.update({
-                    "user_analysis": report.get('user_analysis', {}),
-                    "case_analysis": report.get('case_analysis', {})
-                })
-            
-            return Response(response_data, status=status.HTTP_200_OK)
-            
-        except Exception as e:
-            logger.exception("Failed to get rating metrics: %s", e)
-            return Response({
-                "message": f"Failed to get rating metrics: {str(e)}",
-                "status": "error"
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class StreamingChatView(APIView):

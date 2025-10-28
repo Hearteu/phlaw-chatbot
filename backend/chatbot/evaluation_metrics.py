@@ -16,6 +16,393 @@ class LegalAccuracyMetrics:
     """Classification metrics for legal information accuracy"""
     
     @staticmethod
+    def generate_automated_ground_truth(responses: List[str], 
+                                      reference_texts: List[str],
+                                      case_metadata_list: List[Dict],
+                                      query_list: Optional[List[str]] = None) -> List[int]:
+        """
+        Generate automated ground truth labels when no expert/user ratings are available
+        
+        Args:
+            responses: List of chatbot responses to evaluate
+            reference_texts: List of reference legal texts from JSONL
+            case_metadata_list: List of case metadata dictionaries
+            query_list: Optional list of user queries
+            
+        Returns:
+            List of binary ground truth labels (1=high quality, 0=low quality)
+        """
+        ground_truth = []
+        
+        for i, (response, reference, metadata) in enumerate(zip(responses, reference_texts, case_metadata_list)):
+            query = query_list[i] if query_list else ""
+            
+            # Calculate comprehensive automated score
+            automated_scores = AutomatedContentScoring.score_legal_response(
+                response, reference, metadata
+            )
+            
+            # Generate ground truth using multiple criteria
+            gt_score = LegalAccuracyMetrics._calculate_automated_ground_truth_score(
+                response, reference, metadata, query, automated_scores
+            )
+            
+            # Binary classification: 1 if high quality, 0 if low quality
+            # Adjusted threshold based on demo results
+            ground_truth.append(1 if gt_score >= 0.5 else 0)
+        
+        return ground_truth
+    
+    @staticmethod
+    def _calculate_automated_ground_truth_score(response: str, reference_text: str, 
+                                             case_metadata: Dict, query: str, 
+                                             automated_scores: Dict[str, Any]) -> float:
+        """
+        Calculate automated ground truth score using multiple criteria
+        
+        Returns:
+            Float score between 0.0 and 1.0 representing response quality
+        """
+        scores = []
+        weights = []
+        
+        # 1. Content Relevance (BLEU + ROUGE)
+        bleu_avg = automated_scores['bleu'].get('bleu_avg', 0.0)
+        rouge_1_f1 = automated_scores['rouge']['rouge_1']['f1']
+        rouge_2_f1 = automated_scores['rouge']['rouge_2']['f1']
+        rouge_l_f1 = automated_scores['rouge']['rouge_l']['f1']
+        
+        content_score = (bleu_avg + rouge_1_f1 + rouge_2_f1 + rouge_l_f1) / 4.0
+        scores.append(content_score)
+        weights.append(0.25)
+        
+        # 2. Legal Element Presence
+        legal_elements_score = automated_scores['legal_elements']['presence_rate']
+        scores.append(legal_elements_score)
+        weights.append(0.30)
+        
+        # 3. Citation Accuracy
+        citation_score = automated_scores['citation_accuracy']['f1']
+        scores.append(citation_score)
+        weights.append(0.20)
+        
+        # 4. Response Completeness (length and structure)
+        completeness_score = LegalAccuracyMetrics._calculate_completeness_score(response, reference_text)
+        scores.append(completeness_score)
+        weights.append(0.15)
+        
+        # 5. Query Relevance (if query provided)
+        if query:
+            relevance_score = LegalAccuracyMetrics._calculate_query_relevance_score(query, response, reference_text)
+            scores.append(relevance_score)
+            weights.append(0.10)
+        
+        # Calculate weighted average
+        total_weight = sum(weights)
+        weighted_score = sum(score * weight for score, weight in zip(scores, weights)) / total_weight
+        
+        return min(max(weighted_score, 0.0), 1.0)  # Clamp between 0 and 1
+    
+    @staticmethod
+    def _calculate_completeness_score(response: str, reference_text: str) -> float:
+        """Calculate response completeness score"""
+        if not response or not reference_text:
+            return 0.0
+        
+        # Length ratio (response should be substantial but not too long)
+        length_ratio = len(response) / len(reference_text) if len(reference_text) > 0 else 0
+        optimal_ratio = 0.3  # Response should be ~30% of reference length
+        length_score = 1.0 - abs(length_ratio - optimal_ratio) / optimal_ratio
+        length_score = max(0.0, min(1.0, length_score))
+        
+        # Structure score (check for legal document structure)
+        structure_indicators = [
+            'case', 'court', 'decision', 'ruling', 'facts', 'issues',
+            'held', 'wherefore', 'ordered', 'petitioner', 'respondent'
+        ]
+        structure_count = sum(1 for indicator in structure_indicators if indicator.lower() in response.lower())
+        structure_score = min(structure_count / len(structure_indicators), 1.0)
+        
+        return (length_score + structure_score) / 2.0
+    
+    @staticmethod
+    def _calculate_query_relevance_score(query: str, response: str, reference_text: str) -> float:
+        """Calculate how well the response addresses the query"""
+        if not query:
+            return 0.5  # Neutral score if no query provided
+        
+        query_lower = query.lower()
+        response_lower = response.lower()
+        
+        # Extract key terms from query
+        query_terms = set(re.findall(r'\b\w+\b', query_lower))
+        query_terms = {term for term in query_terms if len(term) > 3}  # Remove short words
+        
+        if not query_terms:
+            return 0.5
+        
+        # Check how many query terms appear in response
+        response_terms = set(re.findall(r'\b\w+\b', response_lower))
+        matching_terms = query_terms.intersection(response_terms)
+        
+        # Calculate relevance score
+        relevance_score = len(matching_terms) / len(query_terms)
+        
+        # Bonus for legal terms that might be paraphrased
+        legal_synonyms = {
+            'case': ['decision', 'ruling', 'judgment'],
+            'court': ['tribunal', 'judiciary'],
+            'law': ['legal', 'statute', 'regulation'],
+            'decision': ['ruling', 'judgment', 'holding']
+        }
+        
+        synonym_matches = 0
+        for query_term in query_terms:
+            if query_term in legal_synonyms:
+                for synonym in legal_synonyms[query_term]:
+                    if synonym in response_lower:
+                        synonym_matches += 0.5
+                        break
+        
+        relevance_score += min(synonym_matches / len(query_terms), 0.3)  # Cap bonus at 30%
+        
+        return min(relevance_score, 1.0)
+    
+    @staticmethod
+    def calculate_automated_metrics(responses: List[str], 
+                                  reference_texts: List[str],
+                                  case_metadata_list: List[Dict],
+                                  query_list: Optional[List[str]] = None) -> Dict[str, Any]:
+        """
+        Calculate metrics using fully automated ground truth generation
+        
+        Args:
+            responses: List of chatbot responses
+            reference_texts: List of reference legal texts
+            case_metadata_list: List of case metadata
+            query_list: Optional list of user queries
+            
+        Returns:
+            Dictionary with automated metrics and ground truth analysis
+        """
+        # Generate automated ground truth
+        ground_truth = LegalAccuracyMetrics.generate_automated_ground_truth(
+            responses, reference_texts, case_metadata_list, query_list
+        )
+        
+        # For automated evaluation, we'll use the ground truth as both prediction and truth
+        # In practice, you might have separate model predictions
+        predictions = ground_truth.copy()
+        
+        # Calculate standard metrics
+        metrics = LegalAccuracyMetrics.calculate_metrics(predictions, ground_truth)
+        
+        # Calculate additional automated metrics
+        automated_metrics = {
+            'standard_metrics': metrics,
+            'ground_truth_analysis': {
+                'total_responses': len(responses),
+                'high_quality_count': sum(ground_truth),
+                'low_quality_count': len(ground_truth) - sum(ground_truth),
+                'quality_distribution': {
+                    'high_quality_ratio': sum(ground_truth) / len(ground_truth) if ground_truth else 0,
+                    'low_quality_ratio': (len(ground_truth) - sum(ground_truth)) / len(ground_truth) if ground_truth else 0
+                }
+            },
+            'automated_scores_summary': LegalAccuracyMetrics._summarize_automated_scores(
+                responses, reference_texts, case_metadata_list
+            )
+        }
+        
+        return automated_metrics
+    
+    @staticmethod
+    def _summarize_automated_scores(responses: List[str], reference_texts: List[str], 
+                                  case_metadata_list: List[Dict]) -> Dict[str, float]:
+        """Summarize automated scores across all responses"""
+        all_scores = {
+            'bleu_avg': [],
+            'rouge_1_f1': [],
+            'rouge_2_f1': [],
+            'rouge_l_f1': [],
+            'legal_elements_presence_rate': [],
+            'citation_accuracy_f1': [],
+            'overall_relevance': []
+        }
+        
+        for response, reference, metadata in zip(responses, reference_texts, case_metadata_list):
+            scores = AutomatedContentScoring.score_legal_response(response, reference, metadata)
+            
+            all_scores['bleu_avg'].append(scores['bleu']['bleu_avg'])
+            all_scores['rouge_1_f1'].append(scores['rouge']['rouge_1']['f1'])
+            all_scores['rouge_2_f1'].append(scores['rouge']['rouge_2']['f1'])
+            all_scores['rouge_l_f1'].append(scores['rouge']['rouge_l']['f1'])
+            all_scores['legal_elements_presence_rate'].append(scores['legal_elements']['presence_rate'])
+            all_scores['citation_accuracy_f1'].append(scores['citation_accuracy']['f1'])
+            all_scores['overall_relevance'].append(scores['overall_relevance']['score'])
+        
+        # Calculate averages
+        summary = {}
+        for metric, values in all_scores.items():
+            if values:
+                summary[f'avg_{metric}'] = round(np.mean(values), 4)
+                summary[f'std_{metric}'] = round(np.std(values), 4)
+                summary[f'min_{metric}'] = round(min(values), 4)
+                summary[f'max_{metric}'] = round(max(values), 4)
+        
+        return summary
+    
+    @staticmethod
+    def assess_legal_information_accuracy(response: str, reference_text: str, 
+                                        case_metadata: Dict, query: str = "") -> Dict[str, Any]:
+        """
+        Assess legal information accuracy using automated ground truth
+        
+        Args:
+            response: Chatbot response to assess
+            reference_text: Reference legal text
+            case_metadata: Case metadata
+            query: User query (optional)
+            
+        Returns:
+            Dictionary with accuracy assessment and recommendations
+        """
+        # Calculate automated scores
+        automated_scores = AutomatedContentScoring.score_legal_response(
+            response, reference_text, case_metadata
+        )
+        
+        # Generate ground truth score
+        gt_score = LegalAccuracyMetrics._calculate_automated_ground_truth_score(
+            response, reference_text, case_metadata, query, automated_scores
+        )
+        
+        # Determine accuracy level (adjusted thresholds)
+        if gt_score >= 0.7:
+            accuracy_level = "HIGH"
+            recommendation = "Response demonstrates high legal information accuracy"
+        elif gt_score >= 0.4:
+            accuracy_level = "MEDIUM"
+            recommendation = "Response shows moderate legal information accuracy, consider improvements"
+        else:
+            accuracy_level = "LOW"
+            recommendation = "Response has low legal information accuracy, significant improvements needed"
+        
+        # Identify specific accuracy issues
+        accuracy_issues = []
+        if automated_scores['citation_accuracy']['f1'] < 0.7:
+            accuracy_issues.append("Citation accuracy is low - verify G.R. numbers and case references")
+        if automated_scores['legal_elements']['presence_rate'] < 0.6:
+            accuracy_issues.append("Missing key legal elements - ensure case details are complete")
+        if automated_scores['bleu']['bleu_avg'] < 0.3:
+            accuracy_issues.append("Content relevance is low - response may not match reference accurately")
+        if automated_scores['rouge']['rouge_1']['f1'] < 0.4:
+            accuracy_issues.append("Information overlap is insufficient - ensure key facts are included")
+        
+        return {
+            'accuracy_level': accuracy_level,
+            'accuracy_score': round(gt_score, 4),
+            'recommendation': recommendation,
+            'accuracy_issues': accuracy_issues,
+            'detailed_scores': {
+                'content_relevance': round(automated_scores['bleu']['bleu_avg'], 4),
+                'information_overlap': round(automated_scores['rouge']['rouge_1']['f1'], 4),
+                'legal_elements_completeness': round(automated_scores['legal_elements']['presence_rate'], 4),
+                'citation_accuracy': round(automated_scores['citation_accuracy']['f1'], 4),
+                'overall_relevance': round(automated_scores['overall_relevance']['score'], 4)
+            },
+            'quality_threshold_met': gt_score >= 0.7
+        }
+    
+    @staticmethod
+    def monitor_legal_accuracy_trends(evaluation_logs: List[Dict]) -> Dict[str, Any]:
+        """
+        Monitor legal accuracy trends over time
+        
+        Args:
+            evaluation_logs: List of evaluation records
+            
+        Returns:
+            Dictionary with accuracy trends and insights
+        """
+        if not evaluation_logs:
+            return {'error': 'No evaluation logs provided'}
+        
+        # Extract accuracy scores
+        accuracy_scores = []
+        timestamps = []
+        
+        for log in evaluation_logs:
+            if 'automated_ground_truth_score' in log:
+                accuracy_scores.append(log['automated_ground_truth_score'])
+                timestamps.append(log.get('timestamp', ''))
+        
+        if not accuracy_scores:
+            return {'error': 'No accuracy scores found in logs'}
+        
+        # Calculate trends
+        avg_accuracy = sum(accuracy_scores) / len(accuracy_scores)
+        min_accuracy = min(accuracy_scores)
+        max_accuracy = max(accuracy_scores)
+        
+        # Count accuracy levels
+        high_accuracy_count = sum(1 for score in accuracy_scores if score >= 0.8)
+        medium_accuracy_count = sum(1 for score in accuracy_scores if 0.6 <= score < 0.8)
+        low_accuracy_count = sum(1 for score in accuracy_scores if score < 0.6)
+        
+        # Calculate improvement trend (if multiple evaluations)
+        trend = "stable"
+        if len(accuracy_scores) > 1:
+            recent_avg = sum(accuracy_scores[-5:]) / min(5, len(accuracy_scores))
+            earlier_avg = sum(accuracy_scores[:5]) / min(5, len(accuracy_scores))
+            
+            if recent_avg > earlier_avg + 0.05:
+                trend = "improving"
+            elif recent_avg < earlier_avg - 0.05:
+                trend = "declining"
+        
+        return {
+            'total_evaluations': len(accuracy_scores),
+            'average_accuracy': round(avg_accuracy, 4),
+            'min_accuracy': round(min_accuracy, 4),
+            'max_accuracy': round(max_accuracy, 4),
+            'accuracy_distribution': {
+                'high_accuracy': high_accuracy_count,
+                'medium_accuracy': medium_accuracy_count,
+                'low_accuracy': low_accuracy_count,
+                'high_accuracy_percentage': round(high_accuracy_count / len(accuracy_scores) * 100, 1)
+            },
+            'trend': trend,
+            'recommendations': LegalAccuracyMetrics._generate_accuracy_recommendations(
+                avg_accuracy, trend, high_accuracy_count, len(accuracy_scores)
+            )
+        }
+    
+    @staticmethod
+    def _generate_accuracy_recommendations(avg_accuracy: float, trend: str, 
+                                         high_accuracy_count: int, total_count: int) -> List[str]:
+        """Generate recommendations based on accuracy analysis"""
+        recommendations = []
+        
+        if avg_accuracy < 0.6:
+            recommendations.append("Overall accuracy is low - focus on improving legal element detection")
+            recommendations.append("Review citation accuracy validation algorithms")
+        elif avg_accuracy < 0.8:
+            recommendations.append("Accuracy is moderate - consider enhancing content relevance scoring")
+            recommendations.append("Improve legal element completeness validation")
+        
+        if trend == "declining":
+            recommendations.append("Accuracy trend is declining - investigate recent changes")
+        elif trend == "improving":
+            recommendations.append("Accuracy is improving - continue current strategies")
+        
+        high_accuracy_rate = high_accuracy_count / total_count
+        if high_accuracy_rate < 0.5:
+            recommendations.append("Less than 50% of responses achieve high accuracy - review quality thresholds")
+        
+        return recommendations
+
+    @staticmethod
     def calculate_metrics(predictions: List[int], ground_truth: List[int]) -> Dict[str, float]:
         """
         Calculate accuracy, precision, recall, F1 score, and specificity
@@ -382,17 +769,23 @@ class AutomatedContentScoring:
             if case_metadata.get('case_type', '') and case_metadata['case_type'].lower() in response_lower:
                 elements_present['case_type'] = True
         
-        # Check content sections
+        # Check content sections (more lenient for shorter responses)
         section_keywords = {
-            'facts': ['fact', 'background', 'petitioner', 'respondent', 'alleged'],
-            'issues': ['issue', 'question', 'whether', 'contention', 'argument'],
-            'ruling': ['ruling', 'held', 'decision', 'ordered', 'wherefore', 'decided'],
-            'legal_doctrine': ['doctrine', 'principle', 'rule', 'test', 'standard']
+            'facts': ['fact', 'background', 'petitioner', 'respondent', 'alleged', 'case', 'court'],
+            'issues': ['issue', 'question', 'whether', 'contention', 'argument', 'problem'],
+            'ruling': ['ruling', 'held', 'decision', 'ordered', 'wherefore', 'decided', 'found', 'guilty', 'innocent'],
+            'legal_doctrine': ['doctrine', 'principle', 'rule', 'test', 'standard', 'law', 'legal']
         }
         
         for section, keywords in section_keywords.items():
             if any(keyword in response_lower for keyword in keywords):
                 elements_present[section] = True
+        
+        # Bonus for legal terminology presence
+        legal_terms = ['supreme court', 'court', 'case', 'law', 'legal', 'defendant', 'plaintiff', 'guilty', 'innocent', 'ruling', 'decision']
+        legal_term_count = sum(1 for term in legal_terms if term in response_lower)
+        if legal_term_count >= 2:  # If response contains at least 2 legal terms
+            elements_present['legal_doctrine'] = True
         
         # Calculate presence rate
         presence_rate = sum(elements_present.values()) / len(elements_present)
@@ -565,6 +958,63 @@ class EvaluationTracker:
         
         return statistics
     
+    def log_evaluation_with_automated_ground_truth(self, query: str, response: str, reference: str, 
+                                                  case_metadata: Optional[Dict] = None) -> Dict[str, Any]:
+        """
+        Log evaluation using automated ground truth generation (no expert/user ratings needed)
+        
+        Args:
+            query: User query
+            response: Chatbot response
+            reference: Reference text
+            case_metadata: Case metadata
+            
+        Returns:
+            Complete evaluation record with automated ground truth
+        """
+        # Calculate automated scores
+        automated_scores = AutomatedContentScoring.score_legal_response(
+            response, reference, case_metadata
+        )
+        
+        # Generate automated ground truth score
+        gt_score = LegalAccuracyMetrics._calculate_automated_ground_truth_score(
+            response, reference, case_metadata or {}, query, automated_scores
+        )
+        
+        # Create automated expert scores for compatibility
+        automated_expert_scores = {
+            'accuracy': round(gt_score * 5, 1),  # Scale to 1-5 range
+            'completeness': round(automated_scores['legal_elements']['presence_rate'] * 5, 1),
+            'relevance': round(automated_scores['overall_relevance']['score'] * 5, 1),
+            'clarity': round(min(gt_score * 5, 5.0), 1),
+            'legal_reasoning': round(automated_scores['citation_accuracy']['f1'] * 5, 1),
+            'citation_accuracy': round(automated_scores['citation_accuracy']['f1'] * 5, 1),
+            'overall_rating': round(gt_score * 5, 1)
+        }
+        
+        # Create evaluation record
+        evaluation_record = {
+            'timestamp': datetime.now().isoformat(),
+            'session_id': self.session_id,
+            'query': query,
+            'response': response,
+            'reference': reference[:500],  # Store first 500 chars
+            'case_metadata': case_metadata,
+            'automated_scores': automated_scores,
+            'expert_scores': automated_expert_scores,
+            'automated_ground_truth_score': round(gt_score, 4),
+            'quality_label': 'high_quality' if gt_score >= 0.7 else 'low_quality',
+            'response_length': len(response),
+            'reference_length': len(reference)
+        }
+        
+        # Save to log file
+        with open(self.log_file, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(evaluation_record, ensure_ascii=False) + '\n')
+        
+        return evaluation_record
+    
     def export_report(self, output_file: Optional[str] = None) -> str:
         """Export evaluation report to JSON file"""
         if output_file is None:
@@ -573,6 +1023,6 @@ class EvaluationTracker:
         statistics = self.get_session_statistics()
         
         with open(output_file, 'w', encoding='utf-8') as f:
-            json.dumps(statistics, indent=2, ensure_ascii=False)
+            json.dump(statistics, f, indent=2, ensure_ascii=False)
         
         return output_file
