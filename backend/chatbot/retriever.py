@@ -74,11 +74,21 @@ def _get_collection_info(collection_name: str) -> Dict[str, Any]:
 # =============================================================================
 
 def load_case_from_jsonl(case_id: str, jsonl_path: str = DATA_FILE) -> Optional[Dict[str, Any]]:
-    """Load full case text from JSONL file by case ID or GR number"""
-    print(f"🔍 Looking for case {case_id} in {jsonl_path}")
+    """Load full case text from JSONL file by case ID or GR number with caching"""
+    
+    # Check cache first
+    try:
+        from .case_cache import cache_case, get_cached_case
+        cached_case = get_cached_case(case_id)
+        if cached_case:
+            return cached_case
+    except ImportError:
+        pass  # Cache not available, proceed with file loading
+    
+    print(f"[LOADING] Looking for case {case_id} in {jsonl_path}")
     
     if not os.path.exists(jsonl_path):
-        print(f"❌ JSONL file not found: {jsonl_path}")
+        print(f"[ERROR] JSONL file not found: {jsonl_path}")
         return None
     
     try:
@@ -106,11 +116,19 @@ def load_case_from_jsonl(case_id: str, jsonl_path: str = DATA_FILE) -> Optional[
                     case_special == f"OCA No. {case_id}" or
                     case_special == f"U.C. No. {case_id}" or
                     case_special == f"ADM No. {case_id}"):
-                    print(f"✅ Found case {case_id} at line {line_num}")
+                    print(f"[FOUND] Found case {case_id} at line {line_num}")
+                    
+                    # Cache the loaded case
+                    try:
+                        from .case_cache import cache_case
+                        cache_case(case_id, case)
+                    except ImportError:
+                        pass
+                    
                     return case
                     
     except Exception as e:
-        print(f"❌ Error loading case {case_id}: {e}")
+        print(f"[ERROR] Error loading case {case_id}: {e}")
     return None
 
 
