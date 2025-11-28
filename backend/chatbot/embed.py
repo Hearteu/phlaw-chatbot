@@ -90,7 +90,7 @@ def load_finetuned_model(model_path: str = None):
 
 def _organize_flat_predictions(flat_predictions: Dict[str, float]) -> Dict[str, Dict[str, float]]:
     """Organize flat predictions into categories"""
-    # Define label-to-category mapping based on fine-tuned model labels
+    # Define label-to-category mapping based
     LABEL_CATEGORIES = {
         # Case types
         'civil': 'case_type',

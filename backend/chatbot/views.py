@@ -24,11 +24,14 @@ class ChatView(APIView):
     def post(self, request):
         serializer = ChatRequestSerializer(data=request.data)
         if not serializer.is_valid():
-            return Response({"error": "Missing or invalid 'query'."},
-                            status=status.HTTP_400_BAD_REQUEST)
+            return Response({
+                "error": "Invalid request data.",
+                "details": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         query = serializer.validated_data["query"]
         history = serializer.validated_data.get("history") or []
+        template_mode = serializer.validated_data.get("template_mode", "full")
         
         # Note: Local GGUF LLM is NOT loaded here - chatbot uses TogetherAI for generation
         # The GGUF model is only used for contextual chunking (lazy-loaded when needed)
@@ -37,7 +40,7 @@ class ChatView(APIView):
             # Use proper logging-based debug capture
             with debug_capture(max_messages=50) as debug_logger:
                 # Call chat_with_law_bot directly without timeout
-                answer = chat_with_law_bot(query, history=history)
+                answer = chat_with_law_bot(query, history=history, template_mode=template_mode)
                 
                 # Handle caching response format
                 cached_case_data = None
@@ -129,6 +132,17 @@ class AdminMemoryStatsView(APIView):
         """Get comprehensive memory and model statistics"""
         try:
             stats = get_memory_stats()
+            
+            # Add case cache statistics
+            try:
+                from .case_cache import get_cache_stats
+                case_cache_stats = get_cache_stats()
+                stats["case_cache"] = case_cache_stats
+            except ImportError:
+                stats["case_cache"] = {"error": "Case cache module not available"}
+            except Exception as e:
+                stats["case_cache"] = {"error": f"Failed to get case cache stats: {e}"}
+            
             return Response(stats, status=status.HTTP_200_OK)
         except Exception as e:
             logger.exception("Failed to get memory stats: %s", e)
@@ -140,56 +154,7 @@ class AdminMemoryStatsView(APIView):
 
 
 
-class StreamingChatView(APIView):
-    """Streaming chat endpoint with real-time progress updates"""
-    authentication_classes: list = []
-    permission_classes: list = []
-
-    def post(self, request):
-        import json
-
-        from django.http import StreamingHttpResponse
-        
-        serializer = ChatRequestSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response({"error": "Missing or invalid 'query'."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        query = serializer.validated_data["query"]
-        history = serializer.validated_data.get("history") or []
-        
-        def generate_stream():
-            """Generator function for streaming responses with progress updates"""
-            try:
-                # Import here to avoid circular dependencies
-                from .chat_engine import chat_with_law_bot_streaming
-
-                # Send initial metadata
-                yield f"data: {json.dumps({'type': 'start', 'query': query})}\n\n"
-                
-                # Generate streaming response with progress updates
-                for chunk in chat_with_law_bot_streaming(query, history=history):
-                    if isinstance(chunk, dict):
-                        # Progress update
-                        yield f"data: {json.dumps(chunk)}\n\n"
-                    else:
-                        # Content chunk (string)
-                        yield f"data: {json.dumps({'type': 'content', 'chunk': chunk})}\n\n"
-                
-                # Send completion signal
-                yield f"data: {json.dumps({'type': 'done'})}\n\n"
-                
-            except Exception as e:
-                logger.exception("Streaming chat failed: %s", e)
-                yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
-
-        response = StreamingHttpResponse(
-            generate_stream(),
-            content_type='text/event-stream'
-        )
-        response['Cache-Control'] = 'no-cache'
-        response['X-Accel-Buffering'] = 'no'
-        return response
+## StreamingChatView removed: streaming functionality is no longer supported.
 
 
 class ClearCacheView(APIView):
@@ -215,9 +180,32 @@ class ClearCacheView(APIView):
                         logger.warning(f"Could not clear retrieval cache for {collection}: {e}")
                 cleared_caches.append('retrieval')
             
+            if cache_type in ['all', 'case_content']:
+                # Clear case content cache
+                try:
+                    from .case_cache import clear_case_cache
+                    clear_case_cache()
+                    cleared_caches.append('case_content')
+                except ImportError:
+                    logger.warning("Case cache module not available")
+                except Exception as e:
+                    logger.warning(f"Could not clear case content cache: {e}")
+            
             if cache_type in ['all', 'model']:
                 clear_llm_cache()
                 cleared_caches.append('model')
+            
+            if cache_type == 'session':
+                # Clear only case content cache for new chat sessions
+                try:
+                    from .case_cache import clear_case_cache
+                    clear_case_cache()
+                    cleared_caches.append('case_content')
+                    logger.info("Case content cache cleared for new chat session")
+                except ImportError:
+                    logger.warning("Case cache module not available")
+                except Exception as e:
+                    logger.warning(f"Could not clear case content cache for session: {e}")
             
             return Response({
                 "message": f"Successfully cleared caches: {', '.join(cleared_caches)}",

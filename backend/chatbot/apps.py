@@ -1,3 +1,4 @@
+import atexit
 import os
 
 from django.apps import AppConfig
@@ -15,6 +16,7 @@ class ChatbotConfig(AppConfig):
             from .model_cache import (get_cached_bm25,
                                       get_cached_cross_encoder,
                                       get_cached_embedding_model)
+            from .retriever import close_qdrant_client
             print("[LOADING] Loading models at startup...")
             # Preload embedding model and auxiliary models
             # Note: Local GGUF LLM is NOT loaded here - it's only used for contextual chunking
@@ -23,5 +25,9 @@ class ChatbotConfig(AppConfig):
             get_cached_cross_encoder()
             get_cached_bm25()
             print("[SUCCESS] Essential models loaded at startup (GGUF LLM skipped - lazy load)")
+            
+            # Register cleanup function to close Qdrant client on shutdown
+            atexit.register(close_qdrant_client)
+            print("[REGISTERED] Qdrant client cleanup handler registered")
         except Exception as e:
             print(f"[WARNING] Startup model load failed: {e}")

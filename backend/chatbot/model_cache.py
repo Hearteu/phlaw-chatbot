@@ -7,8 +7,9 @@ from contextlib import contextmanager
 from typing import Any, Dict, List, Optional, Tuple
 
 import psutil
-from llama_cpp import Llama
 from sentence_transformers import SentenceTransformer
+
+from .docker_model_client import DockerModelClient, get_docker_model_client
 
 # Optional heavy deps imported lazily in functions
 
@@ -39,6 +40,42 @@ _MEMORY_STATS = {
 
 # Base directory for data files
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ENABLE_DOCKER_LLM = os.getenv("ENABLE_DOCKER_LLM", "false").lower() == "true"
+
+
+class DockerLlamaAdapter:
+    """Adapter exposing Docker-hosted Llama 3.2 through a llama.cpp-like interface."""
+
+    def __init__(self, docker_client: DockerModelClient):
+        self._client = docker_client
+        self.model_path = f"{docker_client.model_name}@{docker_client.base_url}"
+
+    def __call__(
+        self,
+        prompt: str,
+        max_tokens: int = 256,
+        temperature: float = 0.3,
+        top_p: float = 0.85,
+        stop: Optional[List[str]] = None,
+        **_: Any,
+    ) -> Dict[str, Any]:
+        call_kwargs: Dict[str, Any] = {
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "top_p": top_p,
+        }
+        if stop:
+            call_kwargs["stop"] = stop
+
+        response = self._client.generate_response(prompt, **call_kwargs)
+        return {
+            "id": "docker-llama-3.2",
+            "choices": [{"text": response}],
+        }
+
+    def close(self) -> None:
+        """Compatibility no-op."""
+        return None
 
 # =============================================================================
 # LLM CACHING
@@ -86,9 +123,17 @@ def memory_managed_operation():
             print("High memory usage detected, forcing cleanup...")
             _force_cleanup()
 
-def get_cached_llm() -> Optional[Llama]:
-    """Get cached LLM instance with enhanced memory management"""
+def get_cached_llm() -> Optional[Any]:
+    """Get cached Docker-hosted LLM instance with enhanced memory management"""
     global _LLM_INSTANCE, _LLM_LOADED, _MEMORY_STATS
+
+    if not ENABLE_DOCKER_LLM:
+        with _CACHE_LOCK:
+            if not _LLM_LOADED:
+                print("ℹ️ Docker LLM disabled via configuration; returning None")
+            _LLM_INSTANCE = None
+            _LLM_LOADED = True
+        return None
     
     with _CACHE_LOCK:
         if _LLM_INSTANCE is not None:
@@ -104,120 +149,51 @@ def get_cached_llm() -> Optional[Llama]:
     if not _LLM_LOADED:
         with memory_managed_operation():
             try:
-                print("Loading LLM model...")
+                print("Initializing Docker-hosted Llama 3.2 client...")
                 start_time = time.time()
-                
-                # Check memory before loading
+
+                # Check memory before loading (still useful for monitoring)
                 memory_before = _monitor_memory()
-                print(f"Memory before LLM load: {memory_before.get('used_percent', 0):.1f}%")
-                
-                # LLM Configuration
-                BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                MODEL_PATH = os.path.join(BASE_DIR, "law-chat.Q4_K_M.gguf")
-                
-                # Check if model file exists
-                if not os.path.exists(MODEL_PATH):
-                    raise FileNotFoundError(f"Model file not found: {MODEL_PATH}")
-                
-                # Load-time configuration only; sampling is set at generation time
-                LLM_CONFIG = {
-                    "model_path": MODEL_PATH,
-                    "n_ctx": 4096,
-                    "n_gpu_layers": -1,
-                    "n_threads": 8,
-                    "n_batch": 256,
-                    "n_ubatch": 16,
-                    "use_mmap": True,
-                    "use_mlock": False,
-                    "low_vram": True,
-                    "f16_kv": True,
-                    "logits_all": False,
-                    "embedding": False,
-                    "verbose": False,
-                }
-            
-                try:
-                    _LLM_INSTANCE = Llama(**LLM_CONFIG)
-                    load_time = time.time() - start_time
-                    memory_after = _monitor_memory()
-                    print(f"[SUCCESS] LLM model loaded in {load_time:.2f}s")
-                    print(f"Memory after LLM load: {memory_after.get('used_percent', 0):.1f}%")
-                    _MEMORY_STATS["llm_loads"] += 1
-                    _LLM_LOADED = True
-                except Exception as e:
-                    print(f"[ERROR] CUDA configuration failed: {e}")
-                    print("Trying CPU-only fallback...")
-                    
-                    # Fallback to CPU-only configuration
-                    cpu_config = {
-                        "model_path": MODEL_PATH,
-                        "n_ctx": 2048,
-                        "n_gpu_layers": 0,
-                        "n_threads": 4,
-                        "n_batch": 16,
-                        "use_mmap": True,
-                        "use_mlock": False,
-                        "f16_kv": True,
-                        "logits_all": False,
-                        "embedding": False,
-                        "verbose": False,
-                    }
-                    
-                    try:
-                        _LLM_INSTANCE = Llama(**cpu_config)
-                        load_time = time.time() - start_time
-                        memory_after = _monitor_memory()
-                        print(f"[SUCCESS] LLM model loaded in CPU-only mode in {load_time:.2f}s")
-                        print(f"Memory after LLM load: {memory_after.get('used_percent', 0):.1f}%")
-                        _MEMORY_STATS["llm_loads"] += 1
-                        _LLM_LOADED = True
-                    except Exception as e2:
-                        print(f"[ERROR] CPU fallback also failed: {e2}")
-                        _LLM_LOADED = True  # Mark as loaded to prevent retry loops
-                        return None
-            
+                print(f"Memory before LLM init: {memory_before.get('used_percent', 0):.1f}%")
+
+                docker_client = get_docker_model_client()
+                if not docker_client.is_available and hasattr(docker_client, "_test_connection"):
+                    docker_client._test_connection()
+
+                if not docker_client.is_available:
+                    raise RuntimeError("Docker model runner not available")
+
+                _LLM_INSTANCE = DockerLlamaAdapter(docker_client)
+
+                load_time = time.time() - start_time
+                memory_after = _monitor_memory()
+                print(f"[SUCCESS] Docker Llama 3.2 client ready in {load_time:.2f}s")
+                print(f"Memory after LLM init: {memory_after.get('used_percent', 0):.1f}%")
+                _MEMORY_STATS["llm_loads"] += 1
+                _LLM_LOADED = True
             except Exception as e:
-                print(f"[ERROR] Failed to load LLM model: {e}")
-                _LLM_LOADED = True  # Mark as loaded to prevent retry loops
+                print(f"[ERROR] Failed to initialize Docker Llama 3.2 client: {e}")
+                _LLM_INSTANCE = None
+                _LLM_LOADED = False
                 return None
     
     return _LLM_INSTANCE
 
-def get_fresh_llm() -> Optional[Llama]:
-    """Load a fresh Llama instance without touching or populating the global cache."""
+def get_fresh_llm() -> Optional[Any]:
+    """Load a fresh Docker Llama 3.2 adapter without touching the global cache."""
     try:
-        print("Loading fresh LLM (no cache)...")
-        BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        MODEL_PATH = os.path.join(BASE_DIR, "law-chat.Q4_K_M.gguf")
-        if not os.path.exists(MODEL_PATH):
-            raise FileNotFoundError(f"Model file not found: {MODEL_PATH}")
-        cfg = {
-            "model_path": MODEL_PATH,
-            "n_ctx": 4096,
-            "n_gpu_layers": -1,
-            "n_threads": 8,
-            "n_batch": 512,
-            "use_mmap": True,
-            "use_mlock": False,
-            "f16_kv": True,
-            "logits_all": False,
-            "embedding": False,
-            "verbose": False,
-        }
-        try:
-            return Llama(**cfg)
-        except Exception:
-            cpu_cfg = {
-                "model_path": MODEL_PATH,
-                "n_ctx": 2048,
-                "n_gpu_layers": 0,
-                "n_threads": 4,
-                "n_batch": 16,
-                "use_mmap": True,
-                "use_mlock": False,
-                "verbose": False,
-            }
-            return Llama(**cpu_cfg)
+        if not ENABLE_DOCKER_LLM:
+            print("ℹ️ Docker LLM disabled via configuration; fresh instance unavailable")
+            return None
+        print("Initializing fresh Docker Llama 3.2 client (no cache)...")
+        docker_client = get_docker_model_client()
+        if not docker_client.is_available and hasattr(docker_client, "_test_connection"):
+            docker_client._test_connection()
+
+        if not docker_client.is_available:
+            raise RuntimeError("Docker model runner not available")
+
+        return DockerLlamaAdapter(docker_client)
     except Exception as e:
         print(f"[ERROR] get_fresh_llm failed: {e}")
         return None

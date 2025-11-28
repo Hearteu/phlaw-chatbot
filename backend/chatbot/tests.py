@@ -4,8 +4,6 @@ import sys
 import time
 from datetime import datetime
 
-from django.test import Client, TestCase
-
 # Fix encoding issues on Windows
 if sys.platform.startswith('win'):
     import codecs
@@ -18,65 +16,34 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 # =============================================================================
 # CONFIGURATION - Edit these values to change test range
 # =============================================================================
-DEFAULT_START_ID = 1      # Starting query ID
-DEFAULT_END_ID = 10       # Ending query ID
-DEFAULT_JSON_FILE = "data/test_queries_2005_2025.json"  # Path to test queries
+DEFAULT_START_ID = 1      # Starting query index (1-based)
+DEFAULT_END_ID = 66       # Ending query index (1-based)
+DEFAULT_JSON_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "fast_test_queries.json")
 
 # =============================================================================
 
 # Note: chat_engine imports removed to avoid import errors during Django test discovery
 
-try:
-    from chatbot.evaluation_metrics import (AutomatedContentScoring,
-                                            LegalAccuracyMetrics)
-    from chatbot.retriever import LegalRetriever
-except ImportError as e:
-    print(f"Warning: Could not import required modules: {e}")
-    # Create mock class for testing
-    class LegalRetriever:
-        def __init__(self, collection="jurisprudence"):
-            self.collection = collection
-        def _clean_content(self, text):
-            if not text:
-                return ""
-            # Simple cleaning for testing
-            return text.replace("- N/A", "").replace("Supreme Court E-Library", "").strip()
-    
-    # Mock evaluation classes if not available
-    class AutomatedContentScoring:
-        @staticmethod
-        def score_legal_response(response, reference, metadata=None):
-            return {
-                'bleu': {'bleu_1': 0.0, 'bleu_2': 0.0, 'bleu_3': 0.0, 'bleu_4': 0.0, 'bleu_avg': 0.0},
-                'rouge': {'rouge_1': {'f1': 0.0}, 'rouge_2': {'f1': 0.0}, 'rouge_l': {'f1': 0.0}},
-                'legal_elements': {'presence_rate': 0.0, 'elements_found': 0, 'total_elements': 0},
-                'citation_accuracy': {'precision': 0.0, 'recall': 0.0, 'f1': 0.0},
-                'overall_relevance': {'score': 0.0}
-            }
-    
-    class LegalAccuracyMetrics:
-        @staticmethod
-        def assess_legal_information_accuracy(response, reference, metadata, query=""):
-            return {
-                'accuracy_level': 'LOW',
-                'accuracy_score': 0.0,
-                'recommendation': 'Mock evaluation',
-                'accuracy_issues': ['Mock evaluation'],
-                'detailed_scores': {
-                    'content_relevance': 0.0,
-                    'information_overlap': 0.0,
-                    'legal_elements_completeness': 0.0,
-                    'citation_accuracy': 0.0,
-                    'overall_relevance': 0.0
-                },
-                'quality_threshold_met': False
-            }
+from chatbot.evaluation_metrics import (AutomatedContentScoring,
+                                        LegalAccuracyMetrics)
+from chatbot.retriever import LegalRetriever
 
 
 class TestReportGenerator:
     """Generate comprehensive JSON test reports for analysis"""
     
-    def __init__(self):
+    def __init__(self, baseline_file=None):
+        """
+        Initialize test report generator.
+        
+        Args:
+            baseline_file: Optional path to baseline results JSON file for Objective 3 comparison
+        """
+        self.baseline_file = baseline_file
+        self.baseline_results = None
+        if baseline_file and os.path.exists(baseline_file):
+            self._load_baseline()
+        
         self.test_results = {
             "test_run_info": {
                 "timestamp": datetime.now().isoformat(),
@@ -101,10 +68,11 @@ class TestReportGenerator:
             "performance_metrics": {},
             "recommendations": [],
             "evaluation_metrics": {
-                "bleu_scores": {"bleu_1": [], "bleu_2": [], "bleu_3": [], "bleu_4": [], "bleu_avg": []},
                 "rouge_scores": {"rouge_1_f1": [], "rouge_2_f1": [], "rouge_l_f1": []},
+                "bert_score_f1": [],
                 "accuracy_scores": [],
                 "content_relevance_scores": [],
+                "hallucination_flags": [],
                 "thesis_objectives": {
                     "objective_1_accuracy": {"target": "75-85%", "achieved": False, "score": 0.0},
                     "objective_2_content_relevance": {"target": "50-80%", "achieved": False, "score": 0.0},
@@ -114,6 +82,69 @@ class TestReportGenerator:
         }
         self.start_time = None
         self.current_category = None
+    
+    def _load_baseline(self):
+        """Load baseline results from JSON file for comparison"""
+        try:
+            with open(self.baseline_file, 'r', encoding='utf-8') as f:
+                baseline_data = json.load(f)
+            
+            # Extract baseline hallucination rate
+            eval_metrics = baseline_data.get("evaluation_metrics", {})
+            hallucination_flags = eval_metrics.get("hallucination_flags", [])
+            
+            if hallucination_flags:
+                baseline_rate = (sum(1 for h in hallucination_flags if h) / len(hallucination_flags)) * 100
+            else:
+                baseline_rate = None  # No baseline data available
+            
+            self.baseline_results = {
+                "hallucination_rate": baseline_rate,
+                "timestamp": baseline_data.get("test_run_info", {}).get("timestamp", "Unknown"),
+                "total_tests": baseline_data.get("summary", {}).get("total_tests", 0)
+            }
+            print(f"✓ Loaded baseline from {self.baseline_file}")
+            if baseline_rate is not None:
+                print(f"  Baseline hallucination rate: {baseline_rate:.2f}%")
+        except Exception as e:
+            print(f"⚠ Warning: Could not load baseline from {self.baseline_file}: {e}")
+            self.baseline_results = None
+    
+    def save_baseline(self, filename=None):
+        """Save current results as baseline for future comparisons"""
+        if filename is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"result/baseline_{timestamp}.json"
+        
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        
+        # Convert numpy types and booleans to native Python types for JSON serialization
+        def convert_types(obj):
+            if isinstance(obj, bool):
+                return bool(obj)
+            elif hasattr(obj, 'item'):  # numpy scalars
+                return obj.item()
+            elif hasattr(obj, 'tolist'):  # numpy arrays
+                return obj.tolist()
+            return obj
+        
+        # Recursively convert all values
+        def recursive_convert(d):
+            if isinstance(d, dict):
+                return {k: recursive_convert(v) for k, v in d.items()}
+            elif isinstance(d, list):
+                return [recursive_convert(item) for item in d]
+            else:
+                return convert_types(d)
+        
+        converted_results = recursive_convert(self.test_results)
+        
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(converted_results, f, indent=2, ensure_ascii=False)
+        
+        print(f"✓ Baseline saved to: {filename}")
+        return filename
     
     def start_test_run(self):
         """Start timing the test run"""
@@ -184,23 +215,15 @@ class TestReportGenerator:
     def add_evaluation_metrics(self, response, reference_text, case_metadata, query):
         """Add evaluation metrics for a test response"""
         try:
-            # Calculate automated scores
+            # Calculate automated scores (passing query for section-aware evaluation)
             automated_scores = AutomatedContentScoring.score_legal_response(
-                response, reference_text, case_metadata
+                response, reference_text, original_query=query
             )
             
             # Calculate legal accuracy assessment
             accuracy_assessment = LegalAccuracyMetrics.assess_legal_information_accuracy(
-                response, reference_text, case_metadata, query
+                response, reference_text, query
             )
-            
-            # Extract BLEU scores
-            bleu_scores = automated_scores.get('bleu', {})
-            self.test_results["evaluation_metrics"]["bleu_scores"]["bleu_1"].append(bleu_scores.get('bleu_1', 0.0))
-            self.test_results["evaluation_metrics"]["bleu_scores"]["bleu_2"].append(bleu_scores.get('bleu_2', 0.0))
-            self.test_results["evaluation_metrics"]["bleu_scores"]["bleu_3"].append(bleu_scores.get('bleu_3', 0.0))
-            self.test_results["evaluation_metrics"]["bleu_scores"]["bleu_4"].append(bleu_scores.get('bleu_4', 0.0))
-            self.test_results["evaluation_metrics"]["bleu_scores"]["bleu_avg"].append(bleu_scores.get('bleu_avg', 0.0))
             
             # Extract ROUGE scores
             rouge_scores = automated_scores.get('rouge', {})
@@ -208,11 +231,25 @@ class TestReportGenerator:
             self.test_results["evaluation_metrics"]["rouge_scores"]["rouge_2_f1"].append(rouge_scores.get('rouge_2', {}).get('f1', 0.0))
             self.test_results["evaluation_metrics"]["rouge_scores"]["rouge_l_f1"].append(rouge_scores.get('rouge_l', {}).get('f1', 0.0))
             
+            # Extract BERTScore F1
+            bert_f1 = automated_scores.get('bertscore', {}).get('f1', 0.0)
+            self.test_results["evaluation_metrics"]["bert_score_f1"].append(bert_f1)
+
             # Add accuracy and relevance scores
             self.test_results["evaluation_metrics"]["accuracy_scores"].append(accuracy_assessment.get('accuracy_score', 0.0))
             self.test_results["evaluation_metrics"]["content_relevance_scores"].append(
                 automated_scores.get('overall_relevance', {}).get('score', 0.0)
             )
+            # Track hallucination flags (prefer LegalAccuracyMetrics if present; fallback to AutomatedContentScoring)
+            hallucinated = None
+            if isinstance(accuracy_assessment, dict):
+                hallucinated = accuracy_assessment.get('hallucination_detected')
+            if hallucinated is None and isinstance(automated_scores, dict):
+                halluc_analysis = automated_scores.get('hallucination_analysis', {})
+                hallucinated = halluc_analysis.get('hallucination_detected')
+            if hallucinated is None:
+                hallucinated = False
+            self.test_results["evaluation_metrics"]["hallucination_flags"].append(bool(hallucinated))
             
             return {
                 'automated_scores': automated_scores,
@@ -238,7 +275,34 @@ class TestReportGenerator:
         # Check thesis objectives
         obj1_achieved = 75 <= accuracy_percentage <= 85
         obj2_achieved = 50 <= content_relevance_percentage <= 80
-        obj3_achieved = accuracy_percentage >= 70  # High quality threshold
+        
+        # Calculate current hallucination rate
+        halluc_rate = (sum(1 for h in eval_metrics.get("hallucination_flags", []) if h) / len(eval_metrics.get("hallucination_flags", [1]))) * 100 if eval_metrics.get("hallucination_flags") else 0.0
+        
+        # Objective 3: Hallucination reduction (need baseline comparison)
+        baseline_rate = self.baseline_results.get("hallucination_rate") if self.baseline_results else None
+        
+        if baseline_rate is not None:
+            # Calculate reduction from baseline
+            reduction_percentage = baseline_rate - halluc_rate
+            target_reduction = 25.0 - 15.0  # Target: reduce from 25% to 15% (10 percentage points)
+            target_absolute_rate = 15.0
+            
+            # Objective 3 achieved if:
+            # 1. Current rate is <= 15% AND
+            # 2. Reduction from baseline is >= 10 percentage points
+            obj3_achieved = halluc_rate <= target_absolute_rate and reduction_percentage >= target_reduction
+            
+            # Store reduction information
+            eval_metrics["thesis_objectives"]["objective_3_hallucination_reduction"]["baseline_rate"] = round(baseline_rate, 2)
+            eval_metrics["thesis_objectives"]["objective_3_hallucination_reduction"]["reduction_percentage"] = round(reduction_percentage, 2)
+            eval_metrics["thesis_objectives"]["objective_3_hallucination_reduction"]["target_reduction"] = target_reduction
+        else:
+            # No baseline: just check if current rate is <= 15%
+            obj3_achieved = halluc_rate <= 15.0
+            eval_metrics["thesis_objectives"]["objective_3_hallucination_reduction"]["baseline_rate"] = None
+            eval_metrics["thesis_objectives"]["objective_3_hallucination_reduction"]["reduction_percentage"] = None
+            eval_metrics["thesis_objectives"]["objective_3_hallucination_reduction"]["note"] = "No baseline provided - only checking if rate <= 15%"
         
         # Update thesis objectives
         eval_metrics["thesis_objectives"]["objective_1_accuracy"]["achieved"] = obj1_achieved
@@ -248,11 +312,13 @@ class TestReportGenerator:
         eval_metrics["thesis_objectives"]["objective_2_content_relevance"]["score"] = round(content_relevance_percentage, 2)
         
         eval_metrics["thesis_objectives"]["objective_3_hallucination_reduction"]["achieved"] = obj3_achieved
-        eval_metrics["thesis_objectives"]["objective_3_hallucination_reduction"]["score"] = round(100 - accuracy_percentage, 2)  # Hallucination rate
+        eval_metrics["thesis_objectives"]["objective_3_hallucination_reduction"]["score"] = round(halluc_rate, 2)
         
         return {
             'accuracy_percentage': accuracy_percentage,
             'content_relevance_percentage': content_relevance_percentage,
+            'hallucination_rate': halluc_rate,
+            'baseline_rate': baseline_rate,
             'objectives_met': sum([obj1_achieved, obj2_achieved, obj3_achieved])
         }
     
@@ -291,14 +357,14 @@ class TestReportGenerator:
         eval_metrics = self.test_results["evaluation_metrics"]
         
         # Calculate averages
-        bleu_avg = sum(eval_metrics["bleu_scores"]["bleu_avg"]) / len(eval_metrics["bleu_scores"]["bleu_avg"]) if eval_metrics["bleu_scores"]["bleu_avg"] else 0.0
         rouge_1_avg = sum(eval_metrics["rouge_scores"]["rouge_1_f1"]) / len(eval_metrics["rouge_scores"]["rouge_1_f1"]) if eval_metrics["rouge_scores"]["rouge_1_f1"] else 0.0
+        bert_f1_avg = sum(eval_metrics["bert_score_f1"]) / len(eval_metrics["bert_score_f1"]) if eval_metrics["bert_score_f1"] else 0.0
         accuracy_avg = sum(eval_metrics["accuracy_scores"]) / len(eval_metrics["accuracy_scores"]) if eval_metrics["accuracy_scores"] else 0.0
         relevance_avg = sum(eval_metrics["content_relevance_scores"]) / len(eval_metrics["content_relevance_scores"]) if eval_metrics["content_relevance_scores"] else 0.0
         
         print(f"\n📊 EVALUATION METRICS:")
-        print(f"  Average BLEU Score: {bleu_avg:.4f}")
         print(f"  Average ROUGE-1 Score: {rouge_1_avg:.4f}")
+        print(f"  Average BERTScore F1: {bert_f1_avg:.4f}")
         print(f"  Average Accuracy: {accuracy_avg:.4f} ({accuracy_avg*100:.2f}%)")
         print(f"  Average Content Relevance: {relevance_avg:.4f} ({relevance_avg*100:.2f}%)")
         
@@ -313,7 +379,20 @@ class TestReportGenerator:
         print(f"\n🎯 THESIS OBJECTIVES:")
         print(f"  Objective 1 (75-85% Accuracy): {'✓ ACHIEVED' if objectives['objective_1_accuracy']['achieved'] else '✗ NOT ACHIEVED'} ({objectives['objective_1_accuracy']['score']:.2f}%)")
         print(f"  Objective 2 (50-80% Content Relevance): {'✓ ACHIEVED' if objectives['objective_2_content_relevance']['achieved'] else '✗ NOT ACHIEVED'} ({objectives['objective_2_content_relevance']['score']:.2f}%)")
-        print(f"  Objective 3 (Hallucination Reduction): {'✓ ACHIEVED' if objectives['objective_3_hallucination_reduction']['achieved'] else '✗ NOT ACHIEVED'} (Hallucination Rate: {objectives['objective_3_hallucination_reduction']['score']:.2f}%)")
+        
+        # Objective 3 with baseline comparison
+        obj3 = objectives['objective_3_hallucination_reduction']
+        baseline_rate = obj3.get('baseline_rate')
+        reduction = obj3.get('reduction_percentage')
+        
+        if baseline_rate is not None:
+            print(f"  Objective 3 (Hallucination Reduction): {'✓ ACHIEVED' if obj3['achieved'] else '✗ NOT ACHIEVED'}")
+            print(f"    Current Rate: {obj3['score']:.2f}%")
+            print(f"    Baseline Rate: {baseline_rate:.2f}%")
+            print(f"    Reduction: {reduction:.2f} percentage points (target: {obj3.get('target_reduction', 10.0):.1f}%)")
+        else:
+            print(f"  Objective 3 (Hallucination Reduction): {'✓ ACHIEVED' if obj3['achieved'] else '✗ NOT ACHIEVED'} (Current Rate: {obj3['score']:.2f}%)")
+            print(f"    ⚠ No baseline provided - cannot calculate reduction. Use --baseline to compare against previous run.")
         
         print("\n" + "="*80)
     
@@ -321,7 +400,7 @@ class TestReportGenerator:
         """Save the test report to a JSON file"""
         if filename is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"test_results/chatbot_test_{timestamp}.json"
+            filename = f"result/chatbot_test_{timestamp}.json"
         
         # Create directory if it doesn't exist
         os.makedirs(os.path.dirname(filename), exist_ok=True)
@@ -358,7 +437,7 @@ class TestReportGenerator:
         
         if filename is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"test_results/chatbot_test_{timestamp}.csv"
+            filename = f"result/chatbot_test_{timestamp}.csv"
         
         # Create directory if it doesn't exist
         os.makedirs(os.path.dirname(filename), exist_ok=True)
@@ -386,19 +465,6 @@ class TestReportGenerator:
                     'timestamp': test.get("timestamp", "")
                 }
                 
-                # Add BLEU scores
-                if 'bleu' in automated_scores:
-                    bleu_scores = automated_scores['bleu']
-                    row.update({
-                        'bleu_1': bleu_scores.get('bleu_1', 0.0),
-                        'bleu_2': bleu_scores.get('bleu_2', 0.0),
-                        'bleu_3': bleu_scores.get('bleu_3', 0.0),
-                        'bleu_4': bleu_scores.get('bleu_4', 0.0),
-                        'bleu_avg': bleu_scores.get('bleu_avg', 0.0)
-                    })
-                else:
-                    row.update({'bleu_1': 0.0, 'bleu_2': 0.0, 'bleu_3': 0.0, 'bleu_4': 0.0, 'bleu_avg': 0.0})
-                
                 # Add ROUGE scores
                 if 'rouge' in automated_scores:
                     rouge_scores = automated_scores['rouge']
@@ -409,6 +475,9 @@ class TestReportGenerator:
                     })
                 else:
                     row.update({'rouge_1_f1': 0.0, 'rouge_2_f1': 0.0, 'rouge_l_f1': 0.0})
+
+                # Add BERTScore F1
+                row['bertscore_f1'] = automated_scores.get('bertscore', {}).get('f1', 0.0)
                 
                 # Add accuracy scores
                 row.update({
@@ -429,8 +498,8 @@ class TestReportGenerator:
         headers = [
             'test_name', 'status', 'query', 'year', 'category', 'case_number',
             'response_length', 'execution_time', 'timestamp',
-            'bleu_1', 'bleu_2', 'bleu_3', 'bleu_4', 'bleu_avg',
             'rouge_1_f1', 'rouge_2_f1', 'rouge_l_f1',
+            'bertscore_f1',
             'accuracy_score', 'accuracy_level', 'quality_threshold_met',
             'content_relevance_score'
         ]
@@ -448,67 +517,64 @@ class TestReportGenerator:
         return filename
 
 
-def analyze_response_quality(response, expected_type):
-    """Analyze the quality of a chatbot response"""
-    analysis = {
-        "response_length": len(response),
-        "has_content": len(response.strip()) > 0,
-        "word_count": len(response.split()),
-        "contains_legal_terms": any(term in response.lower() for term in [
-            "court", "case", "ruling", "decision", "supreme", "g.r.", "petitioner", "respondent"
-        ])
-    }
-    
-    # Analyze based on expected response type
-    if expected_type == "digest":
-        digest_sections = ["Issue", "Facts", "Ruling", "Discussion", "Case", "Decision"]
-        analysis["digest_sections_found"] = [section for section in digest_sections if section in response]
-        analysis["has_digest_format"] = len(analysis["digest_sections_found"]) > 0
-    elif expected_type == "facts":
-        analysis["contains_facts_indicators"] = any(word in response.lower() for word in ["facts", "factual", "occurred", "happened"])
-    elif expected_type == "ruling":
-        analysis["contains_ruling_indicators"] = any(word in response.lower() for word in ["ruling", "decision", "court", "held", "therefore"])
-    
-    return analysis
-
-
-def load_test_queries_from_json(start_id=1, end_id=10, json_file="data/test_queries_2005_2025.json"):
-    """Load test queries from JSON file based on ID range"""
+def load_test_queries_from_json(start_id=1, end_id=10, json_file=None):
+    """Load test queries from backend/fast_test_queries.json (or specified file) based on index range (1-based)."""
     try:
-        with open(json_file, 'r', encoding='utf-8') as f:
+        json_path = json_file or DEFAULT_JSON_FILE
+        with open(json_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
-        
-        all_queries = data.get("test_queries", [])
-        
-        # Filter queries by ID range
+        # New format produced by generate_test_queries.py
+        all_queries = data.get("queries", [])
+        # Select by 1-based indices
+        start_idx = max(0, start_id - 1)
+        end_idx_excl = min(len(all_queries), end_id)
+        selected = all_queries[start_idx:end_idx_excl]
+
         filtered_queries = []
-        for query in all_queries:
-            query_id = query.get("id", 0)
-            if start_id <= query_id <= end_id:
-                # Extract case number from query text
-                query_text = query.get("query_text", "")
+        for i, item in enumerate(selected, start=start_id):
+            query_text = item.get("query", "")
+            category = item.get("category", "")
+            year = item.get("case_year", "")
+            case_title = item.get("case_title", "")
+            case_id = item.get("case_id", "")  # Include case_id for grouping
+            gr = item.get("case_gr_number") or ""
+            
+            # Use case_gr_number as-is if available (already formatted in fast_test_queries.json)
+            # Otherwise, try to construct from case_id if it looks like a case number
+            if gr:
+                case_number = gr  # Already properly formatted (e.g., "A.C. No. 11219", "G.R. No. 254248")
+            elif case_id and ("G.R." in case_id or "A.C." in case_id or "A.M." in case_id):
+                case_number = case_id  # Use case_id if it contains a case number format
+            else:
                 case_number = "Unknown"
-                if "G.R. No." in query_text:
-                    case_number = query_text.split("G.R. No.")[1].split(".")[0].strip()
-                    case_number = f"G.R. No. {case_number}"
-                elif "A.M. No." in query_text:
-                    case_number = query_text.split("A.M. No.")[1].split(".")[0].strip()
-                    case_number = f"A.M. No. {case_number}"
-                elif "A.C. No." in query_text:
-                    case_number = query_text.split("A.C. No.")[1].split(".")[0].strip()
-                    case_number = f"A.C. No. {case_number}"
-                
-                filtered_queries.append({
-                    "query": query_text,
-                    "expected_type": "digest",
-                    "description": f"Case digest generation test for {case_number} ({query.get('year', 'Unknown')})",
-                    "year": query.get("year", "Unknown"),
-                    "category": query.get("category", "Unknown"),
-                    "case_number": case_number,
-                    "query_id": query_id
-                })
-        
-        print(f"📋 Loaded {len(filtered_queries)} queries (IDs {start_id}-{end_id}) from {json_file}")
+            
+            # Map expected type for analysis helpers
+            cat_lower = category.lower()
+            if "digest" in cat_lower:
+                expected_type = "digest"
+            elif "factual" in cat_lower or "q&a" in cat_lower or "qa" in cat_lower or "ruling" in query_text.lower():
+                expected_type = "ruling"
+            else:
+                expected_type = "facts"
+
+            # Extract ground_truth - can be string or dict with facts/issues/ruling
+            ground_truth = item.get("ground_truth", "")
+            
+            filtered_queries.append({
+                "query": query_text,
+                "expected_type": expected_type,
+                "description": f"{category} for {case_title} ({year})",
+                "year": year,
+                "category": category,
+                "case_number": case_number,
+                "case_id": case_id,  # Include case_id for proper grouping
+                "case_title": case_title,  # Include case_title for reference
+                "case_gr_number": gr,  # Include raw case_gr_number
+                "ground_truth": ground_truth,  # Include ground_truth from JSON
+                "query_index": i
+            })
+
+        print(f"📋 Loaded {len(filtered_queries)} queries (indexes {start_id}-{end_id}) from {json_path}")
         return filtered_queries
         
     except FileNotFoundError:
@@ -522,11 +588,28 @@ def load_test_queries_from_json(start_id=1, end_id=10, json_file="data/test_quer
         return []
 
 
-def run_comprehensive_chatbot_test(start_id=1, end_id=10):
-    """Run comprehensive chatbot tests with real responses"""
+def run_comprehensive_chatbot_test(start_id=1, end_id=10, baseline_file=None, save_as_baseline=False, use_rag=True, json_file=None):
+    """Run comprehensive chatbot tests with real responses
+    
+    Args:
+        start_id: Starting query ID (1-based)
+        end_id: Ending query ID (1-based)
+        baseline_file: Optional path to baseline results JSON file for Objective 3 comparison
+        save_as_baseline: If True, save current results as baseline after completion
+        use_rag: If False, test without RAG (baseline mode - LLM only)
+        json_file: Path to test queries JSON file (defaults to DEFAULT_JSON_FILE)
+    """
     print("STARTING COMPREHENSIVE CHATBOT TEST WITH REAL RESPONSES")
     print("="*80)
     print(f"📊 Testing queries with IDs {start_id} to {end_id}")
+    if not use_rag:
+        print(f"🔧 BASELINE MODE: No RAG - LLM only")
+        if not save_as_baseline:
+            print(f"⚠️  Note: Consider using --save-baseline when running without RAG")
+    if baseline_file:
+        print(f"📋 Baseline file: {baseline_file}")
+    if save_as_baseline:
+        print(f"💾 Will save results as baseline after completion")
     
     # Setup Django for standalone execution
     import django
@@ -543,118 +626,204 @@ def run_comprehensive_chatbot_test(start_id=1, end_id=10):
         django.setup()
     
     # Load test queries from JSON file
-    test_queries = load_test_queries_from_json(start_id, end_id)
+    query_json_file = json_file or DEFAULT_JSON_FILE
+    test_queries = load_test_queries_from_json(start_id, end_id, query_json_file)
     
     if not test_queries:
         print("❌ No test queries loaded. Exiting.")
         return None, None
     
-    test_report = TestReportGenerator()
+    test_report = TestReportGenerator(baseline_file=baseline_file)
     test_report.start_test_run()
-    test_report.start_category(f"Comprehensive Chatbot Tests (IDs {start_id}-{end_id})", f"Testing chatbot with {len(test_queries)} queries from test_queries_2005_2025.json")
+    test_report.start_category(
+        f"Comprehensive Chatbot Tests (Indexes {start_id}-{end_id})",
+        f"Testing chatbot with {len(test_queries)} queries from test_queries.json"
+    )
 
     try:
         from chatbot.views import ChatView
-        from django.test import RequestFactory
     except ImportError as e:
         print(f"Warning: Could not import required modules: {e}")
         return None
+    
+    # Group queries by case so we can preserve conversation history across the 3 queries
+    from collections import OrderedDict
+    grouped_by_case = OrderedDict()
+    for item in test_queries:
+        case_key = item.get('case_id') or item.get('case_number') or f"{item.get('case_title','Unknown')}|{item.get('year','') }"
+        grouped_by_case.setdefault(case_key, []).append(item)
 
-    # Use direct view testing instead of HTTP client
-    factory = RequestFactory()
-    
-    for i, test_case in enumerate(test_queries):
-        try:
-            print(f"\nTesting Query {i+1}: {test_case['query']}")
-            
-            # Test the view directly (bypassing HTTP layer)
-            request = factory.post('/api/chat/', {'query': test_case['query'], 'history': []})
-            request.data = {'query': test_case['query'], 'history': []}  # Manually set for DRF
-            
-            view = ChatView()
-            response = view.post(request)
-            
-            if response.status_code == 200:
-                # response is a DRF Response object, not HTTP response
-                data = response.data
-                chatbot_response = data.get("response", "")
+    case_counter = 0
+    for case_key, case_queries in grouped_by_case.items():
+        case_counter += 1
+        history = []  # preserve for this case only
+        
+        for j, test_case in enumerate(case_queries):
+            i = (case_counter, j+1)
+            try:
+                print(f"\nTesting Case {case_counter} Query {j+1}: {test_case['query']}")
+                print(f"📜 History length: {len(history)} messages")
                 
-                # Analyze response quality
-                response_analysis = analyze_response_quality(chatbot_response, test_case['expected_type'])
+                # If baseline mode (no RAG), call chat_with_law_bot directly
+                if not use_rag:
+                    from chatbot.chat_engine import chat_with_law_bot
+                    chatbot_response = chat_with_law_bot(test_case['query'], history=history, use_rag=False, template_mode="simplified")
+                    response_status = 200  # Assume success if no exception
+                else:
+                    # Use DRF APIClient to properly test the API endpoint with history
+                    from django.http import HttpRequest
+                    from rest_framework.test import APIRequestFactory
+
+                    # Create a mock request object with template_mode for testing
+                    factory = APIRequestFactory()
+                    request = factory.post('/api/chat/', {
+                        'query': test_case['query'],
+                        'history': history,
+                        'template_mode': 'simplified'  # Use simplified template for tests
+                    }, format='json')
+                    
+                    # Get the view and call it directly
+                    view = ChatView.as_view()
+                    try:
+                        response = view(request)
+                        response_status = response.status_code
+                        
+                        if response.status_code == 200:
+                            # DRF Response should have .data attribute
+                            if hasattr(response, 'data'):
+                                data = response.data
+                                chatbot_response = data.get("response", "")
+                            else:
+                                # Fallback for Django HttpResponse
+                                chatbot_response = response.content.decode('utf-8') if hasattr(response, 'content') else ""
+                        else:
+                            chatbot_response = ""
+                            # Handle both DRF Response and Django HttpResponse
+                            error_msg = ""
+                            if hasattr(response, 'data'):
+                                error_msg = str(response.data)
+                            elif hasattr(response, 'content'):
+                                error_msg = response.content.decode('utf-8', errors='ignore')
+                            else:
+                                error_msg = str(response)
+                            print(f"⚠️ API returned status {response_status}: {error_msg}")
+                    except Exception as e:
+                        response_status = 500
+                        chatbot_response = ""
+                        print(f"⚠️ Error calling view: {e}")
+                        import traceback
+                        traceback.print_exc()
                 
-                # Create mock reference text and case metadata for evaluation
-                # In a real scenario, you would have actual case data
-                reference_text = f"Case digest for {test_case['query']}. This is a reference case digest with facts, issues, and ruling."
-                case_metadata = {
-                    'case_title': f"Test Case {i+1}",
-                    'gr_number': test_case.get('case_number', f"G.R. No. {217411 + i}"),
-                    'ponente': 'Justice Test',
-                    'promulgation_date': f"{test_case.get('year', '2023')}-01-01",
-                    'case_type': 'criminal',
-                    'year': test_case.get('year', '2023'),
-                    'category': test_case.get('category', 'Case Digest & Summary Generation')
-                }
+                if response_status == 200:
+                    # Append to history so the next turn keeps context
+                    history.append({"role": "user", "content": test_case['query']})
+                    history.append({"role": "assistant", "content": chatbot_response})
+                    
+                    # Use ground_truth directly from fast_test_queries.json
+                    # Template: Facts, Issues, Ruling only
+                    ground_truth = test_case.get('ground_truth', '')
+                    if isinstance(ground_truth, dict):
+                        # Format dict ground_truth (case digest format) into text
+                        # Only include Facts, Issues, Ruling
+                        parts = []
+                        if 'facts' in ground_truth:
+                            facts = ground_truth['facts']
+                            if isinstance(facts, list):
+                                parts.append(f"FACTS:\n{' '.join(facts)}")
+                            else:
+                                parts.append(f"FACTS:\n{facts}")
+                        if 'issues' in ground_truth:
+                            issues = ground_truth['issues']
+                            if isinstance(issues, list):
+                                parts.append(f"ISSUES:\n{'; '.join(issues)}")
+                            else:
+                                parts.append(f"ISSUES:\n{issues}")
+                        if 'ruling' in ground_truth:
+                            ruling = ground_truth['ruling']
+                            if isinstance(ruling, list):
+                                parts.append(f"RULING:\n{' '.join(ruling)}")
+                            else:
+                                parts.append(f"RULING:\n{ruling}")
+                        reference_text = '\n\n'.join(parts) if parts else ''
+                    elif isinstance(ground_truth, str):
+                        reference_text = ground_truth
+                    else:
+                        # Fallback if ground_truth is missing or unexpected format
+                        reference_text = f"Reference for {test_case.get('case_title','Unknown')} — ground truth not available."
+
+                    # Minimal case_metadata for evaluation (case digest template: facts, issues, ruling only)
+                    case_metadata = {
+                        'case_title': test_case.get('case_title', f"Test Case {case_counter}"),
+                        'gr_number': test_case.get('case_number', ''),
+                        'year': test_case.get('year', '2023'),
+                        'category': test_case.get('category', 'Case Digest & Summary Generation')
+                    }
+                    
+                    # Calculate evaluation metrics
+                    evaluation_results = test_report.add_evaluation_metrics(
+                        chatbot_response, reference_text, case_metadata, test_case['query']
+                    )
+                    
+                    test_report.add_test_result(
+                        f"chatbot_test_case{case_counter}_q{j+1}",
+                        "passed",
+                        f"Case {case_counter} Query {j+1} completed successfully",
+                        1.0,
+                        {
+                            "query": test_case['query'],
+                            "expected_type": test_case['expected_type'],
+                            "description": test_case['description'],
+                            "year": test_case.get('year', '2023'),
+                            "category": test_case.get('category', 'Case Digest & Summary Generation'),
+                            "case_number": test_case.get('case_number', 'Unknown'),
+                            "chatbot_response": chatbot_response,
+                            "response_length": len(chatbot_response),
+                            "status_code": response_status,
+                            "mode": "baseline_no_rag" if not use_rag else "rag_enabled",
+                            "evaluation_metrics": evaluation_results,
+                            "case_id": case_key,
+                            "turn_index": j+1
+                        }
+                    )
+                    
+                    print(f"[{test_case.get('year', '2023')}] [{test_case.get('category', 'Case Digest')}] {test_case.get('case_number', 'Unknown')}")
+                    print(f"Response: {chatbot_response[:200]}...")
+                    if evaluation_results:
+                        print(f"Accuracy: {evaluation_results['accuracy_assessment'].get('accuracy_score',0.0):.4f}")
+                    print("-" * 80)
+                    
+                else:
+                    test_report.add_test_result(
+                        f"chatbot_test_case{case_counter}_q{j+1}",
+                        "failed",
+                        f"Case {case_counter} Query {j+1} failed with status {response_status}",
+                        1.0,
+                        {
+                            "query": test_case['query'],
+                            "status_code": response_status,
+                            "error": "HTTP error" if use_rag else "Generation error",
+                            "case_id": case_key,
+                            "turn_index": j+1,
+                            "mode": "baseline_no_rag" if not use_rag else "rag_enabled"
+                        }
+                    )
+                    print(f"Failed with status: {response_status}")
                 
-                # Calculate evaluation metrics
-                evaluation_results = test_report.add_evaluation_metrics(
-                    chatbot_response, reference_text, case_metadata, test_case['query']
-                )
-                
+            except Exception as e:
                 test_report.add_test_result(
-                    f"chatbot_test_{i+1}",
-                    "passed",
-                    f"Query {i+1} completed successfully",
+                    f"chatbot_test_case{case_counter}_q{j+1}",
+                    "error",
+                    f"Case {case_counter} Query {j+1} caused an exception: {str(e)}",
                     1.0,
                     {
-                        "query": test_case['query'],
-                        "expected_type": test_case['expected_type'],
-                        "description": test_case['description'],
-                        "year": test_case.get('year', '2023'),
-                        "category": test_case.get('category', 'Case Digest & Summary Generation'),
-                        "case_number": test_case.get('case_number', 'Unknown'),
-                        "chatbot_response": chatbot_response,
-                        "response_length": len(chatbot_response),
-                        "status_code": response.status_code,
-                        "response_analysis": response_analysis,
-                        "evaluation_metrics": evaluation_results
+                        "query": test_case.get('query',''),
+                        "error": str(e),
+                        "exception_type": type(e).__name__,
+                        "case_id": case_key,
+                        "turn_index": j+1
                     }
                 )
-                
-                print(f"[{test_case.get('year', '2023')}] [{test_case.get('category', 'Case Digest')}] {test_case.get('case_number', 'Unknown')}")
-                print(f"Response: {chatbot_response[:200]}...")
-                if evaluation_results:
-                    print(f"BLEU Score: {evaluation_results['automated_scores']['bleu']['bleu_avg']:.4f}")
-                    print(f"Accuracy: {evaluation_results['accuracy_assessment']['accuracy_score']:.4f}")
-                print("-" * 80)
-                
-            else:
-                test_report.add_test_result(
-                    f"chatbot_test_{i+1}",
-                    "failed",
-                    f"Query {i+1} failed with status {response.status_code}",
-                    1.0,
-                    {
-                        "query": test_case['query'],
-                        "status_code": response.status_code,
-                        "error": "HTTP error"
-                    }
-                )
-                print(f"Failed with status: {response.status_code}")
-                
-        except Exception as e:
-            test_report.add_test_result(
-                f"chatbot_test_{i+1}",
-                "error",
-                f"Query {i+1} caused an exception: {str(e)}",
-                1.0,
-                {
-                    "query": test_case['query'],
-                    "error": str(e),
-                    "exception_type": type(e).__name__
-                }
-            )
-            print(f"Exception: {str(e)}")
-    
+                print(f"Exception: {str(e)}")
     test_report.end_category()
     test_report.end_test_run()
     
@@ -682,56 +851,43 @@ def run_comprehensive_chatbot_test(start_id=1, end_id=10):
     csv_file = test_report.save_csv_report()
     print(f"CSV report saved to: {csv_file}")
     
+    # Save as baseline if requested
+    if save_as_baseline:
+        baseline_file = test_report.save_baseline()
+        print(f"\n💾 BASELINE SAVED:")
+        print(f"  • Baseline file: {baseline_file}")
+        print(f"  • Use this file with --baseline in future runs to calculate Objective 3 reduction")
+    
     print(f"\n📊 PRESENTATION DATA READY:")
     print(f"  • JSON file: {json_file} (detailed analysis)")
     print(f"  • CSV file: {csv_file} (for Excel/Google Sheets)")
     
     return json_file, csv_file
+# =============================================================================
+# DJANGO TEST RUNNER COMPATIBILITY
+# =============================================================================
+# To run as Django test: python manage.py test chatbot.tests.ChatbotEvaluationTestCase
+# To run standalone: python chatbot/tests.py --start 1 --end 10
 
-
-class ChatbotTestCase(TestCase):
-    """Django test case for chatbot functionality"""
+class ChatbotEvaluationTestCase:
+    """
+    Django TestCase-compatible wrapper for the comprehensive chatbot evaluation.
     
-    def setUp(self):
-        self.client = Client()
-    
-    def test_chatbot_responds(self):
-        """Test that chatbot responds to queries"""
-        response = self.client.post(
-            '/api/chat/',
-            json.dumps({'query': "Make me a case digest of G.R. No. 217411."}),
-            content_type='application/json'
-        )
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertIn("response", data)
-    
-    def test_case_digest_generation(self):
-        """Test case digest generation for first 10 queries from test_queries_2005_2025.json"""
-        test_queries = [
-            "Make a case digest of G.R. No. 163410.",
-            "Make a case digest of G.R. No. 152230.",
-            "Make a case digest of G.R. No. 148339.",
-            "Make a case digest of G.R. No. 151266.",
-            "Make a case digest of A.M. No. RTJ-04-1873.",
-            "Make a case digest of G.R. No. 150678.",
-            "Make a case digest of G.R. No. 156260.",
-            "Make a case digest of A.M. No. P-05-1933.",
-            "Make a case digest of A.C. No. 5864.",
-            "Make a case digest of A.M. No. P-05-2021."
-        ]
+    This allows the test to be discovered by Django's test runner:
+        python manage.py test chatbot.tests.ChatbotEvaluationTestCase
         
-        for query in test_queries:
-            with self.subTest(query=query):
-                response = self.client.post(
-                    '/api/chat/',
-                    json.dumps({'query': query}),
-                    content_type='application/json'
-                )
-                self.assertEqual(response.status_code, 200)
-                data = response.json()
-                self.assertIn("response", data)
-                self.assertGreater(len(data["response"]), 0)
+    Or run standalone with command-line arguments:
+        python chatbot/tests.py --start 1 --end 10 --no-rag --save-baseline
+    """
+    @staticmethod
+    def test_comprehensive_evaluation():
+        """Run comprehensive evaluation test - can be called by Django test runner"""
+        return run_comprehensive_chatbot_test(
+            DEFAULT_START_ID, DEFAULT_END_ID,
+            baseline_file=None,
+            save_as_baseline=False,
+            use_rag=True
+        )
 
 
 if __name__ == "__main__":
@@ -745,15 +901,31 @@ if __name__ == "__main__":
                        help=f'Ending query ID (default: {DEFAULT_END_ID})')
     parser.add_argument('--json', type=str, default=DEFAULT_JSON_FILE, 
                        help=f'Path to test queries JSON file (default: {DEFAULT_JSON_FILE})')
+    parser.add_argument('--baseline', type=str, default=None,
+                       help='Path to baseline results JSON file for Objective 3 comparison')
+    parser.add_argument('--save-baseline', action='store_true',
+                       help='Save current results as baseline for future comparisons')
+    parser.add_argument('--no-rag', action='store_true',
+                       help='Run without RAG (baseline mode - LLM only). Use this to generate baseline results.')
     
     args = parser.parse_args()
     
     print(f"🚀 Starting tests with query IDs {args.start} to {args.end}")
     print(f"📁 Using JSON file: {args.json}")
+    if args.no_rag:
+        print(f"🔧 Running in BASELINE MODE (no RAG)")
+        if not args.save_baseline:
+            print(f"⚠️  Recommendation: Use --save-baseline with --no-rag to save baseline results")
+    if args.baseline:
+        print(f"📋 Baseline file: {args.baseline}")
+    if args.save_baseline:
+        print(f"💾 Will save as baseline")
     
-    # Update the JSON file path in the load function
-    def load_queries_with_custom_path(start_id, end_id):
-        return load_test_queries_from_json(start_id, end_id, args.json)
-    
-    # Run the tests
-    run_comprehensive_chatbot_test(args.start, args.end)
+    # Run the tests with custom JSON file
+    run_comprehensive_chatbot_test(
+        args.start, args.end, 
+        baseline_file=args.baseline, 
+        save_as_baseline=args.save_baseline,
+        use_rag=not args.no_rag,
+        json_file=args.json
+    )

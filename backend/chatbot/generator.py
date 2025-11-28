@@ -8,7 +8,7 @@ from .togetherai_client import (generate_messages_with_togetherai,
 
 
 def _clean_response_text(text: str) -> str:
-    """Clean up response text by removing instruction tokens and formatting artifacts"""
+    """Clean up response text by removing instruction tokens, formatting artifacts, and meta-commentary"""
     if not text:
         return ""
     
@@ -19,6 +19,15 @@ def _clean_response_text(text: str) -> str:
     text = text.replace("[/SYS]", "").replace("[SYS]", "")
     text = text.replace("[/USER]", "").replace("[USER]", "")
     text = text.replace("[/ASSISTANT]", "").replace("[ASSISTANT]", "")
+    
+    # Remove meta-commentary phrases that add unnecessary disclaimers
+    # Remove patterns like "Based on my general knowledge" at the start
+    text = re.sub(r'^(Based on (my )?(general )?knowledge(,)?|I can provide|However,? please note that,?|I may not have (complete )?details?|Note that I)\.?\s*', 
+                  '', text, flags=re.IGNORECASE | re.MULTILINE)
+    
+    # Remove trailing disclaimers
+    text = re.sub(r'\s+However,? please note that.*$', '', text, flags=re.IGNORECASE | re.DOTALL)
+    text = re.sub(r'\s+Please note that I may not have.*$', '', text, flags=re.IGNORECASE | re.DOTALL)
     
     # Remove leading/trailing whitespace and newlines
     text = text.strip()
@@ -126,16 +135,15 @@ def generate_conversational_response(query: str, history: List[Dict[str, str]] =
     messages = [
         {
             "role": "system",
-            "content": """You are a knowledgeable Philippine Law expert assistant. Your role is to:
-- Provide accurate information about Philippine jurisprudence and legal principles
-- Remember and reference previous parts of the conversation
-- Ask clarifying questions when needed
-- Offer proactive suggestions about related legal topics
-- Explain complex legal concepts in clear, accessible language
-- Always cite relevant Supreme Court cases and legal provisions
-- Maintain a helpful, professional tone
+            "content": """You are a Philippine Law expert. Answer queries directly and concisely.
 
-Focus exclusively on Philippine Law. If asked about other jurisdictions, politely redirect to Philippine legal context."""
+CRITICAL: Do NOT include meta-commentary or disclaimers. Answer directly:
+- NO phrases like "Based on my knowledge", "I can provide", "However, please note"
+- NO disclaimers about your knowledge or limitations
+- Simply state the answer directly
+
+Provide accurate information about Philippine jurisprudence and legal principles. 
+Remember and reference previous parts of the conversation. Always cite relevant Supreme Court cases and legal provisions when relevant."""
         }
     ]
     

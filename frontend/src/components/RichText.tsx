@@ -11,7 +11,9 @@ type Props = {
 // - Paragraphs split by blank lines
 // - Lines starting with "- " or "* " become bullet items
 // - **text** becomes bold text
-// - ## text becomes headings
+// - ## text becomes H2 headings (large, preserves **bold** inside)
+// - ### text becomes H3 headings (medium, preserves **bold** inside)
+// - **text:** becomes H4 headings (small, bold)
 // - Single newlines preserved within paragraphs
 // - [text](gr:123) and [text](am:123) become clickable case number links
 // - [text](url) becomes clickable external links
@@ -24,23 +26,11 @@ export function RichText({ content, className, onCaseNumberClick }: Props) {
 
   // Function to render text with bold formatting and clickable links
   const renderTextWithBold = (text: string) => {
-    // First, handle clickable links with bold formatting: **[text](gr:123)**
-    let parts = text.split(/(\*\*\[[^\]]+\]\(gr:[^)]+\)\*\*|\*\*\[[^\]]+\]\(am:[^)]+\)\*\*|\*\*\[[^\]]+\]\(https?:[^)]+\)\*\*)/g);
+    // First, handle all types of links and bold text
+    let parts = text.split(/(\*\*\[[^\]]+\]\(gr:[^)]+\)\*\*|\*\*\[[^\]]+\]\(am:[^)]+\)\*\*|\*\*\[[^\]]+\]\(https?:[^)]+\)\*\*|\[[^\]]+\]\([^)]+\)|\*\*[^*]+\*\*)/g);
     
-    // Then handle regular bold text and markdown links within each part
-    parts = parts.map(part => {
-      // Handle clickable case number links
-      const grMatch = part.match(/\*\*\[([^\]]+)\]\(gr:([^)]+)\)\*\*/);
-      const amMatch = part.match(/\*\*\[([^\]]+)\]\(am:([^)]+)\)\*\*/);
-      const urlMatch = part.match(/\*\*\[([^\]]+)\]\((https?:[^)]+)\)\*\*/);
-      
-      if (grMatch || amMatch || urlMatch) {
-        return part; // Return as-is for clickable links (handled below)
-      }
-      
-      // Handle regular bold text and markdown links
-      return part.split(/(\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\))/g);
-    }).flat();
+    // Filter out empty strings from the split
+    parts = parts.filter(part => part !== '');
     
     return parts.map((part, index) => {
       // Handle clickable case number links
@@ -95,8 +85,8 @@ export function RichText({ content, className, onCaseNumberClick }: Props) {
         );
       }
       
-      // Handle regular bold text
-      if (part.startsWith('**') && part.endsWith('**')) {
+      // Handle regular bold text (but not bold links which are handled above)
+      if (part.startsWith('**') && part.endsWith('**') && !part.includes('[')) {
         return <strong key={index}>{part.slice(2, -2)}</strong>;
       }
       
@@ -118,8 +108,8 @@ export function RichText({ content, className, onCaseNumberClick }: Props) {
         );
       }
       
-      return part;
-    });
+      return <span key={index}>{part}</span>;
+    }).flat();
   };
 
   // Process lines
@@ -152,18 +142,29 @@ export function RichText({ content, className, onCaseNumberClick }: Props) {
 
   for (const line of lines) {
     // Check if this line is a heading
-    const headingMatch = line.match(/^##\s+(.+)$/);
+    const h2HeadingMatch = line.match(/^##\s+(.+)$/);
+    const h3HeadingMatch = line.match(/^###\s+(.+)$/);
     const boldHeadingMatch = line.match(/^\*\*(.+):\*\*$/);
     
-    if (headingMatch) {
+    if (h2HeadingMatch) {
       // Flush current paragraph before adding heading
       flushParagraph();
       
-      // Add the heading
+      // Add the H2 heading
       elements.push(
         <h2 key={elementIndex++} className="text-xl font-bold mt-6 mb-3 text-gray-800">
-          {headingMatch[1]}
+          {renderTextWithBold(h2HeadingMatch[1])}
         </h2>
+      );
+    } else if (h3HeadingMatch) {
+      // Flush current paragraph before adding H3 heading
+      flushParagraph();
+      
+      // Add the H3 heading (### headings) - preserves bold formatting inside
+      elements.push(
+        <h3 key={elementIndex++} className="text-lg font-semibold mt-4 mb-2 text-gray-800">
+          {renderTextWithBold(h3HeadingMatch[1])}
+        </h3>
       );
     } else if (boldHeadingMatch) {
       // Flush current paragraph before adding bold heading
@@ -171,9 +172,9 @@ export function RichText({ content, className, onCaseNumberClick }: Props) {
       
       // Add the bold heading (for ISSUE/S, SC RULING, etc.)
       elements.push(
-        <h3 key={elementIndex++} className="text-lg font-bold mt-4 mb-2 text-gray-800">
+        <h4 key={elementIndex++} className="text-base font-bold mt-4 mb-2 text-gray-800">
           {boldHeadingMatch[1]}
-        </h3>
+        </h4>
       );
     } else if (line.trim() === '') {
       // Empty line - flush current paragraph

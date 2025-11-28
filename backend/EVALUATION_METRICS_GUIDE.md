@@ -17,72 +17,56 @@ This document describes the comprehensive evaluation metrics system integrated i
 
 ## Legal Information Accuracy Metrics
 
-### Classification Metrics
+### Composite Quality Score
 
-The system uses standard classification metrics to gauge legal information accuracy:
+The system uses a **composite quality score** (0.0 to 1.0) that combines multiple automated metrics to gauge legal information accuracy:
 
-#### 1. **Accuracy**
-- **Formula**: (TP + TN) / Total
-- **Description**: Overall correctness of predictions
-- **Range**: 0.0 to 1.0 (higher is better)
+#### Components:
 
-#### 2. **Precision**
-- **Formula**: TP / (TP + FP)
-- **Description**: Proportion of positive predictions that are correct
-- **Range**: 0.0 to 1.0 (higher is better)
-- **Use Case**: Measures how many of the chatbot's positive claims are accurate
+1. **Content Score (20%)**: BERTScore + ROUGE combination
+   - Measures semantic similarity and lexical overlap
+   - Range: 0.0 to 1.0
 
-#### 3. **Recall (Sensitivity)**
-- **Formula**: TP / (TP + FN)
-- **Description**: Proportion of actual positives correctly identified
-- **Range**: 0.0 to 1.0 (higher is better)
-- **Use Case**: Measures how many relevant legal points are captured
+2. **Legal Elements (30%)**: Presence of key legal metadata
+   - Checks completeness of case information
+   - Range: 0.0 to 1.0
 
-#### 4. **F1 Score**
-- **Formula**: 2 × (Precision × Recall) / (Precision + Recall)
-- **Description**: Harmonic mean of precision and recall
-- **Range**: 0.0 to 1.0 (higher is better)
-- **Use Case**: Balanced measure of precision and recall
+3. **Case Digest Accuracy (25%)**: Facts/Issues/Ruling identification
+   - F1 score for section identification
+   - Range: 0.0 to 1.0
 
-#### 5. **Specificity**
-- **Formula**: TN / (TN + FP)
-- **Description**: Proportion of actual negatives correctly identified
-- **Range**: 0.0 to 1.0 (higher is better)
-- **Use Case**: Measures ability to avoid false positives
+4. **Completeness (10%)**: Response length and structure
+   - Ensures adequate response detail
+   - Range: 0.0 to 1.0
 
-### Binary Classification Example
+5. **Query Relevance (10%)**: Keyword and synonym matching
+   - Measures alignment with query intent
+   - Range: 0.0 to 1.0
+
+### Usage Example
 
 ```python
 from chatbot.evaluation_metrics import LegalAccuracyMetrics
 
-predictions = [1, 1, 0, 1, 0, 0, 1, 0]
-ground_truth = [1, 0, 0, 1, 0, 1, 1, 0]
-
-metrics = LegalAccuracyMetrics.calculate_metrics(predictions, ground_truth)
-
-print(f"Accuracy: {metrics['accuracy']}")
-print(f"Precision: {metrics['precision']}")
-print(f"Recall: {metrics['recall']}")
-print(f"F1 Score: {metrics['f1_score']}")
-print(f"Specificity: {metrics['specificity']}")
-```
-
-### Multiclass Classification
-
-For cases with multiple categories (e.g., case types: criminal, civil, administrative):
-
-```python
-predictions = [0, 1, 2, 0, 1, 2, 0, 1]
-ground_truth = [0, 1, 1, 0, 2, 2, 0, 1]
-
-metrics = LegalAccuracyMetrics.calculate_multiclass_metrics(
-    predictions, ground_truth, num_classes=3
+# Assess legal information accuracy
+accuracy_assessment = LegalAccuracyMetrics.assess_legal_information_accuracy(
+    response="The Supreme Court ruled that...",
+    reference_text="Reference legal text...",
+    case_metadata={"case_title": "...", "gr_number": "..."},
+    query="What was the ruling?"
 )
 
-print(f"Macro Precision: {metrics['macro_avg']['precision']}")
-print(f"Macro Recall: {metrics['macro_avg']['recall']}")
-print(f"Macro F1 Score: {metrics['macro_avg']['f1_score']}")
+print(f"Accuracy Score: {accuracy_assessment['accuracy_score']:.4f}")
+print(f"Accuracy Level: {accuracy_assessment['accuracy_level']}")
+print(f"Quality Threshold Met: {accuracy_assessment['quality_threshold_met']}")
+print(f"Issues: {accuracy_assessment['accuracy_issues']}")
 ```
+
+### Accuracy Levels
+
+- **HIGH** (≥0.80): Excellent legal information accuracy
+- **MEDIUM** (0.50-0.79): Moderate accuracy, improvements needed
+- **LOW** (<0.50): Significant accuracy issues
 
 ---
 

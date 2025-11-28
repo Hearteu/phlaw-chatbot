@@ -8,11 +8,11 @@ import RichText from "@/components/RichText";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
-    Card,
-    CardContent,
-    CardFooter,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { RotateCcw, Scale, Send, User } from "lucide-react";
@@ -52,6 +52,7 @@ export default function Home() {
     if (!isTyping) return;
 
     const messages = [
+      "Thinking...",
       "Researching jurisprudence",
       "Querying legal database",
       "Analyzing case law",
@@ -114,7 +115,7 @@ export default function Home() {
   //   setRatedMessages(prev => new Set([...prev, messageId]));
   // };
 
-  const handleClearChat = () => {
+  const handleClearChat = async () => {
     // Reset to initial welcome message
     setMessages([
       {
@@ -128,6 +129,26 @@ export default function Home() {
     setInput("");
     // setRatedMessages(new Set());
     console.log("🔄 Chat history cleared - starting new session");
+    
+    // Clear case content cache on the backend for new session
+    try {
+      const response = await fetch("/api/admin/clear-cache/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ type: "session" }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log("✅ Session cache cleared:", data.cleared_caches);
+      } else {
+        console.warn("⚠️ Failed to clear session cache:", response.statusText);
+      }
+    } catch (error) {
+      console.warn("⚠️ Error clearing session cache:", error);
+    }
   };
 
   const handleCaseNumberClick = (caseNumber: string, caseType: 'gr' | 'am') => {
@@ -218,6 +239,7 @@ export default function Home() {
   };
 
   const loadingMessages = [
+    "Thinking...",
     "Researching jurisprudence",
     "Querying legal database",
     "Analyzing case law",

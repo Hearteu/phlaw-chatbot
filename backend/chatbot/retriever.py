@@ -3,52 +3,49 @@ import gzip
 import json
 import os
 import re
-import time
 from typing import Any, Dict, List, Optional
 
-import numpy as np
 from qdrant_client import QdrantClient
 from qdrant_client.models import FieldCondition, Filter, MatchValue
-from sentence_transformers import SentenceTransformer
-
-# Import Contextual RAG system
-from .contextual_rag import create_contextual_rag_system
-# Import centralized model cache
-from .model_cache import get_cached_embedding_model
 
 # =============================================================================
 # GLOBAL CACHING FOR PERFORMANCE
 # =============================================================================
 _QDRANT_CLIENT = None
+_QDRANT_REF_COUNT = 0
 _COLLECTION_INFO = None
 
 # JSONL data file path
 DATA_FILE = os.getenv("DATA_FILE", os.path.join(os.path.dirname(__file__), "..", "data", "cases.jsonl.gz"))
 
 
-def _get_cached_embedding_model():
-    """Get cached SentenceTransformer model with lazy loading"""
-    return get_cached_embedding_model()
 
 def _get_cached_qdrant_client():
-    """Get cached Qdrant client"""
-    global _QDRANT_CLIENT
+    """Get cached Qdrant client with reference counting"""
+    global _QDRANT_CLIENT, _QDRANT_REF_COUNT
     
     if _QDRANT_CLIENT is None:
         host = os.getenv("QDRANT_HOST", "localhost")
         port = int(os.getenv("QDRANT_PORT", 6333))
         _QDRANT_CLIENT = QdrantClient(host=host, port=port, grpc_port=6334, prefer_grpc=True, timeout=30.0)
+        _QDRANT_REF_COUNT = 0
     
+    _QDRANT_REF_COUNT += 1
     return _QDRANT_CLIENT
 
 def close_qdrant_client():
     """Explicitly close the cached Qdrant client to avoid __del__ warnings"""
-    global _QDRANT_CLIENT
-    if _QDRANT_CLIENT is not None:
+    global _QDRANT_CLIENT, _QDRANT_REF_COUNT
+    _QDRANT_REF_COUNT -= 1
+    
+    if _QDRANT_REF_COUNT <= 0 and _QDRANT_CLIENT is not None:
         try:
             _QDRANT_CLIENT.close()
         except Exception:
             pass
+        finally:
+            _QDRANT_CLIENT = None
+            _QDRANT_REF_COUNT = 0
 
 def _get_collection_info(collection_name: str) -> Dict[str, Any]:
     """Get cached collection information"""
@@ -112,10 +109,18 @@ def load_case_from_jsonl(case_id: str, jsonl_path: str = DATA_FILE) -> Optional[
                     case_special == f"A.M. {case_id}" or
                     case_gr == f"A.M. No. {case_id}" or
                     case_gr == f"A.M. {case_id}" or
+                    # Handle A.C. numbers with different formats
+                    case_special == f"A.C. No. {case_id}" or
+                    case_special == f"A.C. {case_id}" or
+                    case_gr == f"A.C. No. {case_id}" or
+                    case_gr == f"A.C. {case_id}" or
                     # Handle other special number formats
                     case_special == f"OCA No. {case_id}" or
                     case_special == f"U.C. No. {case_id}" or
-                    case_special == f"ADM No. {case_id}"):
+                    case_special == f"ADM No. {case_id}" or
+                    case_special == f"B.M. No. {case_id}" or
+                    case_special == f"LRC No. {case_id}" or
+                    case_special == f"SP No. {case_id}"):
                     print(f"[FOUND] Found case {case_id} at line {line_num}")
                     
                     # Cache the loaded case
@@ -135,11 +140,9 @@ def load_case_from_jsonl(case_id: str, jsonl_path: str = DATA_FILE) -> Optional[
 class LegalRetriever:
     """Simplified legal document retriever with structure-aware chunking support"""
     
-    def __init__(self, collection: str = "jurisprudence", use_contextual_rag: bool = True):
+    def __init__(self, collection: str = "jurisprudence"):
         self.collection = collection
-        self.model = _get_cached_embedding_model()
         self.qdrant = _get_cached_qdrant_client()
-        self.use_contextual_rag = True  # Always use contextual RAG
         # Simple cache for retrieval results to ensure consistency
         self._retrieval_cache = {}
         
@@ -176,8 +179,6 @@ class LegalRetriever:
     def retrieve(self, query: str, k: int = 8, is_case_digest: bool = False, 
                 conversation_history: Optional[List[Dict]] = None) -> List[Dict[str, Any]]:
         """Simplified two-path retrieval with chunking support: GR-number exact match or keyword search"""
-        start_time = time.time()
-        
         print(f"🎯 Retrieving: '{query}'")
         
         # Create cache key

@@ -27,5 +27,11 @@ class ChatRequestSerializer(serializers.Serializer):
         required=False,
         allow_empty=True,
     )
+    # Optional template mode: 'full' for complete template, 'simplified' for facts/issues/ruling only
+    template_mode = serializers.ChoiceField(
+        choices=['full', 'simplified'],
+        required=False,
+        default='full'
+    )
 
 

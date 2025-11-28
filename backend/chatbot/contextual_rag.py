@@ -93,10 +93,10 @@ Explanation:"""
         host = os.getenv("QDRANT_HOST", "localhost")
         port = int(os.getenv("QDRANT_PORT", 6333))
         return QdrantClient(
-            host=host, 
-            port=port, 
-            grpc_port=6334, 
-            prefer_grpc=True, 
+            host=host,
+            port=port,
+            grpc_port=6334,
+            prefer_grpc=True,
             timeout=10.0  # Reduced timeout
         )
     

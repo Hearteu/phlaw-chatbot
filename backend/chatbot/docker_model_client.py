@@ -5,19 +5,30 @@ from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
 
-from .model_cache import get_fresh_llm
+ENABLE_DOCKER_MODEL = os.getenv("ENABLE_DOCKER_LLM", "false").lower() == "true"
 
 
 class DockerModelClient:
     """Client for Docker model runner with local LLM fallback"""
     
-    def __init__(self, base_url: str = "http://localhost:8001/engines/llama.cpp/v1", 
-                 model_name: str = "ai/llama3.2", api_key: str = "dummy_value"):
+    def __init__(
+        self,
+        base_url: str = "http://localhost:8001/engines/llama.cpp/v1",
+        model_name: str = "ai/llama3.2",
+        api_key: str = "dummy_value",
+        enabled: Optional[bool] = None,
+    ):
         self.base_url = base_url
         self.model_name = model_name
         self.api_key = api_key
         self.client = None
+        self.enabled = ENABLE_DOCKER_MODEL if enabled is None else enabled
         self.is_available = False
+        
+        if not self.enabled:
+            print("ℹ️ Docker model runner disabled via configuration")
+            return
+        
         self._test_connection()
     
     def _test_connection(self) -> bool:
@@ -43,6 +54,8 @@ class DockerModelClient:
     
     def generate_response(self, prompt: str, **kwargs) -> str:
         """Generate response using Docker model runner"""
+        if not self.enabled:
+            raise RuntimeError("Docker model runner disabled")
         if not self.is_available:
             raise RuntimeError("Docker model runner not available")
         
@@ -67,6 +80,8 @@ class DockerModelClient:
     
     def generate_response_from_messages(self, messages: List[Dict[str, str]], **kwargs) -> str:
         """Generate response from message history using Docker model runner"""
+        if not self.enabled:
+            raise RuntimeError("Docker model runner disabled")
         if not self.is_available:
             raise RuntimeError("Docker model runner not available")
         
@@ -108,6 +123,8 @@ class DockerModelClient:
     
     def get_model_info(self) -> Dict[str, Any]:
         """Get Docker model information"""
+        if not self.enabled:
+            return {"error": "Docker model runner disabled"}
         if not self.is_available:
             return {"error": "Docker model runner not available"}
         
